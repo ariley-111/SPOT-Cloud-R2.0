@@ -1,0 +1,66 @@
+{
+  "generatedAt": "2026-05-28T21:36:33.662Z",
+  "runner": {
+    "schema": 2,
+    "cadSetup": {
+      "Simple": 8,
+      "Straight": 20,
+      "Standard": 25,
+      "Complex": 22
+    },
+    "cadFallback": {
+      "Simple": 2,
+      "Straight": 6,
+      "Standard": 2,
+      "Complex": 4
+    },
+    "crestDieAdjustment": 1200
+  },
+  "counts": {
+    "totalRows": 785,
+    "scored": 773,
+    "unparseable": 12
+  },
+  "fleet": {
+    "medianDelta": "128.48",
+    "meanDelta": "580.48",
+    "medianDeltaPct": "21.33",
+    "meanDeltaPct": "46.95",
+    "p5DeltaPct": "-30.82",
+    "p95DeltaPct": "239.06",
+    "r2": "-0.5537",
+    "sumSpot": "1848587.35",
+    "sumIquote": "1399878.07",
+    "fleetTotalPct": "32.05"
+  },
+  "byTier": {
+    "Standard": {
+      "n": 536,
+      "sumDelta": 277281.8,
+      "sumDeltaPct": 29818.309999999976,
+      "medianPct": 26.02,
+      "meanPct": 55.63117537313428
+    },
+    "Straight": {
+      "n": 80,
+      "sumDelta": 148030.83000000002,
+      "sumDeltaPct": 3076.0699999999997,
+      "medianPct": 23.07,
+      "meanPct": 38.450874999999996
+    },
+    "Complex": {
+      "n": 117,
+      "sumDelta": 11571.12,
+      "sumDeltaPct": 2427.75,
+      "medianPct": 6.2,
+      "meanPct": 20.75
+    },
+    "Simple": {
+      "n": 40,
+      "sumDelta": 11825.53,
+      "sumDeltaPct": 968.1600000000002,
+      "medianPct": 0.47,
+      "meanPct": 24.204000000000004
+    }
+  }
+}

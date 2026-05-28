@@ -95,6 +95,12 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
+### 2026-05-28 — Phase 1 engine port (in progress, awaiting config decision)
+- **Engine ported to Python** — verbatim port of spot_engine.js (1,131 lines), spot_runner.js (358 lines), fleet_compare.js (366 lines)
+- **Parity proven** — Python engine output is byte-identical to legacy JavaScript engine on all 785-job regression metrics (fleet total, R², per-tier medians)
+- **Bobst-first surprise discovered** — D-121/D-123 introduced bobstFirstSizing default "true" that breaks the D-110 baseline. With Bobst-first OFF, fleet Δ matches baseline exactly (+6.55%); with Bobst-first ON, fleet Δ is +32% (R² -0.55)
+- **Phase 1 awaiting your decision** — see /app/memory/PHASE_1_STATUS.md for full report
+
 ### 2026-05-28 — Phase 0 kickoff
 - **Foundation skeleton created**
   - Backend module structure (`engine/`, `routes/`, `models/`, `integrations/`, `utils/`)

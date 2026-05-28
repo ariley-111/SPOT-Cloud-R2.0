@@ -1,0 +1,44 @@
+{
+  "schema": 2,
+  "crestDieAdjustment": 1200,
+  "counts": {
+    "totalRows": 785,
+    "scored": 773,
+    "unparseable": 12
+  },
+  "fleet": {
+    "medianDelta": 50.23539897435896,
+    "meanDelta": 118.56176812761369,
+    "medianDeltaPct": 7.891867160343602,
+    "meanDeltaPct": 16.607786018022814,
+    "p5DeltaPct": -35.57628017021411,
+    "p95DeltaPct": 96.51536904074787,
+    "r2": 0.8398230135983484,
+    "sumSpot": 1491526.3167626478,
+    "sumIquote": 1399878.0700000008,
+    "fleetTotalPct": 6.546873526109814
+  },
+  "byTier": {
+    "Standard": {
+      "n": 536,
+      "medianPct": 12.82133901517569,
+      "meanPct": 19.78894321060771
+    },
+    "Straight": {
+      "n": 80,
+      "medianPct": 14.89875767682328,
+      "meanPct": 17.901404346528373
+    },
+    "Complex": {
+      "n": 117,
+      "medianPct": -10.953196128925095,
+      "meanPct": 0.2831395150487853
+    },
+    "Simple": {
+      "n": 40,
+      "medianPct": 0.47112693144046563,
+      "meanPct": 19.142634001573356
+    }
+  },
+  "elapsedSec": 0.0690615177154541
+}

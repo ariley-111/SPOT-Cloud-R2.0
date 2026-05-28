@@ -1,27 +1,42 @@
-"""SPOT Pricing Engine — Python port of spot_engine.js (1,131 lines).
+"""SPOT Pricing Engine — Python port of spot_engine.js (R1.6.5.1).
 
-This module is the single source of truth for SPOT pricing math.
-It is a verbatim port of the JavaScript engine, validated against
-the 785-job iQuote regression dataset at R² 0.969 (segment cost).
+Verbatim port. The math, constants, control flow, and edge cases mirror
+the JavaScript engine exactly. Calibration baseline: D-110 FINAL (2026-04-24).
 
-Phase 1 of the port will populate this module. Until then, this is a placeholder.
-
-Source files mirrored (all in /app/legacy_spot/):
-  - spot_engine.js (the Node-side engine, regression-tested)
-  - spot_r1_5.jsx ENGINE block at L84-877 (the live-quote mirror)
-  - spot_runner.js (the orchestrator)
-
-Calibration baseline: D-110 FINAL (2026-04-24)
-  - Segment Cost R²: 0.9690
-  - Segment Sell R²: 0.9496
-  - Per-job Cost R²: 0.8550
-  - Per-job Sell R²: 0.8360
-  - Fleet cost delta vs iQuote: +6.55%
-  - Fleet sell premium vs iQuote: +8.30%
+Public API:
+  run_estimate(json, slot_index=0)  — main entry point (mirrors spot_runner.js)
+  calc_board, compute_layout, auto_select_sheet, auto_route, calc_wf, calc_shipment
+  ENGINE, APPROVED_SHEETS, RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS
 """
+from .core import (
+    ENGINE, SHEET_GROUPS, APPROVED_SHEETS,
+    FLUTE_CALIPERS, PRINT_SPEEDS, CAD_SETUP, CAD_FALLBACK,
+    STRIP_DEFAULTS, GLUE_DEFAULTS,
+    CAD_DIFF_MIGRATION, STRIP_DIFF_MIGRATION, SPOT_SCHEMA_VERSION,
+    GM_MSF_TIERS, GM_DEFAULTS, SELL_DEFAULTS,
+    GRADE_ADDER_DEFAULTS, ECT_GRADE_FALLBACK, MULLEN_UPGRADE,
+    MEDIUM_ORDER, MEDIUM_FALLBACK_POOL,
+    CREST_MAX_W, CREST_MAX_L,
+    BOBST_MIN_W, BOBST_MIN_L, BOBST_MAX_W, BOBST_MAX_L, BOBST_FLUTES,
+    RATE_DEFAULTS,
+    pn, ceil_int, is_finite,
+    get_msf_tier, get_gm_msf_tier, get_dim_adder, get_liner_rate,
+    get_grade_fallback, get_medium_fallback,
+    calc_board, compute_layout,
+)
+from .routing import (
+    select_bobst_sheet, auto_select_sheet, auto_route,
+)
+from .pricing import (
+    calc_wf, allocate_job_cost,
+    GRADE_LINER_DEFAULTS, FLUTE_TAKEUP, SKID_SIZES, TRAILER_FEET, SKID_MAX_PRODUCT_HEIGHT,
+    calc_board_weight, auto_select_skid, calc_pieces_per_skid_layer, calc_shipment,
+)
+from .runner import (
+    run_estimate, build_board_spec, build_asmp, build_prod_inputs, ASMP_DEFAULTS,
+)
 
-# Placeholder constants - populated in Phase 1
-__version__ = "0.0.1-skeleton"
+__version__ = "1.0.0-phase1"
 
 # Calibration baseline (read-only sanity check)
 CALIBRATION_BASELINE = {
