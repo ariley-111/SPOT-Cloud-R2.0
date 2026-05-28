@@ -1,0 +1,19 @@
+{
+  "name": "spot",
+  "version": "1.5.8",
+  "description": "SPOT — Standard Printing Co Quoting Tool",
+  "private": true,
+  "scripts": {
+    "build": "node build_spot_r1_5.js",
+    "start": "node spot_server.js",
+    "fleet-compare": "node DEV_fleet_compare.js"
+  },
+  "dependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

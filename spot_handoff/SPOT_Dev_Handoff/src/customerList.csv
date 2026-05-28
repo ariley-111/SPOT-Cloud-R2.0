@@ -1,0 +1,385 @@
+cust_code,cust_name,address_1,address_2,address_3,city,state,zip,phone,terms_code,sales_agent_id,sales_tax_code,po_required,oncredithold,credit_limit
+0,Standard Printing Company,1115 Cherry Avenue NE,,,Canton,OH,44704,(330) 453-8247,Net 30,House,OH Exempt,1,0,10000000
+8,Hoover Sideliners,,,,,,,,Net 30,House,OH Exempt,1,0,0
+22,St. George Church,1118 Cherry Ave NE,,,Canton,OH,44704,(330) 455-8482,Net 30,House,OH Exempt,1,0,0
+1113,"All Packaging Services, LLC",PO Box 13623,,,Fairlawn,OH,44334,(330) 835-9703,Net 30,RH,OH Exempt,1,0,15000
+1117,"American Printing, Inc.",1121 Tower Drive,,,Akron,OH,44305,(330) 630-1121,Net 30,House,OH Exempt,1,0,18000
+1123,Assn. of Logos Bookstores,1675 East Main Street #204,,,Kent,OH,44240,,Net 30,DP,OH Exempt,1,0,5000
+1124,Adventure Eleven,Attn: Bill Wood,1707 Opal St.,,Louisville,OH,44641,,Net 30,RH,OH Exempt,1,0,10000
+1125,American Box Company,23128 W 43rd Street,,,Shawnee,KS,66226,913-384-0992,Net 30,RH,Exempt,1,0,15000
+1129,Archbishop Hoban High School,1 Holy Cross Boulevard,,,Akron,OH,44306-1531,(330) 773-8620,Net 30,House,OH Exempt,1,0,20000
+1147,"GO2 Partners, Inc. - Corporate",701 Lee Street,Suite 1050,,Des Plaines,IL,60016,630-941-0101,2%/10- Net 60,DP,Exempt,1,0,150000
+1149,"Best Mold & Manufacturing, Inc.",P.O. Box 544,,,Uniontown,OH,44685-0544,(330) 896-9988,Net 30,House,OH Exempt,1,0,1000000
+1150,BCI - Cedar Falls,2900 Capital Way,,,Cedar Falls,IA,50613,,Net 30,KK,Exempt,1,0,150000
+1151,BCI-Houston Division,10343 Ella Blvd.,,,Houston,TX,77038,,Net 30,DP,Exempt,1,0,150000
+1163,B-Squared Marketing Solutions,Attn: Brent Belles,5590 Lauby Road,Suite 6,North Canton,OH,44720,,Net 30,House,OH Exempt,1,0,5000
+1165,BCI Tennessee Division,1500 Elizabeth Lee Pkway,,,Loudon,TN,37774,800-968-6894,2%-10 Days/Net 30,RH,Exempt,1,0,75000
+1167,BCI Buckeye Division,3350 Long Road,,,Wooster,OH,44691,(330) 264-6336,2%-10 Days/Net 30,RH,OH Exempt,1,0,200000
+1171,Advertising By Design,121 S. Alexander Street,,,Millersburg,OH,44654,330-674-3700,Net 45 Days,DP,OH Exempt,1,0,10000
+1172,"GO2 Partners, Inc.",4199 Kinross Lakes Parkway,Suite 235,,Richfield,OH,44286,,2%/10- Net 60,DP,OH Exempt,1,0,200000
+1175,"Cambridge Packaging, Inc.",60794 Southgate Rd.,,,Cambridge,OH,43725,740-432-3351,1% 10/Net 30,DP,OH Exempt,1,0,5000
+1176,"GO2 Partners - Dublin, OH",6099 Riverside Drive,Suite 207,,Dublin,OH,43017,,2%/10- Net 60,DP,OH Exempt,1,0,25000
+1177,Champion Container Corporation,1455 N. Michael Drive,,,Wood Dale,IL,60191,630-530-1990,1% 10/Net 30,DP,Exempt,1,0,75000
+1183,C. Palmer Mfg. Co. Inc.,5 Palmer Road,,,West Newton,PA,15089,724-872-8200,Net 30,RH,Exempt,1,0,5000
+1207,"Carton Service, Inc.",P.O. Box 702,,,Shelby,OH,44875,419-342-5010,Net 30,RH,OH Exempt,1,0,300000
+1208,Archbold Container,800 West Barre Road,PO Box 10,,Archbold,OH,43502-0010,,1% 10/Net 30,RH,OH Exempt,1,0,150000
+1217,"Beaver Constructors, Inc.",2000 Beaver Place Ave. SW,P.O.Box 6059,,Canton,OH,44706,330-478-2151,Net 30,House,OH Taxable,1,0,10000
+1222,PCA Chicago Container Plant,5445 W. 73rd St.,,,Chicago,IL,60655,708-821-1521,Net 30,KK,Exempt,1,0,1000000
+1252,Dancor Solutions Inc.,2155 Dublin Road,,,Columbus,OH,43228,614-340-2155,Net 30,DP,OH Exempt,1,0,5000
+1255,Compass Packaging,10585 Main Street,,,Mantua,OH,44255,,Net 30,DP,OH Exempt,1,0,0
+1257,Advanced Digital Cable,94 Eagle Fork Road,,,Hayesville,NC,28904,800-343-2579,Net 30,DP,OH Taxable,1,0,15000
+1262,PSI Container,1057 Tresckow Road,,,McAdoo,PA,18237,570-929-1600,Net 30,RH,Exempt,1,0,1000000
+1263,"Simply Color Industries, Inc.",2276 S. Arlington Road,,,Akron,OH,44316,330-436-6500,Net 30,House,OH Exempt,1,0,0
+1283,"School Specialty, LLC.",P.O. Box 1017,,,Appleton,WI,54912-1017,(603) 579-3560,Net 30,RH,Exempt,1,0,75000
+1283P,School Specialty Science & Math,P.O. Box 1017,,,Appleton,WI,54912-1017,,Net 30,RH,Exempt,1,0,1000000
+1289,"Commercial Cutting & Graphics, LLC",208 Central Avenue,,,Mansfield,OH,44905,419-526-4800,Net 15,House,OH Exempt,1,0,15000
+1291,Dorn Color,11555 Berea Road,,,Cleveland,OH,44102,,Net 30,DP,OH Exempt,1,0,0
+1294,Custer Products Limited,1320 Sanders Avenue SW,,,Massillon,OH,44647,330-490-3158,Net 30,DP,OH Exempt,1,0,0
+1298,DS Smith Packaging - Roanoke,Attn:  Accounts Payable,600 Peachtree St.,Suite 4200,Atlanta,GA,30308,540-774-0500,2%-10 Days/Net 30,DP,Exempt,1,0,50000
+1304,"Alpha Container Company, Inc.",16789 Square Drive,,,Marysville,OH,43040,937-644-5511,Order,RH,OH Exempt,1,0,0
+1305,PCA - Northampton,525 Mount Tom Rd.,,,Northampton,MA,1060,413-582-3835,Net 30,DJ,Exempt,1,0,0
+1306,LSC Communications - Warrenville IL,Attn: A/P Department,4101 Winfield Rd.,,Warrenville,IL,60555,,2% - 30 Days/Net 60,UN,Exempt,1,0,5000
+1307,Stark County District Library,715 Market Ave. N.,,,Canton,OH,44702,330-458-2692,Net 30,House,OH Exempt,1,0,0
+1309,Pathway Caring for Children,4895 Dressler Road NW,Suite A,,Canton,OH,44718,330-818-0446,Net 30,House,OH Exempt,1,0,0
+1312,DS Smith Packaging - Winchester,600 Peachtree St,Suite 4200,,Atlanta,GA,30308,,2%-10 Days/Net 30,DP,Exempt,1,0,25000
+1313,Early Childhood Resource Center,1718 Cleveland Avenue NW,,,Canton,OH,44703,330-491-3272,Net 30,House,OH Exempt,1,0,5000
+1315,DS Smith - Greensboro,4328 Federal Drive,Suite 105,,Greensboro,NC,27410,3366680871,Net 30,DP,Exempt,1,0,200000
+1321,"National Safety Apparel, Inc.",15825 Industrial Parkway,,,Cleveland,OH,44135,216-941-1111,Net 30,DP,OH Exempt,1,0,5000
+1322,Greif Inc. - Michigan Packaging,425 Winter Road,,,Delaware,OH,43015,740-657-6600,Net 45 Days,RH,Exempt,1,0,150000
+1329,Bell Containers,697 Millers Run Road,PO Box 294,,Cuddy,PA,15031,,Order,DP,Exempt,1,0,1000000
+1333,GO2 Partners,11116 South Towne Square,Ste 300,,St. Louis,MO,63123,314-966-2300,2%/10- Net 60,DP,Exempt,1,0,10000
+1334,"OnQ Solutions, Inc.","25821 Industrial Blvd, Ste 100",,,Hayward,CA,94545,650-241-0215,Net 45 Days,DP,OH Exempt,1,0,500000
+1337,The Standard Group,500 E. Oregon Road,,,Lititz,PA,17543,610-375-6174,Net 30,DJ,Exempt,1,0,10000
+1342,The Ampersand Group,1946 S. Arlington Street,,,Akron,OH,44306,412-418-4163,Net 30,DP,OH Exempt,1,0,5000
+1350,PCA - Plymouth,936 Sheldon Road,,,Plymouth,MI,48170,,Net 30,KK,OH Exempt,1,0,150000
+1351,PCA - Burlington,1600 South Pine Street,,,Burlington,WI,53105,262-763-1452,Net 30,KK,Exempt,1,0,150000
+1353,"GO2 Partners - Mission, KS",5201 Johnson Drive,Suite 250,,Mission,KS,66205,913-432-4333,2%/10- Net 60,DP,OH Exempt,1,0,25000
+1363,"Green Bay Packaging, Inc.",2323 Commerce Drive,,,Fremont,OH,43420,920-433-5109,Net 30,DP,OH Exempt,1,0,1000000
+1375,Freeport Press,Attn: Accounts Payable,121 Main Street,,Freeport,OH,43973,,Net 30,House,OH Exempt,1,0,10000
+1384,International Paper Newton,P.O. Box 5383,,,Portland,OR,97228-5383,828-464-3841,Net 90,DP,Exempt,1,0,150000
+1386,CorrChoice,,,,Palmyra,PA,,,Net 45 Days,RH,Exempt,1,0,10000
+1389,Chief Container Co.,100 Hopson Dr SE,,,Acworth,GA,30101,770-421-0007,Net 30,DP,Exempt,1,0,150000
+1392,GameFly Holding LLC,30 Corporate Park,Suite 207,,Irvine,CA,92606,412-921-4025,Net 30,RH,Exempt,1,0,10000
+1398,CorrChoice. - Cincinnati,,,,,,,,Net 45 Days,RH,OH Exempt,1,0,10000
+1401,Corelle Brands LLC,3025 Highland Parkway,Suite 700,,Downers Grove,IL,60515,847-233-8600,Net 15,DJ,Exempt,1,0,400000
+1408,LDI- Ft. Worth,5100 Glenview Drive,,,Fort Worth,TX,76117,817-577-6100,Net 30,DP,Exempt,0,0,20000
+1423,Hanna Transfer Company North DBA Moonlight Packaging,1300 West 1st St,,,Oil City,PA,16301,814-676-1806,Net 30,DP,Exempt,1,0,10000
+1432,"McElroy Contract Packaging, Inc.",P.O. Box 608,,,Orrville,OH,44667,330-682-2155,Net 30,DP,OH Exempt,1,0,10000
+1435,JM Packaging,26300 Bunnert,,,Warren,MI,48089,586-771--7800,Net 45 Days,KK,Exempt,1,0,10000
+1443,JW Color,5193 Stoneham Rd. NW,Suite 200,,North Canton,OH,44720,330-834-3570,Net 30,DP,OH Exempt,1,0,0
+1453,Jamestown - Cleveland,8146 Bavaria Road,,,Macedonia,OH,44056,(216) 831-3700,Net 60,RH,OH Exempt,1,0,100000
+1455,Lynk Packaging,1250 Page Road,,,Aurora,OH,44202,(330) 562-8080,Net 30,RH,OH Exempt,1,0,15000
+1460,Jamestown Container Corp. - Falconer,PO Box 8,,,Jamestown,NY,14702-0008,(716) 665-4623,Net 60,DJ,OH Exempt,1,0,100000
+1461,Kaitlyn Eckelberry Memorial Fund,3924 Cleveland Ave NW,,,Canton,OH,44709,330-493-3928,Cash,DP,OH Exempt,1,0,0
+1465,"Kitty Poo Club, LLC",1909 Old Mansfield Rd. Building B,,,Wooster,OH,44691,954-834-3807,Net 30,RH,OH Exempt,1,0,25000
+1468,Kehl Kolor,PO Box 770,,,Ashland,OH,44805,(419) 281-3107,Net 45 Days,RH,OH Exempt,1,0,5000
+1477,International Paper Madison,P.O. Box 5383,,,Portland,OR,97228-5383,(440) 428-5116,Net 90,RH,OH Exempt,1,0,200000
+1478,Pratt (Lewisburg Container) LLC.,AP - 8223,P.O. Box 39,,Lewisburg,OH,45338,(937) 962-2681,1%15/Net30,RH,OH Exempt,1,0,300000
+1490,Little Tikes,2180 Barlow Road,,,Hudson,OH,44236,(330) 650-3000,2% - 60 / Net 90,DP,OH Exempt,1,0,400000
+1490L,Little Tikes,2180 Barlow Road,,,Hudson,OH,44236,(330) 650-3000,2% - 60 / Net 90,DP,OH Exempt,1,0,400000
+1490P,Little Tikes,2180 Barlow Road,,,Hudson,OH,44236,,2% - 60 / Net 90,DP,OH Exempt,1,0,25000
+1508,PCA - Roanoke,7500 Shadwell Drive,Suite B,,Roanoke,VA,24019,,Net 30,DJ,Exempt,1,0,10000
+1510,International Paper Retail Pkg & Display,3700 Display Drive,,,Charlotte,NC,28273,704-588-8522`,Net 90,DP,Exempt,1,0,100000
+1517,Labels & Letters,PO Box 1547,,,Stow,OH,44224,,Net 30,DP,OH Exempt,1,0,0
+1521,International Paper Fort Worth,P.O. Box 5383,,,Portland,OR,97228-5383,,Net 90,DP,Exempt,1,0,150000
+1535,Massillon Container,49 Ohio Street,,,Navarre,OH,44662,(330) 879-5653,Net 30,DP,OH Exempt,1,0,50000
+1552,"Nutis Press, Inc.",3540 E Fulton Street,,,Columbus,OH,43227,,Order,House,OH Exempt,1,0,0
+1553,Millcraft,6800 Grant Ave.,,,Cleveland,OH,44105,,Net 30,House,OH Exempt,1,0,0
+1557,Quez Media Marketing,PO Box 31360,,,Independence,,44131,,Net 30,House,OH Exempt,1,0,5000
+1564,"PCA / Newark, OH",205 S 21st Street,,,Newark,OH,43055,,Net 30,RH,OH Exempt,1,0,150000
+1567,PCA Pennsylvania Acquisition Corporation,499 Nixon Road,,,Cheswick,PA,15024,(724) 275-3712,Net 30,RH,Exempt,1,0,1000000
+1571,Paragraphics,2011 29th St NW,,,Canton,OH,44709,,Net 30,House,OH Exempt,1,0,10000
+1582,Nelson Woodcraft,Attn:  Mark Nelson,980 Lincoln Avenue,,Steubenville,OH,43952,(800) 895-6267,TBA,House,OH Exempt,1,0,0
+1589,Packaging Services Inc. - MD,16461 Elliott Parkway,,,Williamsport,MD,21795,800-223-6255,Net 30,RH,Exempt,1,0,50000
+1599,PCA - Lan,1530 Fruitville Pike,,,Lancaster,PA,17601,(717) 293-2869,Net 30,DJ,Exempt,1,0,500000
+1599C,PCA - Lan,1530 Fruitville Pike,,,Lancaster,PA,17601,717-293-2869,Net 30,DJ,Exempt,0,0,150000
+1605,"Packaging Services, Inc. - PA",2245 Industrial Drive,,,Connellsville,PA,15425,(724) 626-0100,Net 30,RH,Exempt,1,0,100000
+1617,Peachtree Packaging & Display,770 Marathon Parkway,,,Lawrenceville,GA,30046,770-822-1304,Net 30,DP,Exempt,1,0,50000
+1618,PCA - Atlanta,PO Box 532058,,,Atlanta,GA,30353,,Net 30,DP,Exempt,1,0,30000
+1620BC,PCA - Hackettstown,101 Bilby Rd.,,,Hackettstown,NJ,7840,,Net 30,DJ,Exempt,1,0,10000
+1623,PCA - Gas City,Attn: Accounts Payable,520 South First Street,,Gas City,IN,46933,,Net 30,KK,Exempt,1,0,150000
+1624,PCA - Ashland,929 Faultless Drive,PO Box 367,,Ashland,OH,44805,(419) 289-8717,Net 30,RH,OH Exempt,1,0,5000000
+1624L,PCA - Ashland,929 Faultless Drive,PO Box 367,,Ashland,OH,44805,(419) 289-8717,Net 30,DP,OH Exempt,1,0,5000000
+1625,PCA - Akron,708 Killian Road,,,Akron,OH,44319,330-245-2222,Net 30,RH,OH Exempt,1,0,150000
+1627,PCA - Waco TX,9200 Old McGregor Road,,,Waco,TX,76712,,Net 30,DP,Exempt,1,0,150000
+1629,PCA - Harrisonburg,930 Pleasant Valley Road,,,Harrisonburg,VA,22801,,Net 30,DJ,Exempt,1,0,300000
+1632,Pax Corrugated - an affiliate of Welch Packaging,1899 Kingsview Drive,,,Lebanon,OH,45036,,2%-10 Days/Net 30,RH,OH Exempt,1,0,100000
+1633,Retail Product Solutions,1776 Tech Park Drive NE,Suite 221,,New Philadelphia,OH,44663,234-303-2400,Net 30,House,OH Exempt,1,0,10000
+1639,Reed Witting,2900 Sassafras Way,,,Pittsburgh,PA,15201,,Net 30,RH,Exempt,1,0,50000
+1641,PCA - Edmore,1106 Industrial Park Drive,,,Edmore,MI,48829,989-427-2111,Net 30,KK,Exempt,0,0,150000
+1642,"Stand Fast Group, LLC",710 Kimberly Drive,,,Carol Stream,IL,60188,630-600-9000,Net 30,DP,Exempt,0,0,30000
+1654,Steps to Literacy,75 Mill Street,,,Colchester,CT,6415,(800) 895-2804,Net 30,DP,Exempt,1,0,10000
+1659,SGS Cincinnati,P.O. Box 32640,,,Louisville,KY,40232,502-637-5443,2%-10 Days/Net 30,DP,OH Exempt,1,0,15000
+1666,"SPA, LLC",401 Milford Parkway,Suite D,,Milford,OH,45150,,Net 30,House,OH Exempt,1,0,50000
+1667,Step 2 Corporation,10010 Aurora-Hudson Rd.,,,Streetsboro,OH,44241,(330) 656-0440,Net 60,DP,OH Exempt,1,0,25000
+1671,Sterilite,P.O. Box 8001,Attn:  Accounts Payable,,Townsend,MA,01469-8001,978-597-8702,Net 30,DJ,OH Exempt,1,0,100000
+1685,Summit Racing,PO Box 909,,,Akron,OH,44309-0909,,Net 30,DP,OH Exempt,1,0,10000
+1687,Spartan Graphics,200 Applewood Drive,,,Sparta,MI,49345,616-887-8243,Net 30,DP,Exempt,0,0,50000
+1699,Sharon Golf Club,6261 Ridge Road,PO Box 8,,Sharon Center,OH,44274,,Net 30,House,OH Taxable,1,0,5000
+1705,International Paper Indianapolis,P.O. Box 5383,,,Portland,OR,97228-5383,(317) 390-3300,Net 90,RH,Exempt,1,0,25000
+1712,Tavens,22475 Aurora Rd.,,,Bedford,OH,44146,(216) 883-3333,1% 10/Net 30,RH,OH Exempt,1,0,50000
+1727,International Paper - Wooster,PO Box 5383,,,Portland,OR,97228-5383,,Net 90,RH,OH Exempt,1,0,75000
+1736,Stephen Gould Corporation,35 South Jefferson Road,,,Whippany,NJ,7981,973-428-1500,Net 60,DP,Exempt,1,0,25000
+1738,Smithers Oasis,P.O. Box 790,,,Kent,OH,44240,330-945-5100,Net 30,DP,OH Exempt,1,0,10000
+1746,Premier OEM,3479 State Road,,,Cuyahoga Falls,OH,44223,,Net 15,DP,OH Exempt,1,0,20000
+1753,Waterline Technology,1904 Industrial Way,,,Calwell,ID,83605,419-529-3949,Net 30,RH,OH Exempt,1,0,10000
+1757,Weaver Leather Inc.,"P.O. Box 68, 7540 C.R. 201",,,Mt. Hope,OH,44660,(330) 674-7548,Net 30,DP,OH Exempt,1,0,20000
+1760,Walsh University,2020 Easton Street NW,,,North Canton,OH,44720,330-490-7503,Net 30,DP,OH Exempt,1,0,20000
+1773,"YPO, Inc",225 E John Carpenter Freeway,Suite 500,,Irving,TX,75062,425-894-9488,Net 30,House,Exempt,0,0,5000
+1783,R. D. Thompson Paper Products,PO Box 88,,,Loudonville,OH,44842,,Net 30,House,OH Exempt,1,0,1000000
+1789,"PCA - Olive Branch, MS",8489 Summit Cove,,,Olvie Branch,MS,38654,,Net 30,DJ,Exempt,1,0,1000000
+1793,Right to Life of Northeast Ohio,300 N. Cleveland Massillon Road,Suite LL1,,Akron,OH,44333,,Net 30,House,OH Exempt,1,0,5000
+1794,Ten Point Crossbow Technologies,1325 Waterloo Rd,,,Mogadore,OH,44260,,Net 30,DP,OH Exempt,1,0,30000
+1799,"PCA / Fairfield, OH",3840 Port Union Road,,,Fairfield,OH,45014,(513) 860-1145,Net 30,RH,OH Exempt,1,0,150000
+1815,Vision Graphics and Printing,3545 Copley Road,,,Copley,OH,44321,330-665-4451,Net 30,DP,OH Exempt,1,0,0
+1821,Valley Containers,3515 Union St.,,,Mineral Ridge,OH,44440,330-544-2244,Net 30,DP,OH Exempt,1,0,0
+1833,Progress Container & Display,635 Patrick Mill Road SW,,,Winder,GA,30680,678-425-2000,Net 30,DP,Exempt,1,0,225000
+1835,Wheeling & Lake Erie Railway,100 East First Street,,,Brewster,OH,44613,330-767-7286,Net 30,DP,OH Taxable,1,0,5000
+1836,York Container Company,138 Mt Zion Road,,,York,PA,17402-0008,717-757-7611,Net 30,RH,Exempt,1,0,300000
+1846,Simplay3,9450 Rosemont Dr.,,,Streetsboro,OH,44241,330-676-5200,Net 30,DP,OH Exempt,1,0,50000
+1849,State Construction,PO Box 191,,,Canal Fulton,OH,44614,330-819-9885,Order,RH,OH Taxable,1,0,0
+1854,"PCA - Mooresville, NC",307 Oates Rd.,Suite B,,Mooresville,NC,28117,,Net 30,DJ,Exempt,1,0,150000
+1855,"KDM Signs, Inc",10450 N Medallion Drive,,,Cincinnati,OH,45241,513-769-3500,Net 30,DP,OH Exempt,1,0,25000
+1857,"Metaline Products Co., Inc.",101 North Feltus Street,,,South Amboy,NJ,8879,,Net 30,DJ,Exempt,1,0,5000
+1860,Weber Display & Packaging,3500 Richmond Street,,,Philadelphia,PA,19134,215-426-3500,Net 30,DJ,Exempt,1,0,200000
+1861,Brothers of Holy Cross,"Brother Roy Smith, Provincial Admin.",544515 State Road 933 North,PO Box 460,Notre Dame,IN,46556-0460,,Net 30,House,Exempt,1,0,5000
+1862,"Sullivan Supply, Inc.",701 Iowa Ave.,,,Dunlap,IA,51529,712-643-5902,Net 30,DP,Exempt,1,0,10000
+1863,Westrock - PA,400 Technology Drive,,,Coal Center,PA,15423,,2%-20/ Net 90,RH,Exempt,1,0,10000
+1866,New England Wooden Ware Corporation,205 School Street,Suite 201,,Gardner,MA,1440,978-632-3600,Net 30,DJ,Exempt,1,0,50000
+1894,"Skybox Packaging, LLC",PO Box 1567,,,Mansfield,OH,44901-1567,419-525-6013,Net 30,DP,OH Exempt,1,0,400000
+1897,Penn Chemists,209 Morton Street,,,New Eagle,PA,15067,412-522-7856,Order,DP,Exempt,1,0,0
+1898,"Yurkovich Marketing Group, LLC",PO Box 2203,,,North Canton,OH,44720,330-556-9974,Net 30,House,OH Taxable,1,0,5000
+1901,"Zehrco-Giancola Composites, Inc.",1501 West 47th Street,,,Ashtabula,OH,44004,440-998-5774,Net 30,RH,OH Exempt,1,0,30000
+2000,"Unipac, Inc.",2109 National Rd SW,,,Hebron,OH,43025,740-929-2000,Net 30,RH,OH Exempt,0,0,15000
+2001,"Neenah, Inc.",1376 Kimberly Drive,,,Neenah,WI,54956-1641,920-721-1333,Net 60,House,Exempt,0,0,5000
+2002,Stephen Gould- Columbus,35 South Jefferson Road,,,Whippany,NJ,7981,973-428-1500,Net 60,DP,OH Exempt,0,0,15000
+2003,Rohrer,717 Seville Rd,,,Wadsworth,OH,44281,,Net 30,RH,OH Exempt,0,0,50000
+2005,PCA- New Oxford,201 South College Ave,,,New Oxford,PA,17350,,Net 45 Days,DJ,Exempt,1,0,150000
+2007,International Paper- Thorofare,33 Phoenix Drive,,,Thorofare,NJ,8096,856-856-7000,Net 90,DJ,Exempt,0,0,75000
+2008,Go2 Partners - Oak Brook,600 22nd Street,Suite 200,,Oak Brook,IL,60523,,2%/10- Net 60,DP,Exempt,0,0,0
+2009,Great Lakes Triad Packaging Corp,3939 36th St SE,,,Kentwood,MI,49512,,Net 30,KK,Exempt,0,0,5000
+2010,The Royal Group,2245 Killian Ave,PO Box 208,,Seymour,IN,47274,812-523-6600,Net 30,RH,Exempt,0,0,25000
+2011,Olde Wood Limited,7557 Willowdale St. SE,,,Magnolia,OH,44643,330-866-1441,Net 30,RH,OH Exempt,0,0,15000
+2012,"Spring Cove Container, Inc",215 Apple Packer Road,,,Martinsburg,PA,16662,814-224-5141,Net 30,RH,Exempt,0,0,25000
+2013,Reclaimed Design Work of Ohio,7557 Willowdale Ave,,,Magnolia,OH,44643,234-254-5343,Net 30,RH,OH Taxable,0,0,10000
+2015,"Defender Bird Feeder, LLC",PO Box 109,,,Water Valley,MS,38965,303-547-7368,Net 30,House,Exempt,0,0,2500
+2016,PCA Salisbury,1302 N. Salisbury Ave,,,Salisbury,NC,28144,704-647-9102,Net 30,DJ,Exempt,0,0,25000
+2019,PCA- Landisville,701 Stony Battery Road,,,Landisville,PA,17538,,Net 30,DJ,Exempt,0,0,300000
+2019C,PCA- Landisville,701 Stony Battery Road,,,Landisville,PA,17583,,Net 30,DJ,Exempt,0,0,300000
+2020,National Hot Rod Association,140 Via Verde Suite 100,,,San Dimas,CA,91773,626-250-2303,,DP,Exempt,0,1,0
+2021,The Scotts Miracle- Gro Company,14310 Scottslawn Road,,,Marysville,OH,43041,,,RH,OH Exempt,0,1,0
+2022,Dalton Box,PO Box 3416,,,Dalton,GA,30719,706-277-2288,Net 30,DP,Exempt,0,0,10000
+2024,Pinnacle Trading,425 Victory Drive,,,Springboro,OH,45066,937-746-1010,Net 30,DP,OH Exempt,0,0,3000
+2025,BisLabels Inc,250 E. 5th Street,15th Floor,,Cincinnati,OH,45202,,,DJ,OH Exempt,0,1,0
+2026,Corpad Company,555 Park Ave East,,,Mansfield,OH,44905,419-522-7818,,RH,Exempt,0,1,0
+2027,Welch Packaging Elkhart,1130 Herman ST.,,,Elkhart,IN,46516,,2%-10 Days/Net 30,RH,Exempt,0,0,25000
+2029,Litho Stock,255 Sheridan Road,,,Glencoe,IL,60022,773-562-8585,Net 30,RH,Exempt,0,0,50000
+2030,High Resolutions,127 Bearden Place,,,Knoxville,TN,37917,865-523-3361,,RH,Exempt,0,1,0
+2032,"Cedar Health Science, Inc.","7040 Avenida Encinas, #104-241",,,Carlsbad,CA,92011,760-492-5992,,House,Exempt,0,1,0
+2033,The Quarry Golf Club,5650 Quarry Lake Dr,,,Canton,OH,44730,,Cash,House,OH Taxable,0,0,1000
+2034,"United Finishing & Die Cutting, Inc.",3875 King Avenue,,,Cleveland,OH,44114,216-881-0239,,House,OH Taxable,0,1,0
+2035,Kelly Box & Packaging Corporation,2801 Covington Rd,,,Fort Wayne,IN,46802,260-432-4570,Net 30,KK,Exempt,0,0,25000
+2036,"Amish Door, Inc.",1210 Winesburg Street,,,Wilmot,OH,44689,330-359-9546,Net 30,DP,OH Taxable,0,0,5000
+2037,Pac360 Design,3300 Winbrook Dr.,,,Memphis,TN,38116,,,UN,Exempt,0,1,0
+2038,Apex Paper Box Company,5601 Walworth Avenue,,,Cleveland,OH,44102,,Net 30,DP,OH Exempt,0,0,5000
+2039,Hood Container - York,200 Boxwood Lane,,,York,PA,17402-9302,717-757-7525,1%/20 Net 45,DJ,Exempt,0,0,15000
+2040,Liberty Packaging,8330 Endicott Lane,,,Dallas,TX,75227,,,DP,Exempt,0,1,0
+2041,Gilson Graphics,2000 Oak Industrial Dr. NE,,,Grand Rapids,MI,49505,616-459-4539,Net 30,DP,Exempt,0,0,25000
+2042,"Tyoga Container Company, Inc.",9 Fish Street,PO Box 517,,Tioga,PA,16946,1-800-724-6003,Net 30,DJ,Exempt,0,0,25000
+2044,Unicorr Packaging Group,455 Sackett Point Road,,,North Haven,CT,6473,203-747-3031,Net 30,DJ,Exempt,0,0,25000
+2046,"M-Line, Inc.",2906 Nationwide Pkwy,,,Brunswick,OH,44212,330-225-8559,Net 45 Days,DP,OH Exempt,0,0,25000
+2047,ImagineThis,1147 Oberlin Ave SW,,,Massillon,OH,44647,330-481-1102,Net 30,DP,OH Taxable,0,0,5000
+2048,The Clinical Trials Network,700 W. Clair Ave.,Ste 414,,Cleveland,OH,44113,216-505-8150,Net 30,DP,OH Taxable,0,0,5000
+2051,"Batavia Container, Inc",1400 Paramount Parkway,,,Batavia,IL,60510,630-879-2100,Net 30,DP,Exempt,0,0,25000
+2052,"Larsen Packaging Products, Inc.(Alpha Container)",425 South 37th Avenue,,,St. Charles,IL,60174,630-384-1130,Net 30,House,Exempt,0,1,15000
+2053,Cumberland Container,1027 N. Chestnut St.,,,Monterey,TN,38574,931-839-2227,TBA,RH,Exempt,0,1,5000
+2055,SMC Packaging Group,4500 E. Progress Place,,,Springfield,MO,65803,417-616-2017,,DP,Exempt,0,1,0
+2056,Seen Media Group,29 Meserole Ave,,,Brooklyn,NY,11222,,,UN,Exempt,0,1,0
+2057,M Pack Solutions LLC,PO Box 429,,,Gallatin,TN,37066,,Net 30,DP,Exempt,0,0,25000
+2058,"Crispy Maid, LLC",5500 Bucknell Dr.,,,Atlanta,GA,30336,225-677-8226,Net 30,DJ,Exempt,0,0,25000
+2059,Vestcom,2800 Cantrell Road,"One Cantrell Building, Suite 400",,Little Rock,AR,72202,501-663-0100,Net 45 Days,DP,Exempt,0,0,250000
+2060,Clarience Technologies,11664 Route 6,,,Wellsboro,PA,16901,,,House,Exempt,0,1,0
+2061,i2M,755 Oak Hill Road,,,Mountain Top,PA,18424,570-474-4417,Net 30,UN,Exempt,0,0,25000
+2062,Landaal Packaging Systems- Flint Packaging Division,PO Box 326,,,Flint,MI,48501,810-742-2730,Net 30,RH,Exempt,0,0,10000
+2063,"Coastal Pet Products, Inc.",911 Leadway Ave,,,Alliance,OH,44601,330-821-7363,,DP,OH Taxable,0,1,0
+2064,Hawthorne Gardening Company,3204 NW 38th Cir,,,Vancouver,WA,98660,,,UN,Exempt,0,1,0
+2065,Symmetry Printing and Marketing,8925 SW 129th St.,,,Miami,FL,33176,,,UN,Exempt,0,1,0
+2066,Hood Container- Lebanon,1315 West Baddour Pkwy,,,Lebanon,TN,37087,615-784-0267,,UN,Exempt,0,1,0
+2070,Orange Pkg.,PO Box 2295,,,Newburgh,NY,12550,845-562-0900,,UN,Exempt,0,1,0
+2071,PBI Sales,41 E. Barclay Street,,,Hicksville,NY,11801,516-937-1133,Net 30,UN,Exempt,0,0,50000
+2072,One Stop Binding & Finishing Solutions,267 Farmers Road,,,Pontypool,ON,L0A 1K0,416-688-8129,,UN,Exempt,0,1,0
+2074,GO2- TFS Results,4199 Kinross Lakes Parkway,Suite 235,,Richfield,OH,44286,330-650-5300,2%/10- Net 60,DP,OH Exempt,0,0,10000
+2075,Vinyl Works,"110 Main Street, Suite 102",,,South Amboy,NJ,8879,732-753-9632,,DP,Exempt,0,1,0
+2076,Run Direct,465 West 23rd Street,,,New York,NY,10011,646-320-9940,,DJ,Exempt,0,1,0
+2077,Dominion Carton Corporation,301 Gordon Avenue,,,Bristol,VA,24201,276-669-1109,,UN,Exempt,0,1,0
+2078,Bennett,4800 Noland Road,,,Kansas City,MO,64133,816-447-9210,,UN,Exempt,0,1,0
+2079,Central Coated Products Inc,2025 Mccrea St,,,Alliance,OH,44601,,,RH,OH Exempt,0,1,0
+2080,Welch Packaging Toledo,1240 Matzinger Rd.,,,Toledo,OH,43612,,2%-10 Days/Net 30,RH,OH Exempt,0,0,25000
+2081,Abbott Action,3 Venus Way,,,Attleboro,MA,2703,781-821-8200,Net 30,DJ,Exempt,0,0,25000
+2082,Leon L Berkowitz Co.,626 Jacksonville Road,Suite 154,,Warminster,PA,18974,215-654-0800,,UN,Exempt,0,1,0
+2083,Merchandising & Marketing Corporation,650 Halstead Avenue,Suite 100,,Mamaroneck,NY,10543,914-381-4830,,UN,Exempt,0,1,0
+2085,Diamond Line Containers,760 Killian Rd,,,Akron,OH,44319,330-644-9993,Net 30,DP,OH Exempt,0,0,1000
+2087,Stewart- MacDonald Manufacturing,21 N. Shafer St,,,Athens,OH,45701,800-848-2273,,UN,OH Taxable,0,1,0
+2088,Tyndell Photographic,13030 Wayne Rd,,,Livonia,MI,48150,,Net 30,DP,Exempt,0,0,6000
+2089,BCI- Lancaster Division,3950 Continental Dr.,,,Columbia,PA,17512,,Net 30,DJ,Exempt,0,0,30000
+2090,Sutherland Packaging,254 Brighton Rd,,,Andover,NJ,7821,800-527-0588,,UN,Exempt,0,1,0
+2091,TKM,3455 Forest Lake Drive,Suite 200,,Uniontown,OH,44685,,Net 30,House,OH Exempt,0,0,500
+2092,"Complete Finishings and Folding Cartons, LLC",7920 State Road,,,Philadelphia,PA,19136,215-335-9311,,UN,Exempt,0,1,0
+2093,Contemporary Imaging,161 Coolidge Ave,,,Englewood,NJ,7631,201-510-4475,,UN,Exempt,0,1,0
+2094,Express,1 Express Drive,,,Columbus,OH,43230,,Net 45 Days,RH,OH Taxable,0,1,25000
+2095,"Capitol Container, Inc",2555 Container Drive,,,Montgomery,AL,36109,334-277-5644,Net 30,DP,Exempt,0,0,50000
+2097,Henley Graphics,229 N. Mt Vernon Ave,,,Loudonville,OH,44842,419-994-5488,On Receipt,DP,OH Exempt,0,1,1000
+2098,Diamond Packaging,111 Commerce Drive,,,Rochester,NY,14623,585-334-8038,,DJ,Exempt,0,1,0
+2099,Holmes Printing Solutions,8757 Co Rd 77,,,Fredericksburg,OH,44627,330-674-2828,Net 30,RH,OH Taxable,0,0,25000
+2100,Apex Display Group,1000 N. Cannon Ave.,Suite 1400,,Lansdale,PA,19446,215-310-1647,1% 10/Net 30,DJ,Exempt,0,0,25000
+2101,The Committee to Elect Justin Speight,1402 Walnut Ridge Drive,,,Uniontown,OH,44685,,Net 30,DP,OH Taxable,0,0,500
+2102,Foil Image,6 Continental Lane,,,Marlton,NJ,8053,856-983-8557,,UN,Exempt,0,1,0
+2103,Canton Data Print,2617 Cleveland Ave NW,,,Canton,OH,44709,330-454-8288,,House,OH Taxable,0,1,0
+2104,Hummingbird,312 Plum St.,Suite 1420,,Cincinnati,OH,45202,,,UN,OH Taxable,0,1,0
+2105,TriState Container/ ProCorr Display,1440 Bridgewater Road,,,Bensalem,PA,19020,215-638-1311,,UN,Exempt,0,1,0
+2107,Jamestown- Buffalo,2775 Broadway Street,,,Buffalo,NY,14227,,Net 30,DJ,Exempt,0,0,25000
+2108,NEO Marketing,4607 Woodland Ave NW,,,Canton,OH,44709-1338,330-933-1843,,DP,OH Taxable,0,1,0
+2109,Titan Display & Packaging,455 T Elmer Cox Dr.,,,Greeneville,TN,37743,423-812-0405,Net 30,DJ,Exempt,0,0,25000
+2110,GBS Corp,7233 Freedom Ave NW,,,North Canton,OH,44720,330-494-5330,Net 30,DP,OH Exempt,0,0,50000
+2111,Ardent Displays & Packaging,95 Leggett Street,,,East Hartford,CT,6108,860-528-6000,Net 30,DJ,Exempt,0,0,25000
+2112,TekWeld,,,,,,,,,UN,Exempt,0,1,0
+2113,President Container Group,200 West Commercial Ave,,,Moonachie,NJ,7074,,,UN,Exempt,0,1,0
+2114,Reliant Packaging,120 Victoria Rd,,,Youngstown,OH,44515,330-953-1032,,RH,OH Exempt,0,1,0
+2115,Welch- Toledo,1240 Matzinger Rd,,,Toledo,OH,43612,,,UN,OH Exempt,0,0,0
+2117,American Solutions for Business,106 South Street,,,Foxborough,MA,2035,,,DJ,Exempt,0,1,0
+2118,"Ohio Gratings, Inc",5299 Southway St SW,,,Canton,OH,44706,,,DP,OH Taxable,0,1,0
+2120,Polymer Packaging Inc.,7755 Freedom Ave NW,,,North Canton,OH,44720,,,DP,OH Taxable,0,1,0
+2121,The Ruskin Group,1330 Old Freeport Road,Ste 2BR,,Pittsburgh,PA,15238,,,DP,Exempt,0,1,0
+2122,Lucas Graphics LLC,,,,,,,,,RH,OH Taxable,0,1,0
+2123,Miller Zell,6100 Fulton Industrial Blvd SW,,,Atlanta,GA,30336,,,UN,Exempt,0,1,0
+2124,U.D. Label,929 2nd Ave,,,Coraopolis,PA,15108,412-264-9000,,RH,Exempt,0,1,0
+2125,PCA- Miami,15600 N.W. 15th Ave,,,Miami Gardens,FL,33156,,,UN,Exempt,0,1,0
+2126,Middlestreet Graphics & Display,6939 Americana Parkway,,,Reynoldsburg,OH,43068,614-255-6779,"2%-15, Net 30",DP,OH Taxable,0,1,0
+2127,Unified Resources in Display,40 Boright Ave,,,Kenilworth,NJ,7033,516-353-4467,,UN,Exempt,0,1,0
+2128,Atlas Packaging & Displays,13165 NW 38 Ave,,,Opa Locka,FL,33054,305-688-5096,,UN,Exempt,0,1,0
+2130,Kendal King,609 SW 8th St #140,,,Bentonville,AR,72712,,,UN,Exempt,0,1,0
+2131,Elegant Packaging,5253 W. Roosevelt Rd.,,,Cicero,IL,60804,,,House,Exempt,0,1,0
+2132,POV Printing Solutions,16715 W Park Cir Dr. #1,,,Chagrin Falls,OH,44022,,Net 30,DP,OH Exempt,0,0,25000
+2133,Welch Packaging- Valley View,6090 Hillcrest Dr.,,,Valley View,OH,44125,,Net 30,DP,OH Taxable,0,0,25000
+2134,RDA Container Corporation,70 Cherry Road,,,Rochester,NY,14624,,,DJ,Exempt,0,1,0
+2135,A & A Packaging Products,9419 Belair Road,,,Baltimore,MD,21236,,,UN,Exempt,0,1,0
+2136,Hatteras,56 Park Road,,,Tinton Falls,NJ,7724,,Net 30,RH,Exempt,0,0,25000
+2137,"Theisen's Supply, Inc",6201 Chavenelle Rd,,,Dubuque,IA,52002,563-556-4738,Net 30,DP,Exempt,0,0,5000
+2139,Neofill,650 S. Prospect Ave.,Suite 107,,Hartville,OH,44632,,,DP,OH Taxable,0,1,0
+2140,"Packaging Consultants, Inc",9 Welby Road,,,New Bedford,MA,2745,,,UN,Exempt,0,1,0
+2141,"Abracadabra Experiences, LLC",1420 Celebration Blvd.,Suite 200,,Celebration,FL,34747,,Net 30,House,Exempt,0,0,5000
+2143,Paige Packaging,1 Paul Kohner Place,,,Elmwood Park,NJ,7407,,,UN,Exempt,0,1,0
+2144,Greenbay Packaging- Lebanon,760 Kingsview Drive,,,Lebanon,OH,45036,,,RH,OH Exempt,0,1,0
+2145,"Creative Packaging, Inc",1781 Kemper Ct.,PO Box 305,,Zanesville,OH,43702-0305,,Net 30,RH,Exempt,0,0,10000
+2146,"Howi, Inc",40 Triangle Center,Suite 101,,Yorktown Heights,NY,10598,,,UN,Exempt,0,1,0
+2147,Panther Graphics,465 Central Ave,,,Rochester,NY,14605,,,DJ,Exempt,0,1,0
+2148,Wild Posting,214 S. Locust St.,#300,,Inglewood,CA,90301,,,UN,Exempt,0,1,0
+2149,GO2 Partners- Las Vegas,6543 S Las Vegas Blvd.,Suite 200,,Las Vegas,NV,89119,,2%/10- Net 60,DP,Exempt,0,0,10000
+2150,Prisma,4651 S Butterfieldd Dr #161,,,Tucson,AZ,85714,,,DP,Exempt,0,1,0
+2152,IPS,69 Benham Ave,,,Bridgeport,CT,6605,,,UN,Exempt,0,1,0
+2154,"Votive Display and Packaging, LLC",9434 W 157th Ct,,,Overland Park,KS,66221,913-579-8200,,UN,Exempt,0,1,0
+2155,Shorr Packaging Corp.,12121 Best Place,,,Sharonville,OH,45241,513-782-4445,2%-10 Days/Net 30,RH,OH Exempt,0,0,100000
+2156,Danbury Square Box Company,1A Broad Street,,,Danbury,CT,6810,,Net 30,DJ,Exempt,0,0,25000
+2157,Designlore,1238 Callowhill St.,Ste. 608,,Philadelphia,PA,19123,,,DJ,Exempt,0,1,0
+2158,Hood Container- Covington,2251 Augustine Ave,,,Covington,KY,61014,,,UN,Exempt,0,1,0
+2159,Midwest Box Company,9801 Walford Ave,,,Cleveland,OH,44102,,,House,OH Exempt,0,1,0
+2160,Anchor Hocking,519 Pierce Avenue,,,Lancaster,OH,43130,,Net 90,DJ,OH Exempt,0,0,225000
+2162,DS Smith Packaging- Greeneville,120 T. Elmer Cox Drive,,,Greeneville,TN,37743,,Net 30,DP,Exempt,0,0,25000
+2164,Moore Packaging Corporation,191 John Street,,,Barrie,ON,L4N2L4,,,DJ,Exempt,0,1,0
+2165,Bay Cities,5138 Industry Ave,,,Pico Rivera,CA,90660,,,RH,Exempt,0,1,0
+2166,Stephen Gould- Whitestown,4990 Indianapolis Road,,,Whitestown,IN,46075,,,UN,Exempt,0,1,0
+2167,BCI- Greenville Division,10 Jack Casey Court,,,Fountain Inn,SC,29644,864-295-3044,Net 30,RH,Exempt,0,0,25000
+2168,Supply One-Cleveland,26801 Fargo Ave,,,Cleveland,OH,44146,216-514-7000,,DP,OH Exempt,0,1,0
+2169,Hood Container- Winston Salem,555 Aureole Street,,,Winston Salem,NC,27107,336-771-3425,,DJ,Exempt,0,1,0
+2170,Paul Schumacher Homes,2715 Wise Ave NW,,,Canton,OH,44708,,,DP,OH Taxable,0,1,0
+2172,LamPro Industries Inc,4701 Crayton Ave,Unit A,,Cleveland,OH,44104,,,DP,OH Taxable,0,1,0
+2174,Anchor Bay Packaging,30905 23 Mile Road,,,New Baltimore,MI,48047,,,UN,Exempt,0,1,0
+2175,Arrow Packaging Solutions,6550 E 30th Street,Suite 130,,Indianapolis,IN,46219,,,RH,Exempt,0,1,0
+2176,"Catalpha Advertising & Design, Inc.",142 Westwood Circle,,,Elizabathtown,NC,28337,410-337-0066,Net 30,RH,Exempt,0,0,15000
+2177,Sandusky Packaging Corp.,2016 George St.,,,Sandusky,OH,44870,,Net 30,DP,OH Exempt,0,0,10000
+2178,Archer Sign Corporation,1917 Henry Ave SW,,,Canton,OH,44706,,,DP,OH Taxable,0,1,0
+2180,"Mount Vernon Packaging, Inc",135 Progress Dr.,,,Mount Vernon,OH,43050,,,DP,OH Taxable,0,1,0
+2181,Crews Ink,13915 W 107th St.,,,Lenexa,KS,66215,,,UN,Exempt,0,1,0
+2182,Alliance Corrugated & Displays,1291 Lions Club Rd.,,,Madison,GA,30650,,Net 30,DP,Exempt,0,0,25000
+2184,Ancore,96 Swampscott Rd,St 7,,Salem,MA,,,,RH,Exempt,0,1,0
+2185,"Intercontinental Packaging, Inc",604 Walker Street,,,Opelika,AL,36801,334-749-6168,,UN,Exempt,0,1,0
+2186,Travel Host,,,,,,,,,RH,OH Taxable,0,1,0
+2187,Jet Container- Anchor,1033 Brentnell Ave,,,Columbus,OH,43219,614-444-2133,,DJ,OH Exempt,0,1,0
+2188,Gervasi Vineyard,1700 55th Street NE,,,Canton,OH,44721,,,DP,OH Taxable,0,1,0
+2189,International Paper- Fort Wayne,3904 Ferguson Rd.,,,Fort Wayne,IN,46809,,Net 90,RH,Exempt,0,0,75000
+2190,Shorr Packaging- Indianapolis,9901 Kincaid Drive,Suite 100,,Fishers,IN,46037,,,UN,Exempt,0,1,0
+2191,Elite Print Finishing,1718 Maple Ave,,,Burlington,NC,27215,,,DP,Exempt,0,1,0
+2192,One Source,2358 Walnut Ave,,,Fullerton,CA,92831,,Net 30,RH,Exempt,0,0,100000
+2193,Seymour Home Products,885 North Chestnut Street,,,Syemour,IN,47274,,Net 30,DP,Exempt,0,0,15000
+2194,"Caxtronic, Inc.",777 Brickell Ave 500-9311,,,Miami,FL,33131,,,DP,Exempt,0,1,0
+2195,"Strawder Family Innovations, LLC",16 South Avenue West,,,Cranford,NJ,7016,,Net 30,RH,Exempt,0,0,10000
+2196,PCA- Waco Sheet Plant,701 Texas Central Pkwy,,,Waco,TX,76712,,Net 30,DP,Exempt,0,0,100000
+2197,CJ Industries,760 Water Street,,,Meadville,PA,16335,,,DP,Exempt,0,1,0
+2198,Oat Haus,994 Valley Belt Road,,,Brooklyn Heights,OH,44131,,Net 30,DJ,OH Taxable,0,0,15000
+2199,"1880 Retail, LLC",8755 W Higgins Road,Suite 610,,Chicago,IL,60631,,Net 30,DJ,Exempt,0,0,15000
+2200,Zippity Print,1060 W. Bagley Rd,Suite 102,,Berea,OH,44017,,,RH,OH Taxable,0,1,0
+2201,Jay Group,,,,,,,,,DJ,Exempt,0,1,0
+2202,Vesta JA,734 Lynbrook St. SE,,,North Canton,OH,44720,330-354-0997,Cash,DP,OH Exempt,0,0,5000
+2203,Ivoclar Vivadent Inc.,175 Pineview Drive,,,Amherst,NY,14228,,,DJ,Exempt,0,1,0
+2205,PPi Graphics,3620 N. High Street,Ste 308,,Columbus,OH,43214,614-262-4430,,DP,OH Taxable,0,1,0
+2206,Galley Printing,,,,,,,,,RH,OH Taxable,0,1,0
+2207,New Day Organics,788 Wye Rd.,,,Akron,OH,44333,,,RH,OH Taxable,0,1,0
+2208,HC-Companies,2450 Edison Blvd,Suite 3,,Twinsburg,OH,44087,330-487-3710,Net 30,DP,OH Exempt,0,0,25000
+2209,PCA-Middletown,1824 Baltimore St.,,,Middletown,OH,45044,,,RH,OH Exempt,0,1,0
+2210,Precision Corr,1875 Rockdale Industrial Blvd,,,Conyers,GA,30012,770-922-5355,,DP,Exempt,0,1,0
+2211,PCA- Columbus Container,3460 Commerce Drive,,,Columbus,IN,47201,,Net 30,RH,Exempt,0,0,25000
+2212,PackEdge,100 Sanford St.,,,Hamden,CT,6514,,Net 30,DJ,Exempt,0,0,25000
+2213,Hood Container- Chicago,4800 South Austin Avenue,,,Chicago,IL,60638,,,KK,Exempt,0,1,0
+2214,BCI- New York Region,797 Old Dutch Rd,,,Victor,NY,14564,,Net 30,DJ,Exempt,0,0,20000
+2215,Lahlouh,1649 Adrian Road,,,Burlingame,CA,94010,,,RH,Exempt,0,1,0
+2216,Gold Digger,1967 E. Maple St,Suite 181,,North Canton,OH,44720,330-243-7887,Cash,DP,OH Taxable,0,0,0
+2217,Innovative Packaging Solutions,20 Flour Mill Road West,,,York,PA,17406,,,DJ,Exempt,0,1,0
+2218,Eagle Flexible,,,,,,,,,RH,OH Taxable,0,1,0
+2219,Great Northern Corporation,1800 South Street,,,Racine,WI,53404,,,KK,Exempt,0,1,0
+2220,BCI- Syracuse,1203 Kinne Street,,,East Syracuse,NY,13057,,Net 30,DJ,Exempt,0,0,25000
+2221,Snackish,7021 Prescott Street,,,Vancouver,BC,V6N,778-837-3867,,RH,Exempt,0,1,0
+2222,Ferguson Box,10820 Quality Drive,,,Charlotte,NC,28278,,,DP,Exempt,0,1,0
+2223,Pratt Industries,1901 International Way,,,Hebron,KY,41048,513-770-0859,,RH,Exempt,0,1,0
+2224,Gravity Ignite,256 South Main Street,,,Wadsworth,OH,44281,330-331-6400,,DP,OH Taxable,0,1,0
+2225,BCI- Lakeside Division,,,,,,,,,DJ,Exempt,0,1,0
+2226,Forest Packaging,1955 Estes Ave,,,Elk Grove VIllage,IL,60007,,,KK,Exempt,0,1,0
+2227,NPN 360,2325 Holmgren Way,Suite 110,,Green Bay,WI,54304,,,KK,Exempt,0,1,0
+2228,"Positive Packaging & Graphics, Inc",530 Bennett Road,,,Elk Grove Village,IL,60007,,,KK,Exempt,0,1,0
+2229,Packaging Design Corporation,101 Shore Drive,,,Burr Ridge,IL,60527,,,KK,Exempt,0,1,0
+2230,L&M Corrugated Container Corporation,32 Insight Drive,,,Platteville,WI,53818,,Net 30,KK,Exempt,0,0,25000
+2231,AK Packaging Inc,10 Canal St 302,,,Bristol,PA,19007,,,DJ,Exempt,0,1,0
+2232,PCA- Carrollton,1015 Hayden Drive,,,Carrollton,TX,75006,,Net 30,DP,Exempt,0,0,25000
+2233,BCI- Sioux Falls Division,4501 2nd Avenue,,,Sioux Falls,SD,57105,,,KK,Exempt,0,1,0
+2234,Northeast Box- Div of Welch Packaging,1726 Griswold Ave,,,Ashtabula,OH,44004,440-992-5500,,RH,OH Exempt,0,1,0
+2235,Colortech Inc.,232 South 9th Street,,,Lebanon,PA,17042,,,DP,Exempt,0,1,0
+2236,365 Degree Total Marketing,153 Follins Lane,,,St. Simons Island,GA,31522,,,DP,Exempt,0,1,0
+2237,Unfused Brew Hall,130 3rd St NW,,,Canton,OH,44702,,,DP,OH Taxable,0,1,0
+2238,Effem (Mars Petcare),2013 Ovation Pkwy,,,Franklin,TN,37067,,Net 30,RH,Exempt,0,0,25000
+2239,Dimension Development Ltd,"Komet Works, Sawday Street",,,Leicester,,,,50%AdvPay/50%Net 30,RH,Exempt,0,0,0
+2240,Sonic Media Solutions,30 Bloomington St,,,Medford,NY,11763,516-840-3660,,DP,Exempt,0,0,0
+2241,Each & Every,154 N Water Street,Suite 2A,,Kent,OH,44240,,,DP,OH Taxable,0,1,0
+2242,Stephen Gould- MN Office,2950 Xenium Lane N,Suite 104,,Plymouth,MN,55441,,Net 30,KK,Exempt,0,0,25000
+2243,Pressbox Printing,200 W. 14th Avenue,,,Altoona,PA,16601,814-944-3057,,House,Exempt,0,0,0
+2244,Michcor Container,1151 Sheldon Ave SE,,,Grand Rapids,MI,49507,,2%-10 Days/Net 30,KK,Exempt,0,0,25000
+2245,"Clayton Kendall, LLC",167 Dexter Drive,,,Monroeville,PA,15146,,Net 30,RH,Exempt,0,0,50000
+2246,Delta Packaging,100 Shoe House Rd,,,York,PA,17406,717-840-9333,,DJ,Exempt,0,1,0
+2247,"Valley Container, Inc",850 Union Ave,,,Bridgeport,CT,6607,,,DJ,Exempt,0,1,0
+2248,"Healthy Sites, LLC",8247 E Washington St,Unit #222,,Chagrin Falls,OH,44023,,Cash,DP,OH Exempt,0,0,0
+2249,International Paper- Buffalo,,,,,,,,,DJ,Exempt,0,1,0
+2250,PCA- Morganton,114 Dixie Blvd,,,Morganton,NC,28655,,Net 30,DJ,Exempt,0,0,25000
+2251,Grand Traverse Container,4633 Patterson Ave SE,,,Grand Rapids,MI,49512,,,KK,Exempt,0,1,0
+2252,Performance Health,1245 Home Ave,,,Akron,OH,44310,330-633-8460,Net 30,RH,OH Taxable,0,0,5000
+2253,Carlisle Container Company,750 Claremont Road,,,Carlisle,PA,17013,717-462-4207,Net 30,DJ,Exempt,0,0,25000
+2254,Capitol Container- Mexicali - Cajas y Empaques de Baja California,Tax ID: CEB140421AM3,Cajas y Empaques de Baja California,"Av. Anahuac 423, Centro Civico",Mexicali,B.C.,21000,,Net 30,DP,Exempt,0,0,50000
+2255,Excel Displays & Packaging,4390 Liberty Street,,,Aurora,IL,60504,,Net 30,KK,Exempt,0,0,25000
+2256,Princeton Packaging,,,,,,,,,DJ,Exempt,0,1,0
+2257,PCA- South Gate Design Center,9700 Frontage Road,,,South Gate,CA,90280,,,RH,Exempt,0,1,0
+2258,York Container Company- Midwest,2601 Mason Road,,,Elgin,IL,60124,,Net 30,DP,Exempt,0,0,25000
+2259,Brooks Litho & Digital Group,72 Bridge Road,,,Islandia,NY,11749,631-789-4500,,RH,Exempt,0,1,0
+2260,Lithotone,1313 West Hively Ave,,,Elkhart,IN,46517,,,DP,Exempt,0,1,0
+2261,Great Northern Corporation- Chippewa Falls,421 Palmer St,,,Chippewa Falls,WI,54729,,,KK,Exempt,0,1,0
+2262,Worth Higgins & Associates,8770 Park Central Dr.,,,Richmond,VA,23227,,,DP,Exempt,0,1,0
+2263,Buffalo Games,220 James E. Casey Drive,,,Buffalo,NY,14206,,,DJ,Exempt,0,1,0
+2264,TI Group,115 Thorncliffe Park Dr.,,,East York,ON,M4H 1M1,416-388-3878,,KK,Exempt,0,1,0
+2265,The Fischer Group,,,,,,,,,RH,Exempt,0,1,0
+2266,Excelsus Solutions,,,,,,,,,DJ,Exempt,0,1,0
