@@ -1,34 +1,254 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* SPOT Cloud — Phase 0 landing page styling.
+   Aesthetic: industrial precision (corrugated packaging, calibration, instrumentation).
+   Color palette draws from CMYK (the corrugated/print domain) on warm paper tones. */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;800&display=swap');
+
+:root {
+  --spot-paper:        #F5F1E8;   /* warm corrugated kraft */
+  --spot-paper-deep:   #ECE5D3;
+  --spot-ink:          #1A1B1E;   /* near-black K */
+  --spot-ink-soft:     #2E2F33;
+  --spot-rule:         #C9C1AE;   /* paper rule line */
+  --spot-cyan:         #00A3B4;
+  --spot-magenta:      #D52E6B;
+  --spot-yellow:       #F5C518;
+  --spot-key:          #1A1B1E;
+  --spot-accent:       #D52E6B;   /* M from CMYK as the accent */
+  --spot-ok:           #2E8B4A;
+  --spot-warn:         #C77B0E;
+  --spot-error:        #B83A3A;
+  --shadow-sm:         0 1px 2px rgba(26, 27, 30, 0.05);
+  --shadow-md:         0 4px 12px rgba(26, 27, 30, 0.08);
+  --shadow-lg:         0 12px 32px rgba(26, 27, 30, 0.12);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; padding: 0; }
+
+body {
+  background: var(--spot-paper);
+  color: var(--spot-ink);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(213, 46, 107, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(0, 163, 180, 0.04) 0%, transparent 50%);
+  min-height: 100vh;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.spot-landing {
+  min-height: 100vh;
+  padding: 4rem 2rem;
 }
 
-.App-link {
-    color: #61dafb;
+.spot-landing-inner {
+  max-width: 880px;
+  margin: 0 auto;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* ─── Header ─── */
+.spot-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: 2rem;
+  margin-bottom: 3rem;
+  border-bottom: 1px solid var(--spot-rule);
+}
+
+.spot-cmyk-cube {
+  width: 64px;
+  height: 64px;
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  background: var(--spot-ink);
+  padding: 2px;
+}
+
+.spot-cube-face { transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.spot-cube-c { background: var(--spot-cyan); }
+.spot-cube-m { background: var(--spot-magenta); }
+.spot-cube-y { background: var(--spot-yellow); }
+.spot-cube-k { background: #2E2F33; }
+
+.spot-cmyk-cube:hover .spot-cube-face { transform: scale(0.9); }
+
+.spot-title {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.spot-subtitle {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.875rem;
+  color: var(--spot-ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.spot-edition {
+  margin: 0.5rem 0 0 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--spot-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ─── Cards ─── */
+.spot-card {
+  background: #FFFEFB;
+  border: 1px solid var(--spot-rule);
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+.spot-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--spot-accent);
+}
+
+.spot-card-title {
+  margin: 0 0 1rem 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--spot-ink-soft);
+}
+
+.spot-card-note {
+  margin: 0 0 1.25rem 0;
+  font-size: 0.875rem;
+  color: var(--spot-ink-soft);
+  line-height: 1.55;
+}
+
+.spot-loading { font-family: 'JetBrains Mono', monospace; color: var(--spot-ink-soft); }
+
+.spot-error {
+  background: #fbe9e9;
+  border-left: 3px solid var(--spot-error);
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--spot-error);
+}
+
+/* ─── Status grid ─── */
+.spot-status-grid { display: flex; flex-direction: column; gap: 0.65rem; }
+.spot-status-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px dashed var(--spot-rule);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+}
+.spot-status-row:last-child { border-bottom: none; padding-bottom: 0; }
+.spot-status-label { color: var(--spot-ink-soft); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; }
+.spot-status-value { font-weight: 500; color: var(--spot-ink); }
+.spot-status-ok { color: var(--spot-ok); font-weight: 700; }
+
+/* ─── Baseline grid ─── */
+.spot-baseline-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--spot-rule);
+  border: 1px solid var(--spot-rule);
+}
+.spot-baseline-cell {
+  background: #FFFEFB;
+  padding: 1rem 1.25rem;
+}
+.spot-baseline-label {
+  font-size: 0.7rem;
+  color: var(--spot-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.4rem;
+}
+.spot-baseline-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Roadmap ─── */
+.spot-roadmap-card { padding: 1.75rem 2rem 2rem; }
+.spot-roadmap {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+.spot-phase {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  background: var(--spot-paper-deep);
+  border-left: 3px solid var(--spot-rule);
+  font-size: 0.9rem;
+  color: var(--spot-ink-soft);
+  line-height: 1.5;
+}
+.spot-phase-active {
+  background: #FFF6E0;
+  border-left-color: var(--spot-accent);
+  color: var(--spot-ink);
+}
+.spot-phase-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  width: 1.5rem;
+  flex-shrink: 0;
+}
+.spot-phase-tag {
+  display: inline-block;
+  margin-left: 0.75rem;
+  padding: 2px 8px;
+  background: var(--spot-accent);
+  color: white;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.spot-phase-tag-critical { background: var(--spot-ink); }
+
+.spot-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--spot-rule);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--spot-ink-soft);
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 640px) {
+  .spot-landing { padding: 2rem 1rem; }
+  .spot-title { font-size: 2.25rem; }
+  .spot-baseline-grid { grid-template-columns: repeat(2, 1fr); }
 }
