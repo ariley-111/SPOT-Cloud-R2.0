@@ -1,0 +1,39 @@
+SPOT R1.6.5.1 Deployment Package — VERSION MANIFEST
+Generated: 2026-05-22 14:44:26 UTC
+Package source: Claude session, sourced from project knowledge SHA-audited 2026-05-22
+
+==============================================================================
+FILE                            LINES/SIZE       SHA-256 (first 16 hex chars)
+==============================================================================
+OPEN_SPOT.bat                    L=93              4186c164628496ee
+README.md                        L=201             52846c0f0b7081db
+SPOT_R1.5.html                   L=28074           22473ac8fe159608
+WF_Quoting_Tool_Test_Data.xlsx   sz=162982         c67287f7b5a6a119
+build_spot_r1_5.js               L=60              d1985a9ad329c54f
+customerList.csv                 L=385             9c41a30de202a3d8
+customerList.xlsx                sz=46511          4246da5bf6966c41
+fleet_compare.js                 L=366             db6b89e4e55c81bd
+install.bat                      L=120             68dbccbecfa4d5c4
+make_shortcut.vbs                L=68              16eddf69fe4b39fa
+package.json                     L=20              852cfc6211d10846
+spc_logo.png                     sz=129429         b107b6bfb48e0613
+spot_engine.js                   L=1131            5ff7594d031a62e1
+spot_r1_5.jsx                    L=9007            0c66da0efdd2acbf
+spot_runner.js                   L=358             8001c3a2d87dea88
+spot_server.js                   L=2619            cfd2ded86ea3994f
+==============================================================================
+
+BLOCKED — NOT INCLUDED (must be obtained from operator localhost):
+  spot.ico                     — desktop shortcut icon (binary, CMYK cube)
+                                 historical SHA: a5cf2664 (3192 bytes, ICO with
+                                 4 embedded sizes 16/32/48/256 px)
+
+Version sentinels (post-install verification):
+  Browser tab title:           'SPOT R1.6.5.1'
+  curl localhost:3100/api/health → version: 'R1.6.5' (server stays at R1.6.5;
+                                 JSX/server skew acceptable per D-149 history)
+  Developer-mode UI badge:     'R1.6.5.1'
+
+Build verification:
+  npm run build  →  SPOT_R1.5.html should rebuild to SHA 22473ac8fe159608
+                    (from spot_r1_5.jsx SHA 0c66da0efdd2acbf)

@@ -1,0 +1,20 @@
+{
+  "name": "spot",
+  "version": "1.6.5.1",
+  "description": "SPOT — Standard Printing Optimization Tool (Standard Printing Company)",
+  "private": true,
+  "scripts": {
+    "build": "node build_spot_r1_5.js",
+    "start": "node spot_server.js",
+    "fleet-compare": "node fleet_compare.js"
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.5",
+    "@babel/preset-react": "^7.28.5",
+    "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
