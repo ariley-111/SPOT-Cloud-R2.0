@@ -95,6 +95,19 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
+### 2026-05-29 — Phase 3 frontend rebuild COMPLETE
+- **Auth flow**: Login page + JWT auth context + token interceptor (`/api/client.js`)
+- **Main shell**: Toolbar, TabBar (multi-draft tabs), LeftPanel (inputs), RightPanel (results)
+- **State plumbing**: Reset-first `applyState()` pattern in `/lib/defaults.js`; QuoteContext manages tabs + per-tab state + auto-save (debounced 1.5s → PUT /api/drafts/{id})
+- **Live engine**: `useEngine` hook debounces 400ms then calls `/api/engine/calculate-all`; `useRouteCompare` runs CAD/Crest/Bobst in parallel for the route comparison panel
+- **Sections**: Estimate Info, Item Setup (with Multi-Part BOM strip), Board, Production Specs, Assembly, Charges (collapsible; always rendered for testability)
+- **Customer typeahead**: hits `/api/customers/search` w/ debounce, populates name + ship-to ZIP
+- **Multi-Part BOM strip**: add/remove/rename items, per-item type selector (Manufactured/Fulfillment/Purchased), Individual vs Matched Set pricing mode
+- **Right panel**: Route Comparison (3-card layout with winner badge), Economics (Sell/GM/Cost metrics), Cost Buildup (Direct→Indirect→Pricing), Quote Table (per-qty rows), consolidated Guardrails list (replaces the 44 legacy popup modals with context-aware in-panel warnings — see `/lib/warnings.js` ~30 rules covering board, route, layout, print, assembly, freight, GM tiers, multi-part)
+- **Modals**: Parse RFQ (Anthropic), Preview Quote PDF (weasyprint blob iframe), Cost Report (internal sheet-and-cost breakdown), Freight Dashboard (UTS+SPCOC), Load Quote/Draft picker — all closable with ESC + backdrop click
+- **6-min KPI timer** in Toolbar with start/pause/reset, color shifts (green→warn→err) at 0/4/6 min
+- **Testing**: Frontend testing agent (iteration_1.json) confirmed end-to-end working at ~95%, no critical issues. Math verified live: 12×18×qty 5000 → 5×6 → 30 out on 63×120 → CAD route → $5,251.80 sell / 26.7% GM / 167 sheets. Auto-save, multi-part, parser, freight, preview PDF, cost report, logout all verified.
+
 ### 2026-05-29 — Phase 2 backend APIs (substantially complete)
 - **Auth (JWT)** — register, login, /me, logout, seed-admin (idempotent)
 - **Customers** — 384 loaded from CSV on startup, search, lookup, admin CSV upload + refresh

@@ -14,7 +14,7 @@ export default function Sec({ title, hue, children, defaultOpen = true, "data-te
           <span style={{ color: "var(--spot-text3)", fontSize: 12 }}>{open ? "▾" : "▸"}</span>
         </span>
       </div>
-      {open && <div className="sp-sec-body">{children}</div>}
+      <div className="sp-sec-body" style={{ display: open ? "block" : "none" }}>{children}</div>
     </div>
   );
 }
