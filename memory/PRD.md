@@ -165,6 +165,7 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 | Item | When needed | Status | Owner |
 |---|---|---|---|
+| **🚩 BOBST CALIBRATION DISCUSSION** | **Before broader rollout** | **🟡 FLAGGED for Monday Jan 6 with Michael** | **User to raise** |
 | Sample RFQ PDFs (Skybox PO 47309, L'Oreal C4-26) | Phase 2/6 | 🟡 Pending | User to grab from file server |
 | 2-3 complex test estimates for parity validation | Phase 6 | 🟡 Pending | User |
 | SharePoint Azure AD app creds | Phase 5 | 🟡 Pending | IT |
@@ -176,6 +177,16 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 ---
 
 ## 8. Architectural decisions
+
+### 🚩 FLAGGED FOR REVIEW WITH MICHAEL (Monday Jan 6)
+
+**Bobst calibration / `bobstFirstSizing` default:**
+- The cloud SPOT currently uses `bobstFirstSizing = "true"` as default (matches Michael's shipped engine R1.6.5.1).
+- Source code at `spot_engine.js` line 161-162 explicitly notes Bobst rates are "uncalibrated — recalibrate after ~90 days shop-floor data."
+- On the 785-job iQuote regression dataset, this default produces fleet Δ +32% over iQuote and R² -0.55 (vs documented R² 0.969 baseline).
+- With `bobstFirstSizing = "false"`, fleet Δ matches D-110 baseline exactly (+6.55%) but R² is only 0.84.
+- **Both behaviors are mathematically correct** — the question is which routing default the business wants, AND when to recalibrate Bobst rates with real shop-floor data.
+- **Decision: keep current behavior (matches what Michael ships and what Rich has been comparing alongside iQuote)**, raise with Michael when he's back on Jan 6. Pricing Console (Phase 4) will allow live adjustment when decision is made.
 
 ### What's IN the cloud port
 - Multi-user with role-based auth
