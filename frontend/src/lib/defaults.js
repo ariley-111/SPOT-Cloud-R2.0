@@ -41,9 +41,9 @@ export const DEFAULT_STATE = Object.freeze({
 
   // ─── Board ─────────────────────────────────────────────────────
   flute: "C",
-  boardGrade: "200#",
+  boardGrade: "200",
   outsideLiner: "42# Kemi-Lite",
-  insideLiner: "42# Kraft",
+  insideLiner: "None",
   medium: "None",
   fscEnabled: false,
   fscFee: "25",
@@ -127,10 +127,10 @@ export function applyState(patch) {
 // ─── Lookup tables ──────────────────────────────────────────────
 export const BOX_STYLES   = ["RSC", "FOL", "D/C Tray", "Mailer", "5PF"];
 export const FLUTES       = ["B", "C", "E", "B/C"];
-export const GRADES       = ["125#","150#","175#","200#","250#","275#","350#",
+export const GRADES       = ["125","150","175","200","250","275","350",
   "ECT 23","ECT 26","ECT 29","ECT 32","ECT 40","ECT 44","ECT 55","NT"];
 export const LINERS       = [
-  "42# Kraft","33# Kla-White","42# Kla-White","Bleached White","42# Kemi-Lite",
+  "None","42# Kemi-Lite","42# Kla-White","42# Bleached White","33# Kla-White","56# Kla-White",
 ];
 export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","40# Medium","42# Bleached Medium"];
 export const PRINT_MODES  = ["Satin","Gloss","OnQ Styrene","OnQ Lightbox"];
