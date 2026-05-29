@@ -95,6 +95,23 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
+### 2026-05-29 — Phase 3 UI fixes per legacy walkthrough
+- Toolbar: removed hex logo, simplified to "SPOT" text + version pill; **moved Initials chip to AFTER customer name** per legacy ordering (Est# → Customer — Project → Initials).
+- EstimateInfoSec: **split +Qty (adds a slot up to 8) from Auto-Fill (multiplies last × 1/2/5/10/20)** — they were one button before.
+- EstimateInfoSec: removed redundant Initials input (the toolbar chip is the single source of truth now).
+- ItemSetupSec: **box-style tiles now overwrite item description ALWAYS** (legacy behavior), not just when blank.
+- ItemSetupSec: **Flip Corr button always visible** in One-Up mode regardless of whether dimensions are filled.
+- ItemSetupSec: **Sheet Library button** now opens a real modal (`SheetLibraryModal.jsx`) showing the SPC approved singlewall sheets with search, the engine auto-pick highlighted in green.
+- ItemSetupSec: **green dot indicators on stock flutes** (B, C, E) in the Board tiles.
+- ItemSetupSec: **grade tile labels strip the "#"** suffix ("200" not "200#"); **NT tile added** at the end with orange "200# Mullen Eq" caption note; **all ECT tiles also show the "200# Mullen Eq" caption** per Rule 4.
+- ItemSetupSec: route winner badge **renamed "AUTO" / "FORCED"** (color-coded green vs. amber) instead of misleading "WINS".
+- New tab behavior confirmed: `makeBlankTab` always returns a fresh `DEFAULT_STATE` with the user's initials — nothing carries over from the previous tab. "Duplicate" tab button copies state intentionally.
+
+### 2026-05-29 — Sections built out per legacy (no more placeholders)
+- **Pricing Strategy** (`PricingStrategySec`): full Tier Targets grid (GM% / Sell$/MSF with basis toggle) + Force Sell/Pc per qty + Pricing Mode (Individual/Matched Set) override panel + Fulfillment/Purchased GM panels when applicable. Reset-to-defaults button.
+- **Advanced Controls** (`AdvancedControlsSec`): full read-only display of D-110 calibrated rates (Inca, CAD, Crest, Bobst hourly + sheets/hr + setup times), GM curve, FSC fee, paper uplift, ink rate, defaults panel. Phase 4 will add admin edit + audit log.
+- **Board Engine** (`BoardEngineSec`): singlewall flutes/grades/liners/mediums display, liner upgrade rules (33# / 56# Kla-White, +$17.50 bleached), route eligibility (D-121/D-124), Buy Min behavior (D-067), board substitution status for current quote. Phase 4 will add admin sheet-library editor.
+
 ### 2026-05-29 — Parser ported VERBATIM to legacy contract
 The Phase 2 parser had been simplified to a flat-output extraction. Brought to 1:1 with legacy `spot_server.js` (D-136 / D-141 / D-144 / D-145):
 

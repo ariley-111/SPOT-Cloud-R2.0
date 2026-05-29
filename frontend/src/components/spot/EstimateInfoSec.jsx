@@ -30,7 +30,7 @@ export default function EstimateInfoSec() {
   return (
     <Sec label={headerLabel} hue="#94a3b8" open={sec.job} onToggle={() => toggleSec("job")}
          data-testid="sec-estimate-info">
-      <div style={{ display: "grid", gap: 6, gridTemplateColumns: "1fr 1fr 1fr auto" }}>
+      <div style={{ display: "grid", gap: 6, gridTemplateColumns: "1fr 2fr 1fr" }}>
         <F l="Estimate #">
           <input className="sp-input" value={s.estNum || ""}
             data-testid="input-est-num"
@@ -48,18 +48,6 @@ export default function EstimateInfoSec() {
           <input className="sp-input" value={s.custRef || ""}
             data-testid="input-project-name"
             onChange={(e) => setField("custRef", e.target.value)} />
-        </F>
-        <F l="Initials">
-          <input className="sp-input" value={s.estInitials || ""}
-            data-testid="input-est-initials"
-            maxLength={4}
-            onChange={(e) => setField("estInitials", e.target.value.toUpperCase().slice(0, 4))}
-            placeholder="—"
-            style={{
-              width: 52, textAlign: "center", fontWeight: 700, letterSpacing: ".05em",
-              padding: "5px 6px", fontSize: 12,
-              borderColor: (!s.estInitials || s.estInitials.length < 2) ? "var(--spot-err)" : undefined,
-            }} />
         </F>
       </div>
 
@@ -80,7 +68,7 @@ export default function EstimateInfoSec() {
         )}
       </div>
 
-      {/* Quantities */}
+      {/* Quantities — up to 8 slots, +Qty adds a slot, Auto-Fill multiplies last */}
       <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
           textTransform: "uppercase", letterSpacing: ".06em", width: 64, flexShrink: 0 }}>Qty</span>
@@ -96,14 +84,30 @@ export default function EstimateInfoSec() {
             style={{ width: 65, padding: "4px 6px", fontSize: 12, textAlign: "center" }} />
         ))}
         <button onClick={() => {
+          const cur = s.qtys || [];
+          if (cur.length >= 8) return;
+          setField("qtys", [...cur, ""]);
+        }} data-testid="btn-qty-add"
+          disabled={(s.qtys || []).length >= 8}
+          style={{
+            all: "unset", cursor: (s.qtys || []).length >= 8 ? "not-allowed" : "pointer",
+            fontSize: 11, fontWeight: 700, color: "var(--spot-accent)",
+            padding: "4px 8px", border: "1px solid var(--spot-accent)", borderRadius: 3,
+            opacity: (s.qtys || []).length >= 8 ? 0.4 : 1,
+          }}
+          title="Add another quantity slot (max 8)">+ Qty</button>
+        <button onClick={() => {
           const filled = (s.qtys || []).filter((q) => Number(q) > 0);
-          const last = filled[filled.length - 1] || 100;
+          const last = Number(filled[filled.length - 1]) || 100;
           const tiers = [last, last * 2, last * 5, last * 10, last * 20].slice(0, 5).map(String);
           setField("qtys", tiers);
-        }} style={{
-          all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "var(--spot-green)",
-          padding: "4px 6px",
-        }} data-testid="btn-qty-autofill">+Qty Auto-Fill</button>
+        }} data-testid="btn-qty-autofill"
+          style={{
+            all: "unset", cursor: "pointer",
+            fontSize: 11, fontWeight: 700, color: "var(--spot-green)",
+            padding: "4px 8px", border: "1px solid var(--spot-green)", borderRadius: 3,
+          }}
+          title="Auto-fill 5 tiers from last entered (×1, ×2, ×5, ×10, ×20)">Auto-Fill</button>
       </div>
     </Sec>
   );

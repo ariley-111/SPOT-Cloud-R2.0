@@ -128,7 +128,7 @@ export function applyState(patch) {
 export const BOX_STYLES   = ["RSC", "FOL", "D/C Tray", "Mailer", "5PF"];
 export const FLUTES       = ["B", "C", "E", "B/C"];
 export const GRADES       = ["125#","150#","175#","200#","250#","275#","350#",
-  "ECT 23","ECT 26","ECT 29","ECT 32","ECT 40","ECT 44","ECT 55","KT"];
+  "ECT 23","ECT 26","ECT 29","ECT 32","ECT 40","ECT 44","ECT 55","NT"];
 export const LINERS       = [
   "42# Kraft","33# Kla-White","42# Kla-White","Bleached White","42# Kemi-Lite",
 ];

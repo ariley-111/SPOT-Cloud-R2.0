@@ -120,11 +120,17 @@ function FreightPanel({ s }) {
 function RouteComparison({ s, primary }) {
   const { routes } = useRouteCompare(s, 0);
   const qty = primary?.qty;
+  const forced = !!s.routeOverride;
   return (
     <div data-testid="route-comparison" style={panelStyle("#22c55e")}>
       <div style={panelHeader("#22c55e")}>
         <span>Route Comparison{qty ? ` · QTY ${fmtInt(qty)}` : ""}</span>
-        {primary?.route && <span className="sp-badge sp-badge-green">{primary.route} WINS</span>}
+        {primary?.route && (
+          <span className={`sp-badge ${forced ? "sp-badge-warn" : "sp-badge-green"}`}
+            data-testid="route-winner-badge">
+            {primary.route} {forced ? "FORCED" : "AUTO"}
+          </span>
+        )}
       </div>
       <div style={{ padding: "8px 10px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
         {(routes.length > 0 ? routes : ["CAD", "Crest", "Bobst"].map((r) => ({ route: r }))).map((r) => {

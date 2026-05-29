@@ -21,7 +21,8 @@ export default function ItemSetupSec({ result }) {
     const descs = { RSC: "Regular Slotted Container", FOL: "Full Overlap Slotted Container",
       "D/C Tray": "Die Cut Tray", Mailer: "Mailer", "5PF": "Five Panel Folder" };
     const patch = { boxStyle: cur };
-    if (cur && !s.itemDesc) patch.itemDesc = descs[cur];
+    // Always overwrite item desc when a box-style tile is clicked (legacy behavior).
+    if (cur) patch.itemDesc = descs[cur];
     if (cur === "RSC" || cur === "Mailer") {
       patch.handGluing = "Yes"; patch.jointsPerPiece = "1"; patch.tape = "No";
     }
@@ -75,20 +76,19 @@ export default function ItemSetupSec({ result }) {
               <>
                 <F l="Width"><Num value={s.oneUpW} onChange={(v) => setField("oneUpW", v)} step="0.0001" min="0" data-testid="input-one-up-w" /></F>
                 <F l="Length"><Num value={s.oneUpL} onChange={(v) => setField("oneUpL", v)} step="0.0001" min="0" data-testid="input-one-up-l" /></F>
-                {Number(s.oneUpW) > 0 && Number(s.oneUpL) > 0 && (
-                  <button onClick={onFlipCorr} data-testid="btn-flip-corr"
-                    title="Swap Width ↔ Length (changes corrugation direction — requires customer approval)"
-                    style={{
-                      all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                      padding: "5px 8px", borderRadius: 4,
-                      color: corrFlipped ? "var(--spot-err)" : "var(--spot-text3)",
-                      background: corrFlipped ? "var(--spot-err-bg)" : "transparent",
-                      border: `1px solid ${corrFlipped ? "var(--spot-err)" : "var(--spot-border)"}`,
-                      whiteSpace: "nowrap",
-                    }}>
-                    {corrFlipped ? "⇄ CORR FLIPPED" : "⇄ Flip Corr"}
-                  </button>
-                )}
+                {/* Flip Corr — ALWAYS visible per legacy spot_r1_5.jsx */}
+                <button onClick={onFlipCorr} data-testid="btn-flip-corr"
+                  title="Swap Width ↔ Length (changes corrugation direction — requires customer approval)"
+                  style={{
+                    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    padding: "5px 8px", borderRadius: 4,
+                    color: corrFlipped ? "var(--spot-err)" : "var(--spot-text3)",
+                    background: corrFlipped ? "var(--spot-err-bg)" : "transparent",
+                    border: `1px solid ${corrFlipped ? "var(--spot-err)" : "var(--spot-border)"}`,
+                    whiteSpace: "nowrap",
+                  }}>
+                  {corrFlipped ? "⇄ CORR FLIPPED" : "⇄ Flip Corr"}
+                </button>
               </>
             ) : (
               <>
@@ -97,7 +97,9 @@ export default function ItemSetupSec({ result }) {
                 <F l="Pcs/Sh"><Num value={s.sheetPcsPerSheet} onChange={(v) => setField("sheetPcsPerSheet", v)} step="1" min="1" style={{ width: 55 }} data-testid="input-pcs-sheet" /></F>
               </>
             )}
-            <button data-testid="btn-sheet-library" style={{
+            <button data-testid="btn-sheet-library"
+              onClick={() => window.dispatchEvent(new CustomEvent("spot:open-sheet-library"))}
+              style={{
               all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 600,
               padding: "5px 12px", borderRadius: 4, background: "var(--spot-accent-soft)",
               color: "var(--spot-accent)", border: "1px solid var(--spot-accent)",
@@ -199,20 +201,43 @@ function BoardStatusBar({ s, r, setField }) {
         <div style={{ padding: "6px 0 2px", display: "flex", flexDirection: "column", gap: 6 }} data-testid="board-tiles">
           <F l="Flute" inline fw={60}>
             <div style={{ display: "flex", gap: 2 }}>
-              {FLUTES.map((f) => (
-                <Tile key={f} label={f} active={s.flute === f}
-                  data-testid={`tile-flute-${f.replace('/', '')}`}
-                  onClick={() => setField("flute", f)} small />
-              ))}
+              {FLUTES.map((f) => {
+                // Green dot = stock-eligible singlewall flutes per legacy SPC sheet library
+                const isStock = ["B", "C", "E"].includes(f);
+                return (
+                  <Tile key={f} label={
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {isStock && <span style={{ width: 5, height: 5, borderRadius: 3,
+                        background: "var(--spot-green)" }} />}
+                      {f}
+                    </span>
+                  } active={s.flute === f}
+                    data-testid={`tile-flute-${f.replace('/', '')}`}
+                    onClick={() => setField("flute", f)} small />
+                );
+              })}
             </div>
           </F>
           <F l="Grade" inline fw={60}>
-            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-              {GRADES.map((g) => (
-                <Tile key={g} label={g} active={s.boardGrade === g}
-                  data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
-                  onClick={() => setField("boardGrade", g)} small />
-              ))}
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
+              {GRADES.map((g) => {
+                const isECT = g.startsWith("ECT");
+                const isNT = g === "NT";
+                const cleanLabel = g.replace("#", "");
+                return (
+                  <span key={g} style={{ display: "inline-flex", flexDirection: "column", gap: 1, alignItems: "center" }}>
+                    <Tile label={cleanLabel} active={s.boardGrade === g}
+                      data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
+                      onClick={() => setField("boardGrade", g)} small />
+                    {(isECT || isNT) && (
+                      <span style={{ fontSize: 8, color: "var(--spot-orange)",
+                        fontWeight: 600, lineHeight: 1, marginTop: 1 }} title="Mullen substitution per Rule 4">
+                        200# Mullen Eq
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           </F>
           <F l="Outside" inline fw={60}>

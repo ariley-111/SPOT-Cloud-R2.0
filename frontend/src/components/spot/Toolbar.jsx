@@ -17,12 +17,8 @@ export default function Toolbar({ openModal }) {
       background: "var(--spot-bg2)", borderBottom: "1px solid var(--spot-line)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 4,
-          background: "linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)",
-          display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 14,
-        }} data-testid="logo-mark">⬢</div>
-        <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.03em" }}>SPOT</span>
+        <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-.03em",
+          color: "var(--spot-text)" }} data-testid="logo-text">SPOT</span>
         <span className="sp-pill" style={{
           background: "var(--spot-bg3)", color: "var(--spot-text3)",
           border: "1px solid var(--spot-border)", fontSize: 10,
@@ -33,16 +29,18 @@ export default function Toolbar({ openModal }) {
             #{s.estNum}
           </span>
         )}
-        {s.estInitials && (
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-accent)" }}
-            data-testid="toolbar-initials">{s.estInitials}</span>
-        )}
         {s.custName && (
           <span style={{ fontSize: 12, color: "var(--spot-text3)" }}
             data-testid="toolbar-cust">— {s.custName}</span>
         )}
         {s.custRef && (
           <span style={{ fontSize: 11, color: "var(--spot-text3)", opacity: 0.7 }}>/ {s.custRef}</span>
+        )}
+        {s.estInitials && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-accent)",
+            padding: "1px 6px", border: "1px solid var(--spot-accent)", borderRadius: 3,
+            marginLeft: 4 }}
+            data-testid="toolbar-initials">{s.estInitials}</span>
         )}
       </div>
 
