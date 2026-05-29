@@ -38,16 +38,20 @@ export function QuoteProvider({ children }) {
   // ─── Initials: prefer saved → else derive from user.name → else prompt ───
   useEffect(() => {
     const saved = localStorage.getItem(INITIALS_KEY);
+    let resolved = "";
     if (saved && saved !== "SPC") {
-      setInitialsState(saved);
+      resolved = saved;
     } else if (user?.name) {
       const derived = deriveInitials(user.name);
-      if (derived) {
-        setInitialsState(derived);
-        localStorage.setItem(INITIALS_KEY, derived);
-      } else {
-        setInitialsGateOpen(true);
-      }
+      if (derived) { resolved = derived; localStorage.setItem(INITIALS_KEY, derived); }
+    }
+    if (resolved) {
+      setInitialsState(resolved);
+      // Backfill: any tab that has no est# yet gets one stamped with these initials.
+      setTabs((cur) => cur.map((t) => {
+        if (t.state.estNum) return t;
+        return { ...t, state: { ...t.state, estInitials: resolved, estNum: generateEstNum(resolved) } };
+      }));
     } else {
       setInitialsGateOpen(true);
     }
@@ -57,28 +61,38 @@ export function QuoteProvider({ children }) {
   useEffect(() => {
     if (!user) return;
     (async () => {
+      const initialsNow = localStorage.getItem(INITIALS_KEY) ||
+        (user?.name ? deriveInitials(user.name) : "");
       try {
         const drafts = await listDrafts();
         if (drafts && drafts.length > 0) {
-          const remoteTabs = drafts.slice(0, 8).map((d) => ({
-            id: d.id, persisted: true,
-            label: d.label || d.est_num || "Draft",
-            state: applyState(d.state || {}),
-            updatedAt: Date.parse(d.updated_at || "") || Date.now(),
-          }));
+          const remoteTabs = drafts.slice(0, 8).map((d) => {
+            const st = applyState(d.state || {});
+            // Backfill: stamp est# on any draft missing one
+            if (!st.estNum && initialsNow) {
+              st.estNum = generateEstNum(initialsNow);
+              st.estInitials = initialsNow;
+            }
+            return {
+              id: d.id, persisted: true,
+              label: d.label || d.est_num || "Draft",
+              state: st,
+              updatedAt: Date.parse(d.updated_at || "") || Date.now(),
+            };
+          });
           setTabs(remoteTabs);
           setActiveId(remoteTabs[0].id);
         } else {
-          const blank = makeBlankTab("New Quote", initials);
-          if (initials) blank.state.estNum = generateEstNum(initials);
-          blank.state.estInitials = initials;
+          const blank = makeBlankTab("New Quote", initialsNow);
+          if (initialsNow) blank.state.estNum = generateEstNum(initialsNow);
+          blank.state.estInitials = initialsNow;
           setTabs([blank]);
           setActiveId(blank.id);
         }
       } catch (_) {
-        const blank = makeBlankTab("New Quote", initials);
-        if (initials) blank.state.estNum = generateEstNum(initials);
-        blank.state.estInitials = initials;
+        const blank = makeBlankTab("New Quote", initialsNow);
+        if (initialsNow) blank.state.estNum = generateEstNum(initialsNow);
+        blank.state.estInitials = initialsNow;
         setTabs([blank]);
         setActiveId(blank.id);
       }

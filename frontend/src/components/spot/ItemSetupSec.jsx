@@ -8,6 +8,13 @@ import {
 } from "../../lib/defaults";
 import { fmtMoney, fmtNum, fmtPct } from "../../lib/format";
 
+// ECT → Mullen equivalence (ported from legacy spot_r1_5.jsx line 270)
+// "200 meets 32ECT specs, but 32ECT does not meet 200 specs"
+const ECT_GRADE_FALLBACK = {
+  "ECT 23": "125", "ECT 26": "150", "ECT 29": "175", "ECT 32": "200",
+  "ECT 40": "250", "ECT 44": "275", "ECT 55": "350",
+};
+
 export default function ItemSetupSec({ result }) {
   const { active, sec, toggleSec, setField, setManyFields } = useQuote();
   const s = active?.state || {};
@@ -219,25 +226,31 @@ function BoardStatusBar({ s, r, setField }) {
             </div>
           </F>
           <F l="Grade" inline fw={60}>
-            <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-              {GRADES.map((g) => {
-                const isECT = g.startsWith("ECT");
-                const isNT = g === "NT";
-                const cleanLabel = g.replace("#", "");
-                return (
-                  <span key={g} style={{ display: "inline-flex", flexDirection: "column", gap: 1, alignItems: "center" }}>
-                    <Tile label={cleanLabel} active={s.boardGrade === g}
-                      data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
-                      onClick={() => setField("boardGrade", g)} small />
-                    {(isECT || isNT) && (
-                      <span style={{ fontSize: 8, color: "var(--spot-orange)",
-                        fontWeight: 600, lineHeight: 1, marginTop: 1 }} title="Mullen substitution per Rule 4">
-                        200# Mullen Eq
-                      </span>
-                    )}
-                  </span>
-                );
-              })}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
+                {GRADES.map((g) => (
+                  <Tile key={g} label={g.replace("#", "")} active={s.boardGrade === g}
+                    data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
+                    onClick={() => setField("boardGrade", g)} small />
+                ))}
+              </div>
+              {/* Mullen-equiv note — only when an ECT grade IS selected, to the RIGHT of the tiles */}
+              {ECT_GRADE_FALLBACK[s.boardGrade] && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                  whiteSpace: "nowrap", paddingLeft: 4,
+                }} data-testid="mullen-equiv-note" title="ECT grades substitute DOWN to Mullen stock (Rule 4)">
+                  → {ECT_GRADE_FALLBACK[s.boardGrade]}# Mullen equiv
+                </span>
+              )}
+              {s.boardGrade === "NT" && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                  whiteSpace: "nowrap", paddingLeft: 4,
+                }} data-testid="mullen-equiv-note" title="NT runs on Mullen 200# stock">
+                  → 200# Mullen equiv
+                </span>
+              )}
             </div>
           </F>
           <F l="Outside" inline fw={60}>

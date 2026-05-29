@@ -2,6 +2,7 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
+import ApiStatusPill from "./ApiStatusPill";
 
 /** Matches legacy SPOT top bar: cube logo + SPOT + version + Est#/Initials/Customer
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
@@ -42,6 +43,7 @@ export default function Toolbar({ openModal }) {
             marginLeft: 4 }}
             data-testid="toolbar-initials">{s.estInitials}</span>
         )}
+        <ApiStatusPill />
       </div>
 
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
