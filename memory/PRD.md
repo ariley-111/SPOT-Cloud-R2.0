@@ -36,7 +36,7 @@ The user wants to port SPOT to the Emergent cloud platform (React + FastAPI + Mo
 
 | Persona | Use of SPOT |
 |---|---|
-| **Estimator** (~3 test users → expandable: Jaime, Michael Musgrave, Rich Walter, +1) | Daily quoting — RFQ in, priced quote out |
+| **Estimator** (~3 test users → expandable: Ashley Rohr, Michael Musgrave, Rich Walter, +1) | Daily quoting — RFQ in, priced quote out |
 | **Admin** (initially Michael) | Manage rates, GM curve, sheet library, user provisioning, view audit logs |
 | **CEO** (Michael) | Strategic oversight; will use as an estimator too |
 | **Test users (pilot)** | Validate parity with local SPOT before full rollout |
