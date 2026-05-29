@@ -152,15 +152,24 @@ export function QuoteProvider({ children }) {
   }, [active]);
 
   // ─── Tab actions ────────────────────────────────────────────
+  /** Create a TRULY blank new tab — no state carryover from any other tab.
+   *  Only the user's initials and a fresh est# are pre-stamped. */
   const newTab = useCallback(() => {
-    const tab = makeBlankTab(`Quote ${tabs.length + 1}`, initials);
-    if (initials) {
-      tab.state.estNum = generateEstNum(initials);
-      tab.state.estInitials = initials;
-    }
-    setTabs((cur) => [...cur, tab]);
-    setActiveId(tab.id);
-  }, [tabs.length, initials]);
+    const fresh = {
+      id: "local-" + Math.random().toString(36).slice(2, 10),
+      persisted: false,
+      label: "New Quote",
+      state: {
+        ...DEFAULT_STATE,                                    // EXPLICIT blank — no merging
+        estInitials: initials || "",
+        estNum: initials ? generateEstNum(initials) : "",
+        estNumAuto: true,
+      },
+      updatedAt: Date.now(),
+    };
+    setTabs((cur) => [...cur, fresh]);
+    setActiveId(fresh.id);
+  }, [initials]);
 
   const closeTab = useCallback(async (id) => {
     const target = tabs.find((t) => t.id === id);

@@ -1,12 +1,9 @@
-"""PDF generation — customer-facing Preview Quote + internal Cost Report.
-
-Uses weasyprint for HTML→PDF (visual fidelity to existing SPOT PDFs).
-This is a first-draft template; Phase 3 polishes to match the legacy PDF
-look exactly once we have estimator screenshots/sample PDFs to compare.
-"""
+"""PDF generation — customer-facing Preview Quote, ported 1:1 from legacy spot_r1_5.jsx (exportQuoteHTML)."""
 from __future__ import annotations
-from datetime import datetime, timezone
+import base64
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends
@@ -17,106 +14,207 @@ from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 
+# ─── Logo (PNG → base64 data URI) ────────────────────────────────────
+_LOGO_PATH = Path(__file__).resolve().parent.parent / "static_assets" / "spc_logo.png"
+try:
+    _LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
+except FileNotFoundError:
+    _LOGO_DATA_URI = ""
 
-def _fmt_money(n: float) -> str:
+
+def _fmt_money(n) -> str:
     try:
         return f"${float(n):,.2f}"
     except (ValueError, TypeError):
         return "—"
 
-
-def _fmt_int(n: float) -> str:
+def _fmt_money_per(n) -> str:
     try:
-        return f"{int(n):,}"
+        return f"${float(n):,.2f}"
     except (ValueError, TypeError):
         return "—"
 
+def _fmt_int(n) -> str:
+    try:
+        return f"{int(float(n)):,}"
+    except (ValueError, TypeError):
+        return "—"
+
+def _g(state, *keys, default=""):
+    """Get first non-empty value of given keys from state dict."""
+    for k in keys:
+        v = state.get(k)
+        if v not in (None, "", []):
+            return v
+    return default
+
 
 def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]]) -> str:
-    today = datetime.now(timezone.utc).strftime("%B %d, %Y")
-    est_num = quote.get("est_num") or "(draft)"
-    customer = quote.get("customer_name") or quote.get("customerName") or "Customer"
-    project = quote.get("projectName") or quote.get("state", {}).get("projectName") or ""
+    state = quote.get("state", {}) or {}
+    today = datetime.now(timezone.utc)
+    today_str = today.strftime("%B %d, %Y")
+    exp_days = int(state.get("quoteExpDays") or 30)
+    exp_date = (today + timedelta(days=exp_days)).strftime("%B %d, %Y")
 
+    est_num   = _g(quote, "est_num") or _g(state, "estNum") or "(draft)"
+    est_init  = _g(state, "estInitials", default="SPC")
+    customer  = _g(quote, "customer_name", "customerName") or _g(state, "custName", default="—")
+    project   = _g(state, "custRef", "projectName")
+    cust_ident = _g(state, "custIdent")
+    item_desc = _g(state, "itemDesc", default="Item")
+    box_style = _g(state, "boxStyle")
+    flute     = _g(state, "flute")
+    grade     = _g(state, "boardGrade")
+    ol        = _g(state, "outsideLiner")
+    il        = _g(state, "insideLiner")
+    one_w     = _g(state, "oneUpW")
+    one_l     = _g(state, "oneUpL")
+    quote_fob = _g(state, "quoteFOB", default="Origin")
+    ship_to   = _g(state, "shipTo", "quoteShipTo")
+    dest_zip  = _g(state, "destZip")
+    terms     = _g(state, "quoteTerms", default="Net 30")
+
+    # Build spec sub-line — "200# E · Kla-White/Kla-White · 31.375×32.3125"
+    spec_parts = []
+    if grade:
+        spec_parts.append(f"{grade}#" if not str(grade).endswith("#") and not str(grade).startswith("ECT") and grade not in ("NT",) else str(grade))
+    if flute:
+        spec_parts.append(flute)
+    if ol or il:
+        liner_join = f"{(ol or 'Kraft').replace('42# ', '').replace('33# ', '')}/{(il or 'Kraft').replace('42# ', '').replace('33# ', '')}"
+        spec_parts.append(liner_join)
+    if one_w and one_l:
+        spec_parts.append(f"{one_w}×{one_l}")
+    spec_line = " · ".join(spec_parts)
+
+    # Title (item)
+    title = box_style or item_desc or "Item"
+
+    # Build ship-to display
+    if ship_to and dest_zip and str(dest_zip) not in ship_to:
+        ship_disp = f"{ship_to}, {dest_zip}"
+    else:
+        ship_disp = ship_to or dest_zip or "—"
+    fob_disp = "Canton, OH (Our Dock)" if str(quote_fob).startswith("Origin") else "Destination"
+
+    # Pricing table rows
     rows_html = []
     for r in results:
         if r.get("error"):
             continue
         qty = _fmt_int(r.get("qty", 0))
-        sell_total = _fmt_money(r.get("sellTotal", 0))
-        sell_pc = _fmt_money(r.get("sellPc", 0))
+        each = _fmt_money_per(r.get("sellPc", 0))
+        per_m = _fmt_money(r.get("sellMSF", 0))
+        total = _fmt_money(r.get("sellTotal", 0))
         rows_html.append(f"""
         <tr>
           <td class="qty">{qty}</td>
-          <td class="price">{sell_pc} / pc</td>
-          <td class="price">{sell_total}</td>
-        </tr>
-        """)
+          <td class="num">{each}</td>
+          <td class="num">{per_m}</td>
+          <td class="num strong">{total}</td>
+        </tr>""")
+
+    pricing_table = "".join(rows_html) or '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:20pt 0">No priced quantities</td></tr>'
+
+    sign_off = "Standard Printing Estimating" if est_init == "SPC" else est_init
+
+    logo_html = f'<img src="{_LOGO_DATA_URI}" alt="Standard Printing Company" style="height:64pt;width:auto;flex-shrink:0" />' if _LOGO_DATA_URI else ""
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
-@page {{ size: letter; margin: 0.6in 0.7in; }}
-body {{ font-family: 'Helvetica', sans-serif; font-size: 10pt; color: #222; }}
-.header {{ border-bottom: 3px solid #D52E6B; padding-bottom: 12pt; margin-bottom: 18pt; display: flex; justify-content: space-between; align-items: flex-start; }}
-.logo-block h1 {{ margin: 0; font-size: 22pt; letter-spacing: -0.02em; color: #1A1B1E; }}
-.logo-block p {{ margin: 2pt 0 0; color: #555; font-size: 9pt; }}
-.quote-meta {{ text-align: right; font-size: 9pt; }}
-.quote-meta strong {{ color: #1A1B1E; }}
-h2 {{ font-size: 11pt; text-transform: uppercase; letter-spacing: 0.08em; color: #888; border-bottom: 1px solid #ddd; padding-bottom: 4pt; margin-top: 18pt; }}
-.specs {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8pt 18pt; margin: 8pt 0; }}
-.specs div {{ font-size: 10pt; }}
-.specs strong {{ display: inline-block; min-width: 110pt; color: #555; font-weight: 600; }}
-table {{ width: 100%; border-collapse: collapse; margin-top: 6pt; }}
-th {{ text-align: left; padding: 8pt 10pt; background: #F5F1E8; color: #1A1B1E; font-size: 9pt; letter-spacing: 0.06em; text-transform: uppercase; }}
-td {{ padding: 8pt 10pt; border-bottom: 1px solid #eee; }}
-td.qty {{ font-weight: 700; }}
-td.price {{ text-align: right; font-variant-numeric: tabular-nums; }}
-.terms {{ margin-top: 20pt; font-size: 8.5pt; color: #555; line-height: 1.5; }}
-.terms p {{ margin: 4pt 0; }}
-.footer {{ position: fixed; bottom: 0.3in; left: 0.7in; right: 0.7in; font-size: 7.5pt; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 6pt; }}
+@page {{ size: letter; margin: 0.5in 0.65in 0.7in; }}
+* {{ box-sizing: border-box; }}
+body {{ font-family: 'DM Sans', 'Segoe UI', Helvetica, sans-serif; font-size: 10pt; color: #1f2937; margin: 0; padding: 0; }}
+.header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3pt solid #1e40af; padding-bottom: 14pt; margin-bottom: 18pt; }}
+.brand {{ display: flex; align-items: center; gap: 14pt; }}
+.brand .lines .name {{ font-size: 14pt; font-weight: 700; color: #1e3a5f; letter-spacing: 0.04em; text-transform: uppercase; }}
+.brand .lines .addr {{ font-size: 9pt; color: #6b7280; margin-top: 3pt; line-height: 1.5; }}
+.q-meta {{ text-align: right; }}
+.q-meta .label {{ font-size: 13pt; font-weight: 700; color: #1e40af; letter-spacing: 0.02em; }}
+.q-meta .num {{ font-size: 10pt; color: #6b7280; margin-top: 2pt; }}
+.fields {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10pt 32pt; margin-bottom: 18pt; }}
+.fields .k {{ font-size: 9pt; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; }}
+.fields .v {{ font-size: 10pt; font-weight: 600; color: #1f2937; margin-top: 2pt; }}
+.item-bar {{ background: #f3f4f6; padding: 10pt 14pt; border-radius: 4pt; margin: 6pt 0 4pt; }}
+.item-bar .title {{ font-size: 13pt; font-weight: 700; color: #1f2937; }}
+.item-bar .sub {{ font-size: 10pt; color: #6b7280; margin-top: 3pt; }}
+table.price {{ width: 100%; border-collapse: collapse; margin-top: 4pt; }}
+table.price th {{ text-align: left; padding: 8pt 10pt 6pt; font-size: 9pt; font-weight: 600; color: #9ca3af; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1pt solid #e5e7eb; }}
+table.price th.num {{ text-align: right; }}
+table.price td {{ padding: 10pt; border-bottom: 1pt solid #e5e7eb; font-size: 10pt; }}
+table.price td.qty {{ font-weight: 700; }}
+table.price td.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+table.price td.strong {{ font-weight: 700; color: #1e40af; }}
+.terms-block {{ margin-top: 20pt; padding-top: 14pt; border-top: 3pt solid #1e40af; }}
+.terms-block h3 {{ font-size: 11pt; font-weight: 700; color: #1e40af; letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 8pt; }}
+.terms-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6pt 32pt; font-size: 10pt; margin-bottom: 8pt; }}
+.terms-row .k {{ font-weight: 700; color: #1f2937; }}
+.terms-row .v {{ color: #4b5563; }}
+.terms-list {{ font-size: 10pt; color: #4b5563; line-height: 1.6; margin: 4pt 0 0; padding: 0; list-style: none; }}
+.terms-list li {{ margin: 3pt 0; }}
+.terms-list li:before {{ content: "•  "; color: #9ca3af; }}
+.signoff {{ margin-top: 24pt; font-size: 10pt; color: #1f2937; }}
+.signoff .name {{ margin-top: 18pt; font-weight: 700; }}
+.footer {{ margin-top: 24pt; padding-top: 10pt; border-top: 1pt solid #e5e7eb; text-align: center; font-size: 9pt; color: #9ca3af; }}
 </style></head>
 <body>
 <div class="header">
-  <div class="logo-block">
-    <h1>Standard Printing Company</h1>
-    <p>1115 Cherry Ave NE · Canton, OH 44704</p>
-    <p>(330) 453-8247 · standardprinting.com</p>
+  <div class="brand">
+    {logo_html}
+    <div class="lines">
+      <div class="name">Standard Printing Company</div>
+      <div class="addr">1115 Cherry Ave NE, Canton, OH 44704<br>Phone 330-453-8247 · Fax 330-453-8730 · www.spcoc.com</div>
+    </div>
   </div>
-  <div class="quote-meta">
-    <div><strong>QUOTE #</strong> {est_num}</div>
-    <div><strong>DATE</strong> {today}</div>
-    <div><strong>VALID</strong> 30 days</div>
+  <div class="q-meta">
+    <div class="label">QUOTATION</div>
+    <div class="num">Estimate {est_num}</div>
   </div>
 </div>
 
-<h2>Quoted to</h2>
-<div><strong>{customer}</strong>{(" · " + project) if project else ""}</div>
-
-<h2>Specifications</h2>
-<div class="specs">
-  <div><strong>Finished size:</strong> {quote.get('state', {}).get('oneUpW', '—')} × {quote.get('state', {}).get('oneUpL', '—')}″</div>
-  <div><strong>Board:</strong> {quote.get('state', {}).get('boardGrade', '—')} {quote.get('state', {}).get('flute', '')} flute</div>
-  <div><strong>Outer liner:</strong> {quote.get('state', {}).get('outsideLiner', '—')}</div>
-  <div><strong>Inner liner:</strong> {quote.get('state', {}).get('insideLiner', '—')}</div>
-  <div><strong>Print:</strong> {quote.get('state', {}).get('printReq', '—')}{(" · " + quote.get('state', {}).get('printSides', '')) if quote.get('state', {}).get('printReq') == 'Yes' else ''}</div>
-  <div><strong>FOB:</strong> {quote.get('state', {}).get('quoteFOB', 'Origin')}</div>
+<div class="fields">
+  <div><div class="k">Customer</div><div class="v">{customer}</div></div>
+  <div><div class="k">Date</div><div class="v">{today_str}</div></div>
+  {f'<div><div class="k">Project</div><div class="v">{project}</div></div>' if project else '<div></div>'}
+  <div><div class="k">Valid Until</div><div class="v">{exp_date}</div></div>
+  <div><div class="k">Ship To</div><div class="v">{ship_disp}</div></div>
+  <div><div class="k">FOB</div><div class="v">{fob_disp}</div></div>
+  {f'<div><div class="k">Customer Ident</div><div class="v">{cust_ident}</div></div>' if cust_ident else ''}
 </div>
 
-<h2>Pricing</h2>
-<table>
-  <thead><tr><th>Quantity</th><th style="text-align:right;">Per piece</th><th style="text-align:right;">Total</th></tr></thead>
-  <tbody>{''.join(rows_html) or '<tr><td colspan="3" style="text-align:center;color:#999;">No priced quantities</td></tr>'}</tbody>
+<div class="item-bar">
+  <div class="title">{title}</div>
+  {f'<div class="sub">{spec_line}</div>' if spec_line else ''}
+</div>
+
+<table class="price">
+  <thead><tr>
+    <th>QTY</th><th class="num">EACH</th><th class="num">PER/M</th><th class="num">TOTAL</th>
+  </tr></thead>
+  <tbody>{pricing_table}</tbody>
 </table>
 
-<div class="terms">
-  <p><strong>Terms:</strong> Net 30. Quote valid for 30 days from the date above. Pricing assumes a single production run; setup applies per release.</p>
-  <p><strong>Freight:</strong> FOB Origin unless otherwise noted. Freight quoted separately on request.</p>
-  <p><strong>Artwork:</strong> Customer-supplied print-ready artwork. Standard prepress included.</p>
+<div class="terms-block">
+  <h3>Terms &amp; Conditions</h3>
+  <div class="terms-row">
+    <div><span class="k">Payment:</span> <span class="v">{terms}</span></div>
+    <div><span class="k">FOB:</span> <span class="v">{fob_disp}</span></div>
+    {f'<div><span class="k">Ship To:</span> <span class="v">{ship_disp}</span></div>' if ship_disp != "—" else '<div></div>'}
+  </div>
+  <ul class="terms-list">
+    <li>All quantities quoted are -0/+5% of quoted quantity unless otherwise noted.</li>
+    <li>Quantity includes 1 hard proof.</li>
+    <li>Artwork to be supplied print-ready by customer or pick up existing files.</li>
+  </ul>
 </div>
 
-<div class="footer">Standard Printing Company · Quote {est_num} · Generated by SPOT</div>
-</body></html>
-"""
+<div class="signoff">
+  Sincerely,
+  <div class="name">{sign_off}</div>
+</div>
+
+<div class="footer">This price quoted is valid for {exp_days} days from the date of this estimate.</div>
+</body></html>"""
 
 
 @router.post("/preview-quote")
@@ -130,8 +228,9 @@ async def preview_quote(
     results = body.get("results", [])
     html = _customer_pdf_html(quote, results)
     pdf_bytes = HTML(string=html).write_pdf()
+    est_num = quote.get("est_num") or quote.get("state", {}).get("estNum") or "draft"
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="quote-{quote.get("est_num","draft")}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="quote-{est_num}.pdf"'},
     )
