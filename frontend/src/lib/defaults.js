@@ -1,49 +1,68 @@
 /* eslint-disable */
-/** Default quote state — matches what the engine runner expects.
- *  Reset-first pattern: applyState REPLACES (after merging defaults), never merges into old. */
+/** Full default state for a SPOT quote tab.
+ *  Mirrors all fields the legacy spot_r1_5.jsx exposes for the engine + UI.
+ *  Reset-first semantics: applyState() REPLACES the state, never merges. */
 
 export const DEFAULT_STATE = Object.freeze({
-  // ─── Estimate Info ───
+  // ─── Estimate Info ─────────────────────────────────────────────
   estNum: "",
+  estInitials: "",          // per-tab estimator initials (4 char max)
+  estNumAuto: true,
   custName: "",
   custCode: "",
-  custRef: "",
-  projectName: "",
-  poNumber: "",
-  quoteFOB: "Origin",
-  quoteTerms: "Net 30",
-  shipTo: "",
-  destZip: "",
-  dueDate: "",
-  notes: "",
+  custRef: "",              // Project name
+  custIdent: "",            // Customer SKU / part #
+  customerRecord: null,
+  spinOffOrigin: null,
 
-  // ─── Item Setup ───
-  quoteType: "Simple", // Simple | Multi-Part
+  // ─── Item Setup ────────────────────────────────────────────────
+  quoteType: "Simple",         // Simple | Multi-Part
+  pricingMode: "Individual",   // Individual | Matched Set
+  setMarginOverride: false,
+  setMarginPct: "0.40",
+  fulfillmentMarginPct: "0.45",
+  purchasedMarginPct: "0.40",
+  bomItems: [],
+  activeItemIdx: 0,
+
   itemDesc: "",
-  boxStyle: "",
+  boxStyle: "",                // RSC | FOL | D/C Tray | Mailer | 5PF | ""
+  quoteMode: "One-Up",         // One-Up | Sheet Size
   oneUpW: "",
   oneUpL: "",
-  qtys: ["", "", "", "", ""],
+  sheetSizeW: "",
+  sheetSizeL: "",
+  sheetPcsPerSheet: "",
+  corrFlipped: false,
+  overrideSheetId: null,
 
-  // ─── Board ───
+  qtys: ["", "", "", "", ""],
+  selSlot: 0,
+
+  // ─── Board ─────────────────────────────────────────────────────
   flute: "C",
-  boardGrade: "200",
+  boardGrade: "200#",
   outsideLiner: "42# Kemi-Lite",
-  insideLiner: "None",
+  insideLiner: "42# Kraft",
   medium: "None",
   fscEnabled: false,
+  fscFee: "25",
+  buyMinBoard: "Auto",
+  boardSubstitution: null,
+  boardTilesOpen: false,
 
-  // ─── Production ───
+  // ─── Production / Routing ─────────────────────────────────────
   printReq: "Yes",
-  printMode: "Satin",
+  printMode: "Satin",          // Satin | Gloss | OnQ Styrene | OnQ Lightbox
   printSides: "1-Sided",
   whiteInk: "No",
   colorsFront: "4",
   colorsBack: "0",
 
-  routeOverride: "Auto",
+  routeOverride: null,         // null=Auto | "CAD"|"Crest"|"Bobst"
   cadDifficulty: "Standard",
-  crestComplexity: "Standard",
+  cadPricingMethod: "By Difficulty",   // By Difficulty | By Inches of Rule
+  crestComplexity: "Standard",         // Standard | Advanced
   totalRuleInches: "0",
   perfPct: "0",
   productMats: "No",
@@ -52,50 +71,88 @@ export const DEFAULT_STATE = Object.freeze({
   saberCuts: "1",
   saberBlanksOut: "1",
 
-  // ─── Assembly ───
+  // ─── Finishing ────────────────────────────────────────────────
   handStripping: "No",
   perimeterStripping: "No",
-  strippingComplexity: "Standard",
+  strippingComplexity: "Standard",     // Simple|Straight|Standard|Complex
+
   handGluing: "No",
   jointsPerPiece: "1",
-  gluingComplexity: "Standard",
+  gluingComplexity: "Standard",        // Simple|Standard|Complex
+
   tape: "No",
-  tapeType: "Clear",
+  tapeType: "Clear",                   // Clear|Reinforced
 
-  // ─── Charges ───
-  freightCost: "0",
-  freightTreatment: "Separate Line",
-  freightMarkup: "0.15",
-  cuttingDieCost: "0",
-  dieTreatment: "None",
-  dieMarkup: "0.15",
+  // ─── One-Time Costs ───────────────────────────────────────────
+  prepressTreatment: "Auto",           // Auto | None | Separate Line | Amortize
   prepressCost: "50",
-  prepressTreatment: "Auto",
-  miscCharges: [],
-  miscChargeMarkup: "0.15",
-  pricingBasis: "Gross Margin %",
+  prepressScope: "None",               // None | Per Item | Per Job
+  jobPrepressTreatment: "Separate Line",
+  jobPrepressCost: "0",
+  defaultPrepressCost: "50",
 
-  // ─── Multi-Part ───
-  bomItems: [],
-  activeItemIdx: 0,
-  pricingMode: "Individual",
-  setMarginOverride: false,
-  setMarginPct: "0.40",
-  fulfillmentMarginPct: "0.45",
-  purchasedMarginPct: "0.40",
+  dieTreatment: "None",                // None | Separate Line | Amortize
+  cuttingDieCost: "0",
+  dieAmortMethod: "Markup",            // Markup | OrderMargin
+
+  miscCharges: [],                     // [{id,name,cost,treatment}]
+
+  // ─── Freight ──────────────────────────────────────────────────
+  quoteFOB: "Origin",                  // Origin | Destination | Will-Call | Ship
+  freightType: "None",                 // None | Line | Amort
+  freightTreatment: "None",            // None | Separate Line | Amortize
+  freightCost: "0",
+  freightMarkup: "0.15",
+  freightScope: "None",                // None | Per Item | Per Job
+  jobFreightTreatment: "Separate Line",
+  jobFreightCost: "0",
+  freightByQty: {},
+  quoteShipTo: "",
+  destZip: "",
+
+  // ─── Quote Header ─────────────────────────────────────────────
+  poNumber: "",
+  quoteTerms: "Net 30",
+  quoteExpDays: "30",
+  quoteNotes: "",
+  dueDate: "",
+  shipTo: "",
 });
 
-/** Reset-first state apply (Rule 7). */
-export function applyState(partial) {
-  return { ...DEFAULT_STATE, ...(partial || {}) };
+/** Reset-first: returns a brand new object based on DEFAULT_STATE merged with patch. */
+export function applyState(patch) {
+  return { ...DEFAULT_STATE, ...(patch || {}) };
 }
 
-export const FLUTES = ["B", "C", "E", "B/C"];
-export const GRADES = ["125", "150", "175", "200", "250", "275", "350",
-  "ECT 23", "ECT 26", "ECT 29", "ECT 32", "ECT 40", "ECT 44", "ECT 55"];
-export const LINERS = ["None", "42# Kemi-Lite", "42# Kla-White", "Bleached White", "White"];
-export const BOX_STYLES = ["RSC", "FOL", "D/C Tray", "Mailer", "5PF"];
-export const ROUTE_OPTIONS = ["Auto", "CAD", "Crest", "Bobst", "Saber+DC"];
-export const DIFFICULTY = ["Simple", "Straight", "Standard", "Complex"];
-export const PRINT_MODES = ["Satin", "Gloss", "OnQ Stylus", "OnQ Lightbox"];
-export const PRINT_SIDES = ["1-Sided", "2-Sided"];
+// ─── Lookup tables ──────────────────────────────────────────────
+export const BOX_STYLES   = ["RSC", "FOL", "D/C Tray", "Mailer", "5PF"];
+export const FLUTES       = ["B", "C", "E", "B/C"];
+export const GRADES       = ["125#","150#","175#","200#","250#","275#","350#",
+  "ECT 23","ECT 26","ECT 29","ECT 32","ECT 40","ECT 44","ECT 55","KT"];
+export const LINERS       = [
+  "42# Kraft","33# Kla-White","42# Kla-White","Bleached White","42# Kemi-Lite",
+];
+export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","40# Medium","42# Bleached Medium"];
+export const PRINT_MODES  = ["Satin","Gloss","OnQ Styrene","OnQ Lightbox"];
+export const PRINT_SIDES  = ["1-Sided","2-Sided"];
+export const DIFFICULTY   = ["Simple","Straight","Standard","Complex"];
+export const STRIP_COMP   = ["Simple","Straight","Standard","Complex"];
+export const GLUE_COMP    = ["Simple","Standard","Complex"];
+export const ITEM_TINTS = [
+  { hex: "#e8927c" }, { hex: "#b08cf5" }, { hex: "#7dd3c0" },
+  { hex: "#e88dc4" }, { hex: "#8cc8e8" }, { hex: "#d4a76a" },
+];
+
+// Default initials derived from user.name (e.g., "Ashley Rohr" → "AR")
+export function deriveInitials(name) {
+  if (!name) return "";
+  const parts = String(name).trim().split(/\s+/);
+  const initials = parts.map((p) => p[0] || "").join("").toUpperCase();
+  return initials.slice(0, 4);
+}
+
+// Abbreviated liner short-form (for status bars)
+export function liner_short(l) {
+  if (!l || l === "None") return "Kraft";
+  return l.replace("42# ", "").replace("33# ", "").replace("56# ", "");
+}

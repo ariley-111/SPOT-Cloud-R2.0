@@ -8,7 +8,8 @@ export default function Modal({ title, onClose, children, footer, width = 720, "
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
   return (
-    <div className="sp-modal-backdrop" data-testid={dti || "modal-backdrop"} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sp-modal-backdrop" data-testid={dti || "modal-backdrop"}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sp-modal" style={{ width }} role="dialog" aria-modal="true">
         <div className="sp-modal-head">
           <span>{title}</span>

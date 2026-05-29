@@ -1,0 +1,331 @@
+/* eslint-disable */
+import React from "react";
+import { useQuote } from "../../context/QuoteContext";
+import Sec, { F } from "./Sec";
+import Tile, { Num } from "./Tile";
+import {
+  BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS,
+} from "../../lib/defaults";
+import { fmtMoney, fmtNum, fmtPct } from "../../lib/format";
+
+export default function ItemSetupSec({ result }) {
+  const { active, sec, toggleSec, setField, setManyFields } = useQuote();
+  const s = active?.state || {};
+  const r = result || {};
+  const route = r.route || "—";
+  const fullyResolved = !!(r && !r.error && r.sheetW);
+  const corrFlipped = !!s.corrFlipped;
+
+  const onBoxStyle = (style) => {
+    const cur = s.boxStyle === style ? "" : style;
+    const descs = { RSC: "Regular Slotted Container", FOL: "Full Overlap Slotted Container",
+      "D/C Tray": "Die Cut Tray", Mailer: "Mailer", "5PF": "Five Panel Folder" };
+    const patch = { boxStyle: cur };
+    if (cur && !s.itemDesc) patch.itemDesc = descs[cur];
+    if (cur === "RSC" || cur === "Mailer") {
+      patch.handGluing = "Yes"; patch.jointsPerPiece = "1"; patch.tape = "No";
+    }
+    setManyFields(patch);
+  };
+
+  const onFlipCorr = () => {
+    const w = s.oneUpW, l = s.oneUpL;
+    setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: !corrFlipped });
+  };
+
+  return (
+    <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
+      badge={fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION"}
+      accent={fullyResolved} warn={!fullyResolved && s.oneUpW && s.oneUpL}
+      data-testid="sec-item-setup">
+
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        {/* Left column: identity + dims + board */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+
+          {/* Identity row */}
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 6 }}>
+            <F l="Customer Ident">
+              <input className="sp-input" value={s.custIdent || ""}
+                data-testid="input-cust-ident"
+                placeholder="Customer SKU / part #"
+                onChange={(e) => setField("custIdent", e.target.value)}
+                style={{ width: 220 }} />
+            </F>
+            <F l="Item Description">
+              <input className="sp-input" value={s.itemDesc || ""}
+                data-testid="input-item-desc"
+                onChange={(e) => setField("itemDesc", e.target.value)}
+                style={{ width: 220 }} />
+            </F>
+            {BOX_STYLES.map((bs) => (
+              <Tile key={bs} label={bs} active={s.boxStyle === bs}
+                data-testid={`tile-box-${bs.replace(/[^a-zA-Z0-9]/g, '')}`}
+                onClick={() => onBoxStyle(bs)} small />
+            ))}
+          </div>
+
+          {/* Dimensions row */}
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 6 }}>
+            <div style={{ display: "flex", gap: 3 }}>
+              <Tile label="One-Up"     active={s.quoteMode === "One-Up"}     onClick={() => setField("quoteMode", "One-Up")}     small data-testid="tile-mode-oneup" />
+              <Tile label="Sheet Size" active={s.quoteMode === "Sheet Size"} onClick={() => setField("quoteMode", "Sheet Size")} small data-testid="tile-mode-sheetsize" />
+            </div>
+            {s.quoteMode !== "Sheet Size" ? (
+              <>
+                <F l="Width"><Num value={s.oneUpW} onChange={(v) => setField("oneUpW", v)} step="0.0001" min="0" data-testid="input-one-up-w" /></F>
+                <F l="Length"><Num value={s.oneUpL} onChange={(v) => setField("oneUpL", v)} step="0.0001" min="0" data-testid="input-one-up-l" /></F>
+                {Number(s.oneUpW) > 0 && Number(s.oneUpL) > 0 && (
+                  <button onClick={onFlipCorr} data-testid="btn-flip-corr"
+                    title="Swap Width ↔ Length (changes corrugation direction — requires customer approval)"
+                    style={{
+                      all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                      padding: "5px 8px", borderRadius: 4,
+                      color: corrFlipped ? "var(--spot-err)" : "var(--spot-text3)",
+                      background: corrFlipped ? "var(--spot-err-bg)" : "transparent",
+                      border: `1px solid ${corrFlipped ? "var(--spot-err)" : "var(--spot-border)"}`,
+                      whiteSpace: "nowrap",
+                    }}>
+                    {corrFlipped ? "⇄ CORR FLIPPED" : "⇄ Flip Corr"}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <F l="Sheet W"><Num value={s.sheetSizeW} onChange={(v) => setField("sheetSizeW", v)} step="0.0001" data-testid="input-sheet-w" /></F>
+                <F l="Sheet L"><Num value={s.sheetSizeL} onChange={(v) => setField("sheetSizeL", v)} step="0.0001" data-testid="input-sheet-l" /></F>
+                <F l="Pcs/Sh"><Num value={s.sheetPcsPerSheet} onChange={(v) => setField("sheetPcsPerSheet", v)} step="1" min="1" style={{ width: 55 }} data-testid="input-pcs-sheet" /></F>
+              </>
+            )}
+            <button data-testid="btn-sheet-library" style={{
+              all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 600,
+              padding: "5px 12px", borderRadius: 4, background: "var(--spot-accent-soft)",
+              color: "var(--spot-accent)", border: "1px solid var(--spot-accent)",
+              whiteSpace: "nowrap",
+            }}>Sheet Library</button>
+
+            {/* Layout summary chip */}
+            {fullyResolved && (
+              <div data-testid="layout-summary" style={{ display: "flex", gap: 6, alignItems: "center",
+                fontSize: 12, marginLeft: 4, flexWrap: "nowrap" }}>
+                <span style={{ fontWeight: 700, color: "var(--spot-text)", fontFamily: "'JetBrains Mono',monospace" }}>
+                  {r.numUp}×{r.numOut}
+                </span>
+                <span style={{ color: "var(--spot-text2)" }}>→</span>
+                <span style={{ fontWeight: 700, color: "var(--spot-accent)" }}>{r.pcsPerSheet} out</span>
+                <span style={{ color: "var(--spot-text3)" }}>on</span>
+                <span style={{ fontWeight: 600 }}>{fmtNum(r.sheetW, 4)}×{fmtNum(r.sheetL, 4)}</span>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 3,
+                  background: `${routeColor(route)}22`, color: routeColor(route),
+                }}>{s.routeOverride ? "" : "auto → "}{route}</span>
+                <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Waste: {fmtPct(r.wastePct, 1)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Board Status Bar */}
+          <BoardStatusBar s={s} r={r} setField={setField} />
+        </div>
+
+        {/* Right column: One-Time Costs panel */}
+        <OneTimeCosts s={s} setField={setField} setManyFields={setManyFields} route={route} />
+      </div>
+    </Sec>
+  );
+}
+
+function routeColor(rt) {
+  if (rt === "CAD") return "#3b82f6";
+  if (rt === "Crest") return "#f59e0b";
+  if (rt === "Bobst") return "#a855f7";
+  if (rt === "Saber+DC" || rt === "Saber→D/C") return "#22c55e";
+  return "#6b7280";
+}
+
+function BoardStatusBar({ s, r, setField }) {
+  const [tilesOpen, setTilesOpen] = React.useState(false);
+  const olShort = String(s.outsideLiner || "").replace("42# ", "").replace("33# ", "").replace("56# ", "");
+  const ilShort = String(s.insideLiner  || "").replace("42# ", "").replace("33# ", "").replace("56# ", "");
+  const med = s.medium || "None";
+  const specLine = `${s.boardGrade || "—"} · ${s.flute || "—"} · ${olShort}/${ilShort}${med !== "None" ? " · " + String(med).replace("# Medium", "#") : ""}`;
+  const isStock = !!r?._pipeline?.stockMode;
+  const isCustom = !!r?._pipeline?.customOrder && !isStock;
+  const sheetInfo = r?.sheetW ? `${fmtNum(r.sheetW, 4)}×${fmtNum(r.sheetL, 4)}` : null;
+
+  return (
+    <div data-testid="board-status-bar" style={{ borderTop: "1px solid var(--spot-line)", paddingTop: 4 }}>
+      <div style={{
+        background: "var(--spot-bg3)", border: "1px solid var(--spot-border)",
+        borderRadius: 6, padding: "8px 12px", marginBottom: 4,
+      }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+            textTransform: "uppercase", letterSpacing: ".04em", minWidth: 50 }}>BOARD</span>
+          <span style={{ fontWeight: 700, color: "var(--spot-text)" }}>{specLine}</span>
+          {isStock && <span className="sp-badge sp-badge-green" data-testid="board-stock-badge">IN STOCK</span>}
+          {isCustom && <span className="sp-badge sp-badge-blue" data-testid="board-order-badge">ORDER</span>}
+          {sheetInfo && <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+            {sheetInfo} · {r.pcsPerSheet} out · {fmtPct(r.wastePct, 1)} waste
+          </span>}
+        </div>
+
+        <div onClick={() => setTilesOpen((v) => !v)} data-testid="board-toggle-tiles"
+          style={{
+            display: "flex", gap: 8, alignItems: "center", marginTop: 4, paddingTop: 4,
+            borderTop: "1px solid var(--spot-line)", cursor: "pointer", userSelect: "none",
+          }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-accent)" }}>
+            {tilesOpen ? "Close" : "Edit board"}
+          </span>
+          <span onClick={(e) => { e.stopPropagation(); setField("fscEnabled", !s.fscEnabled); }}
+            data-testid="board-fsc-toggle"
+            style={{
+              fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 3, cursor: "pointer",
+              background: s.fscEnabled ? "var(--spot-green-soft)" : "transparent",
+              color: s.fscEnabled ? "var(--spot-green)" : "var(--spot-text3)",
+              border: `1px solid ${s.fscEnabled ? "var(--spot-green)" : "var(--spot-border)"}`,
+            }}>
+            {s.fscEnabled ? `✓ FSC $${s.fscFee}` : "FSC"}
+          </span>
+          <span style={{
+            marginLeft: "auto", fontSize: 11, color: "var(--spot-text3)",
+            transform: tilesOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s",
+          }}>▸</span>
+        </div>
+      </div>
+
+      {tilesOpen && (
+        <div style={{ padding: "6px 0 2px", display: "flex", flexDirection: "column", gap: 6 }} data-testid="board-tiles">
+          <F l="Flute" inline fw={60}>
+            <div style={{ display: "flex", gap: 2 }}>
+              {FLUTES.map((f) => (
+                <Tile key={f} label={f} active={s.flute === f}
+                  data-testid={`tile-flute-${f.replace('/', '')}`}
+                  onClick={() => setField("flute", f)} small />
+              ))}
+            </div>
+          </F>
+          <F l="Grade" inline fw={60}>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              {GRADES.map((g) => (
+                <Tile key={g} label={g} active={s.boardGrade === g}
+                  data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
+                  onClick={() => setField("boardGrade", g)} small />
+              ))}
+            </div>
+          </F>
+          <F l="Outside" inline fw={60}>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              {LINERS.map((l) => (
+                <Tile key={l} label={l.replace("42# ", "").replace("33# ", "")}
+                  active={s.outsideLiner === l}
+                  data-testid={`tile-outside-${l.replace(/[^a-zA-Z]/g, '')}`}
+                  onClick={() => setField("outsideLiner", l)} small />
+              ))}
+            </div>
+          </F>
+          <F l="Inside" inline fw={60}>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              {LINERS.map((l) => (
+                <Tile key={l} label={l.replace("42# ", "").replace("33# ", "")}
+                  active={s.insideLiner === l}
+                  data-testid={`tile-inside-${l.replace(/[^a-zA-Z]/g, '')}`}
+                  onClick={() => setField("insideLiner", l)} small />
+              ))}
+            </div>
+          </F>
+          <F l="Medium" inline fw={60}>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
+              {MEDIUMS.map((m) => (
+                <Tile key={m} label={m === "None" ? "None" : m.replace("# Medium", "#").replace("# Bleached Medium", "# Bl")}
+                  active={s.medium === m}
+                  data-testid={`tile-medium-${m.replace(/[^a-zA-Z0-9]/g, '')}`}
+                  onClick={() => setField("medium", m)} small />
+              ))}
+              <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
+              <Tile label="Off" active={!s.fscEnabled}  onClick={() => setField("fscEnabled", false)} small data-testid="tile-fsc-off" />
+              <Tile label="FSC" active={s.fscEnabled}    onClick={() => setField("fscEnabled", true)}  small data-testid="tile-fsc-on" />
+            </div>
+          </F>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OneTimeCosts({ s, setField, setManyFields, route }) {
+  const anyDieRoute = route === "Crest" || route === "Bobst";
+  const setMisc = (idx, patch) => {
+    setField("miscCharges", (s.miscCharges || []).map((c, i) => i === idx ? { ...c, ...patch } : c));
+  };
+  const addMisc = () => setField("miscCharges", [...(s.miscCharges || []), { id: "mc_" + Date.now(), name: "", cost: "0", treatment: "Separate Line" }]);
+  const rmMisc = (idx) => setField("miscCharges", (s.miscCharges || []).filter((_, i) => i !== idx));
+
+  return (
+    <div data-testid="one-time-costs" style={{
+      flexShrink: 0, width: 360, background: "var(--spot-bg3)",
+      border: "1px solid var(--spot-border)", borderRadius: 5, padding: "8px 10px",
+      alignSelf: "flex-start",
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em",
+        color: "var(--spot-text3)", marginBottom: 6,
+      }}>One-Time Costs</div>
+
+      {/* Prepress */}
+      {s.printReq === "Yes" && (
+        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
+          <Tile label="Auto"  active={s.prepressTreatment === "Auto"}           onClick={() => setField("prepressTreatment", "Auto")} small tint="#22c55e" data-testid="tile-prepress-auto" />
+          <Tile label="None"  active={s.prepressTreatment === "None"}           onClick={() => setField("prepressTreatment", "None")} small data-testid="tile-prepress-none" />
+          <Tile label="Line"  active={s.prepressTreatment === "Separate Line"}  onClick={() => setField("prepressTreatment", "Separate Line")} small data-testid="tile-prepress-line" />
+          <Tile label="Amort" active={s.prepressTreatment === "Amortize"}       onClick={() => setField("prepressTreatment", "Amortize")} small data-testid="tile-prepress-amort" />
+          {s.prepressTreatment !== "None" && s.prepressTreatment !== "Auto" && (
+            <Num value={s.prepressCost} onChange={(v) => setField("prepressCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-prepress-cost" />
+          )}
+        </div>
+      )}
+
+      {/* Die */}
+      {anyDieRoute && (
+        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Die</span>
+          <Tile label="None"  active={s.dieTreatment === "None"}          onClick={() => setField("dieTreatment", "None")} small data-testid="tile-die-none" />
+          <Tile label="Line"  active={s.dieTreatment === "Separate Line"} onClick={() => setField("dieTreatment", "Separate Line")} small data-testid="tile-die-line" />
+          <Tile label="Amort" active={s.dieTreatment === "Amortize"}      onClick={() => setField("dieTreatment", "Amortize")} small data-testid="tile-die-amort" />
+          {s.dieTreatment !== "None" && (
+            <Num value={s.cuttingDieCost} onChange={(v) => setField("cuttingDieCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-die-cost" />
+          )}
+        </div>
+      )}
+
+      {/* Misc charges */}
+      {(s.miscCharges || []).map((mc, mi) => (
+        <div key={mc.id || mi} style={{ marginBottom: 4, padding: "3px 0",
+          borderTop: mi === 0 ? "1px dashed var(--spot-border)" : "none" }} data-testid={`misc-charge-${mi}`}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 2 }}>
+            <input className="sp-input" value={mc.name || ""} placeholder="Name…"
+              onChange={(e) => setMisc(mi, { name: e.target.value })}
+              style={{ flex: 1, fontSize: 11, padding: "3px 6px" }} />
+            {mc.treatment !== "None" && (
+              <Num value={mc.cost} onChange={(v) => setMisc(mi, { cost: v })} step="0.01" min="0"
+                style={{ width: 60, padding: "3px 6px", fontSize: 11 }} />
+            )}
+            <span onClick={() => rmMisc(mi)} data-testid={`misc-rm-${mi}`}
+              style={{ fontSize: 16, fontWeight: 700, color: "var(--spot-err)", cursor: "pointer", padding: "0 4px" }}>×</span>
+          </div>
+          <div style={{ display: "flex", gap: 2 }}>
+            <Tile label="None"  active={mc.treatment === "None"}          onClick={() => setMisc(mi, { treatment: "None" })} small />
+            <Tile label="Line"  active={mc.treatment === "Separate Line"} onClick={() => setMisc(mi, { treatment: "Separate Line" })} small />
+            <Tile label="Amort" active={mc.treatment === "Amortize"}      onClick={() => setMisc(mi, { treatment: "Amortize" })} small />
+          </div>
+        </div>
+      ))}
+      <button onClick={addMisc} data-testid="btn-add-misc" style={{
+        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+        color: "var(--spot-accent)", padding: "3px 0",
+      }}>+ Charge</button>
+    </div>
+  );
+}

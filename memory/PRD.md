@@ -95,18 +95,27 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
-### 2026-05-29 — Phase 3 frontend rebuild COMPLETE
-- **Auth flow**: Login page + JWT auth context + token interceptor (`/api/client.js`)
-- **Main shell**: Toolbar, TabBar (multi-draft tabs), LeftPanel (inputs), RightPanel (results)
-- **State plumbing**: Reset-first `applyState()` pattern in `/lib/defaults.js`; QuoteContext manages tabs + per-tab state + auto-save (debounced 1.5s → PUT /api/drafts/{id})
-- **Live engine**: `useEngine` hook debounces 400ms then calls `/api/engine/calculate-all`; `useRouteCompare` runs CAD/Crest/Bobst in parallel for the route comparison panel
-- **Sections**: Estimate Info, Item Setup (with Multi-Part BOM strip), Board, Production Specs, Assembly, Charges (collapsible; always rendered for testability)
-- **Customer typeahead**: hits `/api/customers/search` w/ debounce, populates name + ship-to ZIP
-- **Multi-Part BOM strip**: add/remove/rename items, per-item type selector (Manufactured/Fulfillment/Purchased), Individual vs Matched Set pricing mode
-- **Right panel**: Route Comparison (3-card layout with winner badge), Economics (Sell/GM/Cost metrics), Cost Buildup (Direct→Indirect→Pricing), Quote Table (per-qty rows), consolidated Guardrails list (replaces the 44 legacy popup modals with context-aware in-panel warnings — see `/lib/warnings.js` ~30 rules covering board, route, layout, print, assembly, freight, GM tiers, multi-part)
-- **Modals**: Parse RFQ (Anthropic), Preview Quote PDF (weasyprint blob iframe), Cost Report (internal sheet-and-cost breakdown), Freight Dashboard (UTS+SPCOC), Load Quote/Draft picker — all closable with ESC + backdrop click
-- **6-min KPI timer** in Toolbar with start/pause/reset, color shifts (green→warn→err) at 0/4/6 min
-- **Testing**: Frontend testing agent (iteration_1.json) confirmed end-to-end working at ~95%, no critical issues. Math verified live: 12×18×qty 5000 → 5×6 → 30 out on 63×120 → CAD route → $5,251.80 sell / 26.7% GM / 167 sheets. Auto-save, multi-part, parser, freight, preview PDF, cost report, logout all verified.
+### 2026-05-29 — Phase 3 frontend REWRITE (1:1 legacy layout)
+After the first Phase 3 pass diverged from the legacy SPOT structure, the entire UI was rebuilt to match legacy `spot_r1_5.jsx` section-for-section, in the exact same order, with no invented inputs/displays:
+
+**Top bar:** SPOT logo + R2.0 Cloud pill + Est#/Initials/Customer · Undo / Save / File checkbox / Load / Quote Header / Preview Quote / Cost Report / user / Logout
+
+**Tab bar:** Tab pills (green dot when customer set) + Initials chip (estimator's initials) · + / Duplicate / Spin Off · Expand / Collapse on the right
+
+**Main column (full-width, scroll):**
+1. **Estimate Info** — Estimate # / Customer (typeahead) / Project Name / Initials · Quote Simple/Multi-Part · Pricing Individual/Matched Set (Multi-Part) · Qty row x5 + Auto-Fill
+2. **Bill of Materials** (Multi-Part only) — colored item strip
+3. **Item Setup** — Customer Ident, Item Description, RSC/FOL/D/C Tray/Mailer/5PF tiles · One-Up / Sheet Size toggle, Width/Length, Flip Corr, Sheet Library, layout summary chip · Board Status Bar (BOARD line + IN STOCK/ORDER badge + Buy Min info + Edit board / FSC toggle) · Expandable board tiles (FLUTE / GRADE / OUTSIDE / INSIDE / MEDIUM + FSC) · sticky One-Time Costs panel (Prepress Auto/None/Line/Amort, Die None/Line/Amort, Misc Charges) on the right
+4. **Production Specs** — Print On/Off + Mode Satin/Gloss/OnQ Sty/OnQ LB + Sides 1-Side/2-Side/White + Saber No/Yes (+Cuts/Blanks) · Route Auto/CAD/Crest/Bobst + Difficulty Simple/Straight/Std/Complex + CAD Price Diff/Rule + Perf % + Mats + Crest Std/Adv · Strip No/Yes (+complexity, Edge) + Glue No/Yes (+Joints, complexity) + Tape No/Yes (+Clear/Reinf)
+5. **Quote Table** — All Active button + count + legend dots (Stock/Custom/Below Min) + Export CSV / Copy All / Preview / Export / ⎙ Print · Full table: ACT/QTY/SELL/EA/GM%/GM$/TOTAL/$/MSF/COST/MSF/FREIGHT/SHEET/#OUT/ROUTE · Order Total breakdown row
+6. **Pricing Strategy** — collapsed placeholder (Phase 4)
+7. **Advanced Controls** — collapsed placeholder (Phase 4, admin-gated)
+8. **Board Engine** — collapsed placeholder (Phase 4)
+9. **Files** — drag/drop zone, file list (RFQ tag / FILE tag) with delete, folder name display, embedded **Build Estimate** sub-panel that launches the Anthropic parser inline (no separate modal — matches legacy D-136)
+
+**Right rail (360px fixed):** Freight (FOB/Type/Ship-To/Markup + Item Freight + Update All / Dashboard) · Route Comparison · Economics · Cost Buildup (Summary/Detail toggle, Direct/Indirect/Pricing/One-Time Line Items sections)
+
+**First-launch Initials Gate** popup; saved to localStorage `wf_est_initials`; defaults derive from `user.name` (e.g., "Ashley Rohr" → "AR") if available, otherwise prompt user.
 
 ### 2026-05-29 — Phase 2 backend APIs (substantially complete)
 - **Auth (JWT)** — register, login, /me, logout, seed-admin (idempotent)
