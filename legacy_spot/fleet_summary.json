@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T21:36:33.662Z",
+  "generatedAt": "2026-05-29T12:12:08.558Z",
   "runner": {
     "schema": 2,
     "cadSetup": {
@@ -22,45 +22,45 @@
     "unparseable": 12
   },
   "fleet": {
-    "medianDelta": "128.48",
-    "meanDelta": "580.48",
-    "medianDeltaPct": "21.33",
-    "meanDeltaPct": "46.95",
-    "p5DeltaPct": "-30.82",
-    "p95DeltaPct": "239.06",
-    "r2": "-0.5537",
-    "sumSpot": "1848587.35",
+    "medianDelta": "50.24",
+    "meanDelta": "118.56",
+    "medianDeltaPct": "7.89",
+    "meanDeltaPct": "16.61",
+    "p5DeltaPct": "-35.58",
+    "p95DeltaPct": "96.52",
+    "r2": "0.8398",
+    "sumSpot": "1491526.45",
     "sumIquote": "1399878.07",
-    "fleetTotalPct": "32.05"
+    "fleetTotalPct": "6.55"
   },
   "byTier": {
     "Standard": {
       "n": 536,
-      "sumDelta": 277281.8,
-      "sumDeltaPct": 29818.309999999976,
-      "medianPct": 26.02,
-      "meanPct": 55.63117537313428
+      "sumDelta": 56869.619999999995,
+      "sumDeltaPct": 10606.750000000016,
+      "medianPct": 12.82,
+      "meanPct": 19.788712686567195
     },
     "Straight": {
       "n": 80,
-      "sumDelta": 148030.83000000002,
-      "sumDeltaPct": 3076.0699999999997,
-      "medianPct": 23.07,
-      "meanPct": 38.450874999999996
+      "sumDelta": 37509.74999999999,
+      "sumDeltaPct": 1432.1,
+      "medianPct": 14.9,
+      "meanPct": 17.901249999999997
     },
     "Complex": {
       "n": 117,
-      "sumDelta": 11571.12,
-      "sumDeltaPct": 2427.75,
-      "medianPct": 6.2,
-      "meanPct": 20.75
+      "sumDelta": -14301.949999999995,
+      "sumDeltaPct": 33.10000000000008,
+      "medianPct": -10.95,
+      "meanPct": 0.28290598290598357
     },
     "Simple": {
       "n": 40,
-      "sumDelta": 11825.53,
-      "sumDeltaPct": 968.1600000000002,
+      "sumDelta": 11570.960000000001,
+      "sumDeltaPct": 765.6800000000002,
       "medianPct": 0.47,
-      "meanPct": 24.204000000000004
+      "meanPct": 19.142000000000003
     }
   }
 }

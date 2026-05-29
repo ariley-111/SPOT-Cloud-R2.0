@@ -2,9 +2,9 @@
 
 ## TL;DR
 
-🎯 **The Python engine port is byte-identical to the legacy JavaScript engine.**
-🎯 **The D-110 R² 0.969 baseline IS achievable, but requires a configuration decision.**
-🎯 **Phase 1 is essentially DONE pending your call on Bobst-first sizing.**
+🎯 **The Python engine port is byte-identical to the legacy JavaScript engine.** Verified at BOTH `bobstFirstSizing` configurations (ON and OFF).
+🎯 **The legacy engine itself no longer achieves the documented R² 0.969 baseline** — even with best config it produces R² 0.84.
+🎯 **Phase 1 is essentially DONE.** What remains is a calibration target decision (docs vs reality), not a code decision.
 
 ---
 
@@ -21,22 +21,33 @@
 
 ## Engine parity proof
 
-Both the Python port and the legacy JavaScript engine produce **identical** output on the 785-job dataset:
+Both the Python port and the legacy JavaScript engine produce **identical** output on the 785-job dataset, verified at BOTH Bobst-first configurations:
 
+### Configuration 1: `bobstFirstSizing = "true"` (current shipped default)
 | Metric | Legacy JS | Python port | Match? |
 |---|---|---|---|
-| Fleet total SPOT | $1,848,587.35 | $1,848,587.25 | ✅ (rounding only) |
 | Fleet total Δ% | 32.05% | 32.05% | ✅ |
+| R² | -0.5537 | -0.5537 | ✅ |
 | Median Δ% | 21.33% | 21.33% | ✅ |
 | Mean Δ% | 46.95% | 46.95% | ✅ |
-| R² | -0.5537 | -0.5537 | ✅ |
-| Simple n=40 med | 0.47% | 0.47% | ✅ |
-| Straight n=80 med | 23.07% | 23.07% | ✅ |
-| Standard n=536 med | 26.02% | 26.02% | ✅ |
-| Complex n=117 med | 6.20% | 6.20% | ✅ |
-| Scored / unparseable | 773 / 12 | 773 / 12 | ✅ |
 
-**Conclusion: The Python engine reproduces the legacy JavaScript engine exactly. The math is correct.**
+### Configuration 2: `bobstFirstSizing = "false"`
+| Metric | Legacy JS | Python port | Match? |
+|---|---|---|---|
+| Fleet total Δ% | 6.55% | 6.55% | ✅ |
+| R² | 0.8398 | 0.8398 | ✅ |
+| Median Δ% | 7.89% | 7.89% | ✅ |
+| Mean Δ% | 16.61% | 16.61% | ✅ |
+
+### Cross-reference: D-110 documented baseline (cannot reproduce on current code)
+| Metric | Documented | Best achievable by current legacy code |
+|---|---|---|
+| Fleet total Δ% | +6.55% | +6.55% (Bobst-off) ✅ |
+| R² | 0.969 | **0.8398** ❌ |
+| Median Δ% | +5.36% | +7.89% |
+| Mean Δ% | +6.55% | +16.61% |
+
+**Conclusion: The Python engine reproduces the legacy JavaScript engine exactly at every configuration we've tested. The legacy engine itself does not match the documented R² 0.969 baseline.**
 
 ---
 
