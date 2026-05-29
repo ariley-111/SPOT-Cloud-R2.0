@@ -5,7 +5,7 @@ from engine import CALIBRATION_BASELINE
 
 router = APIRouter(prefix="/api", tags=["health"])
 
-SPOT_CLOUD_VERSION = "0.1.0-phase0"
+SPOT_CLOUD_VERSION = "0.2.0-phase2"
 _started_at = datetime.now(timezone.utc)
 
 
@@ -19,7 +19,7 @@ async def health():
         "version": SPOT_CLOUD_VERSION,
         "uptime_sec": uptime_sec,
         "started": _started_at.isoformat(),
-        "phase": "Phase 0 — Foundation",
+        "phase": "Phase 2 — Backend APIs",
     }
 
 

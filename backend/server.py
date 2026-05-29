@@ -1,12 +1,4 @@
-"""SPOT Cloud — FastAPI application entry point.
-
-Ports the SPOT (Standard Printing Optimization Tool) corrugated packaging quoting
-tool from a local Node.js+JSX desktop app to a cloud-hosted React + FastAPI + MongoDB
-service.
-
-Reference source code: /app/legacy_spot/ (read-only)
-Phased implementation: see /app/memory/PRD.md
-"""
+"""SPOT Cloud — FastAPI application entry point."""
 import logging
 import os
 from pathlib import Path
@@ -18,18 +10,22 @@ from starlette.middleware.cors import CORSMiddleware
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-# Routes
 from routes import health as health_routes
+from routes import auth as auth_routes
+from routes import customers as customers_routes
+from routes import engine_routes
+from routes import quotes as quotes_routes
+from routes import freight as freight_routes
+from routes import parser as parser_routes
+from routes import pdf as pdf_routes
+from routes.customers import ensure_customers_loaded
 
-# ─── App ───────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="SPOT Cloud",
     description="Standard Printing Optimization Tool — Cloud Edition",
-    version="0.1.0-phase0",
+    version="0.2.0-phase2",
 )
 
-# CORS — preview env serves frontend and backend on the same domain, but
-# we keep this permissive for now; tighten before go-live.
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -38,21 +34,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Routers ───────────────────────────────────────────────────────────────
+# Routers
 app.include_router(health_routes.router)
+app.include_router(auth_routes.router)
+app.include_router(customers_routes.router)
+app.include_router(engine_routes.router)
+app.include_router(quotes_routes.drafts_router)
+app.include_router(quotes_routes.quotes_router)
+app.include_router(freight_routes.router)
+app.include_router(parser_routes.router)
+app.include_router(pdf_routes.router)
 
-
-# ─── Lifecycle ─────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("spot")
 
 
 @app.on_event("startup")
 async def on_startup():
-    logger.info("SPOT Cloud starting — phase 0 skeleton")
+    logger.info("SPOT Cloud starting — Phase 2 (Backend APIs)")
+    await ensure_customers_loaded()
+    logger.info("Customer list loaded")
 
 
 @app.on_event("shutdown")

@@ -95,6 +95,19 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
+### 2026-05-29 — Phase 2 backend APIs (substantially complete)
+- **Auth (JWT)** — register, login, /me, logout, seed-admin (idempotent)
+- **Customers** — 384 loaded from CSV on startup, search, lookup, admin CSV upload + refresh
+- **Engine endpoints** — /api/engine/calculate, /api/engine/calculate-all, /api/engine/defaults (wraps Phase 1 engine, output verified identical)
+- **Quote drafts (per-user 'tabs')** — full CRUD with auto-save support
+- **Saved quotes** — full CRUD
+- **Freight** — SPCOC local zones working; UTS API integration coded but endpoint URL needs verification (returns 404)
+- **PDF generation** — weasyprint-based customer Preview Quote PDF (13.5KB sample generated, valid PDF). First-draft template; Phase 3 polishes layout to match legacy
+- **RFQ Parser** — Anthropic Opus 4.7 endpoint coded with verbatim-style prompt, monthly budget tracking. **BLOCKED on invalid API key**
+- All endpoints behind JWT auth, admin role gate on sensitive ones
+- MongoDB collections seeded: users, customers (384), quote_drafts, quotes, parser_budget
+- Admin seeded: admin@standardprinting.com / spot-admin-2026 (see test_credentials.md)
+
 ### 2026-05-28 — Phase 1 engine port (in progress, awaiting config decision)
 - **Engine ported to Python** — verbatim port of spot_engine.js (1,131 lines), spot_runner.js (358 lines), fleet_compare.js (366 lines)
 - **Parity proven** — Python engine output is byte-identical to legacy JavaScript engine on all 785-job regression metrics (fleet total, R², per-tier medians)
@@ -116,7 +129,7 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
   - **PRD.md created (this file)**
 
 ### Configuration
-- Anthropic API key: stored in `.env` (received from user 2026-05-28)
+- Anthropic API key: stored in `.env` (received from user 2026-05-28) — **status: invalid (401) as of 2026-05-29**
 - Anthropic model: `claude-opus-4-7` (matches legacy SPOT)
 - Anthropic monthly cap: $500 USD (matches legacy SPOT default)
 - UTS credentials: `estimates@standardprinting.com / Quotes330-453-8247` (moved from hardcoded source to `.env`)
