@@ -101,9 +101,9 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 - **Engine endpoints** — /api/engine/calculate, /api/engine/calculate-all, /api/engine/defaults (wraps Phase 1 engine, output verified identical)
 - **Quote drafts (per-user 'tabs')** — full CRUD with auto-save support
 - **Saved quotes** — full CRUD
-- **Freight** — SPCOC local zones working; UTS API integration coded but endpoint URL needs verification (returns 404)
+- **Freight** — SPCOC local zones + UTS API both fully working. Fixed endpoint `/v1/rateestimate` with Basic auth — returning live carrier rates (Aberdeen, R&L, Old Dominion, etc.)
 - **PDF generation** — weasyprint-based customer Preview Quote PDF (13.5KB sample generated, valid PDF). First-draft template; Phase 3 polishes layout to match legacy
-- **RFQ Parser** — Anthropic Opus 4.7 endpoint coded with verbatim-style prompt, monthly budget tracking. **BLOCKED on invalid API key**
+- **RFQ Parser** — Anthropic Opus 4.7 endpoint with verbatim-style prompt, monthly budget tracking. ✅ Verified working on all 3 sample RFQs (Lynk/AFA, OnQ Square Terminal, Tavens/Pay Near Me) — parser correctly extracts customer/contact/specs and surfaces ambiguities in `asks[]` array. Spend: $0.44 for 3 parses.
 - All endpoints behind JWT auth, admin role gate on sensitive ones
 - MongoDB collections seeded: users, customers (384), quote_drafts, quotes, parser_budget
 - Admin seeded: admin@standardprinting.com / spot-admin-2026 (see test_credentials.md)
@@ -179,7 +179,7 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 | Item | When needed | Status | Owner |
 |---|---|---|---|
 | **🚩 BOBST CALIBRATION DISCUSSION** | **Before broader rollout** | **🟡 FLAGGED for Monday Jan 6 with Michael** | **User to raise** |
-| Sample RFQ PDFs (Skybox PO 47309, L'Oreal C4-26) | Phase 2/6 | 🟡 Pending | User to grab from file server |
+| Sample RFQ PDFs (Skybox/Lynk, OnQ, Tavens) | Phase 2/6 | ✅ Received 2026-05-29; parser verified working on all 3 | Done |
 | 2-3 complex test estimates for parity validation | Phase 6 | 🟡 Pending | User |
 | SharePoint Azure AD app creds | Phase 5 | 🟡 Pending | IT |
 | Entra SSO Azure AD app creds | Phase 5 | 🟡 Pending | IT |
