@@ -166,6 +166,11 @@ function fmtBytes(b) {
 
 function ReviewParseModal({ result, onClose, onApply }) {
   const p = result.parsed || {};
+  const sources = result.sources || {};
+  const method = result.method || "M1";
+  const overallConf = result.confidence;
+  const asksList = result.asks || [];
+
   // Only DEFAULT to checked when value is truthy (non-null, non-empty).
   const [picks, setPicks] = React.useState(() => {
     const init = {};
@@ -173,108 +178,144 @@ function ReviewParseModal({ result, onClose, onApply }) {
       const v = p[k];
       if (v === null || v === undefined || v === "") return;          // skip nulls/blanks
       if (Array.isArray(v) && v.length === 0) return;
-      if (typeof v === "object" && Object.values(v).every((x) => x == null)) return;
+      if (typeof v === "object" && !Array.isArray(v) && Object.values(v).every((x) => x == null)) return;
       init[k] = true;
     });
     return init;
   });
   const toggle = (k) => setPicks((cur) => ({ ...cur, [k]: !cur[k] }));
 
+  // Map legacy parser field names → our state field names
+  const FIELD_MAP = {
+    custName: "custName", customerName: "custName",
+    custCode: "custCode", customerCode: "custCode",
+    custRef: "custRef", projectName: "custRef",
+    custIdent: "custIdent",
+    po: "poNumber",
+    itemDesc: "itemDesc",
+    boxStyle: "boxStyle",
+    oneUpW: "oneUpW", oneUpL: "oneUpL",
+    qtys: "qtys",
+    flute: "flute",
+    boardGrade: "boardGrade",
+    outsideLiner: "outsideLiner",
+    insideLiner: "insideLiner",
+    medium: "medium",
+    printReq: "printReq", printMode: "printMode", printSides: "printSides",
+    colorsFront: "colorsFront", colorsBack: "colorsBack",
+    whiteInk: "whiteInk",
+    cadDifficulty: "cadDifficulty",
+    totalRuleInches: "totalRuleInches",
+    handStripping: "handStripping", stripReq: "handStripping",
+    handGluing: "handGluing", glueReq: "handGluing",
+    tape: "tape", tapeReq: "tape",
+    quoteFOB: "quoteFOB", fobMode: "quoteFOB",
+    destZip: "destZip",
+    dueDate: "dueDate",
+    notes: "quoteNotes",
+    quoteType: "quoteType",
+    pricingMode: "pricingMode",
+    setMarginPct: "setMarginPct",
+    bomItems: "bomItems",
+  };
+  const NUMERIC_AS_STRING = new Set(["oneUpW", "oneUpL", "colorsFront", "colorsBack", "totalRuleInches", "setMarginPct"]);
+
   const apply = () => {
     const patch = {};
     const has = (k) => picks[k] && p[k] !== null && p[k] !== undefined && p[k] !== "";
-    if (has("customerName")) patch.custName = p.customerName;
-    if (has("customerCode")) patch.custCode = p.customerCode;
-    if (has("projectName"))  patch.custRef  = p.projectName;
-    if (has("custIdent"))    patch.custIdent = p.custIdent;
-    if (has("po"))           patch.poNumber = p.po;
-    if (has("itemDesc"))     patch.itemDesc = p.itemDesc;
-    if (has("boxStyle"))     patch.boxStyle = p.boxStyle;
-    if (has("oneUpW"))       patch.oneUpW = String(p.oneUpW);
-    if (has("oneUpL"))       patch.oneUpL = String(p.oneUpL);
-    if (has("qtys") && Array.isArray(p.qtys)) {
-      const q = [...p.qtys.map(String)]; while (q.length < 5) q.push("");
-      patch.qtys = q.slice(0, 5);
+
+    Object.keys(p).forEach((k) => {
+      const target = FIELD_MAP[k];
+      if (!target) return;
+      if (!has(k)) return;
+      let val = p[k];
+      if (target === "qtys" && Array.isArray(val)) {
+        const q = [...val.map(String)]; while (q.length < 5) q.push("");
+        patch.qtys = q.slice(0, 5);
+        return;
+      }
+      if (NUMERIC_AS_STRING.has(target) && val !== null) val = String(val);
+      patch[target] = val;
+    });
+
+    // Honest "unspecified" print: only force "No" if parser explicitly left printReq null AND
+    // didn't see ANY print signal (e.g. an unchecked Sample Request form).
+    if (p.printReq === null && p.printMode === null && p.printSides === null && p.colorsFront === null && p.whiteInk === null && patch.printReq === undefined) {
+      patch.printReq = "No";
     }
-    if (has("flute"))         patch.flute = p.flute;
-    if (has("boardGrade"))    patch.boardGrade = p.boardGrade;
-    if (has("outsideLiner"))  patch.outsideLiner = p.outsideLiner;
-    if (has("insideLiner"))   patch.insideLiner = p.insideLiner;
-    if (has("medium"))        patch.medium = p.medium;
-    // Print: if parser left ALL print fields null, explicitly turn print OFF so the
-    // estimator sees blank-tray pricing — they can flip it back on with intent.
-    const parserSawPrintFields = ["printReq","printMode","printSides","colorsFront","colorsBack","whiteInk"]
-      .some((k) => p[k] !== null && p[k] !== undefined && p[k] !== "");
-    if (has("printReq"))      patch.printReq = p.printReq;
-    else if (!parserSawPrintFields) patch.printReq = "No";    // honest "unspecified" → No print until estimator opts in
-    if (has("printMode"))     patch.printMode = p.printMode;
-    if (has("printSides"))    patch.printSides = p.printSides;
-    if (has("colorsFront"))   patch.colorsFront = String(p.colorsFront);
-    if (has("colorsBack"))    patch.colorsBack  = String(p.colorsBack);
-    if (has("whiteInk"))      patch.whiteInk = p.whiteInk;
-    if (has("handStripping")) patch.handStripping = p.handStripping;
-    if (has("handGluing"))    patch.handGluing = p.handGluing;
-    if (has("tape"))          patch.tape = p.tape;
-    if (has("quoteFOB"))      patch.quoteFOB = p.quoteFOB;
-    if (has("dueDate"))       patch.dueDate = p.dueDate;
-    if (has("notes"))         patch.quoteNotes = p.notes;
+
     onApply(patch);
   };
 
+  const isFieldNull = (v) =>
+    v === null || v === undefined || v === "" ||
+    (Array.isArray(v) && v.length === 0) ||
+    (v && typeof v === "object" && !Array.isArray(v) && Object.values(v).every((x) => x == null));
+
+  // Confidence display: legacy can return float 0-1 OR string high/medium/low
+  const confLabel = typeof overallConf === "number"
+    ? `${(overallConf * 100).toFixed(0)}%`
+    : (overallConf || "—");
+  const confColor = (() => {
+    const n = typeof overallConf === "number" ? overallConf
+      : overallConf === "high" ? 0.9 : overallConf === "low" ? 0.5 : 0.7;
+    if (n >= 0.85) return "var(--spot-green)";
+    if (n >= 0.65) return "var(--spot-warn)";
+    return "var(--spot-err)";
+  })();
+
   return (
     <div className="sp-modal-backdrop" data-testid="parse-review-modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sp-modal" style={{ width: 820 }}>
+      <div className="sp-modal" style={{ width: 880 }}>
         <div className="sp-modal-head">
           <span>Review Parsed Fields</span>
           <button className="sp-btn" onClick={onClose} data-testid="parse-review-close">×</button>
         </div>
         <div className="sp-modal-body">
-          <div style={{ fontSize: 12, color: "var(--spot-text2)", marginBottom: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <span>Confidence <span style={{
-              color: p.confidence === "high" ? "var(--spot-green)" :
-                     p.confidence === "low"  ? "var(--spot-err)"   : "var(--spot-warn)",
-              fontWeight: 700,
-            }}>{p.confidence || "—"}</span></span>
+          <div style={{ fontSize: 12, color: "var(--spot-text2)", marginBottom: 10,
+            display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <span data-testid="parse-method">Method <span style={{
+              color: "var(--spot-accent)", fontWeight: 700, padding: "1px 6px",
+              border: "1px solid var(--spot-accent)", borderRadius: 3,
+            }}>{method}</span></span>
+            <span style={{ color: "var(--spot-text3)" }}>·</span>
+            <span data-testid="parse-confidence">Confidence <span style={{ color: confColor, fontWeight: 700 }}>{confLabel}</span></span>
             <span style={{ color: "var(--spot-text3)" }}>·</span>
             <span>Model {result.model}</span>
             <span style={{ color: "var(--spot-text3)" }}>·</span>
             <span>Tokens {result.usage?.input_tokens || 0} in / {result.usage?.output_tokens || 0} out</span>
-            {p._source?.form_type && (
+            {result.usage?.cache_read_input_tokens > 0 && (
               <>
                 <span style={{ color: "var(--spot-text3)" }}>·</span>
-                <span>Source: <span style={{ color: "var(--spot-text)", fontWeight: 600 }}>{p._source.form_type}</span></span>
+                <span style={{ color: "var(--spot-green)" }} title="Anthropic prompt cache HIT">
+                  cache hit ({result.usage.cache_read_input_tokens.toLocaleString()} tok)
+                </span>
               </>
             )}
           </div>
 
-          {/* Evidence trail */}
-          {p._source?.key_excerpts?.length > 0 && (
-            <details style={{
-              marginBottom: 12, padding: "6px 10px",
-              background: "var(--spot-bg3)", border: "1px solid var(--spot-border)", borderRadius: 4,
-            }} data-testid="parse-evidence-trail">
-              <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 600, color: "var(--spot-text3)",
-                textTransform: "uppercase", letterSpacing: ".06em" }}>
-                Evidence trail · {p._source.key_excerpts.length} excerpts the parser saw
-              </summary>
-              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 11,
-                color: "var(--spot-text2)", fontFamily: "'JetBrains Mono', monospace" }}>
-                {p._source.key_excerpts.map((s, i) => <li key={i}>{s}</li>)}
-              </ul>
-            </details>
-          )}
-
-          {p.asks?.length > 0 && (
+          {asksList.length > 0 && (
             <div style={{
               marginBottom: 12, padding: "8px 12px",
               background: "var(--spot-warn-bg)", border: "1px solid var(--spot-warn)", borderRadius: 4,
             }} data-testid="parse-asks">
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)", marginBottom: 4,
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)", marginBottom: 6,
                 textTransform: "uppercase", letterSpacing: ".06em" }}>
-                Needs estimator input · {p.asks.length} item{p.asks.length === 1 ? "" : "s"}
+                Needs estimator input · {asksList.length} item{asksList.length === 1 ? "" : "s"}
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--spot-text2)" }}>
-                {p.asks.map((a, i) => <li key={i}>{a}</li>)}
+                {asksList.map((a, i) => (
+                  <li key={i}>
+                    {typeof a === "string" ? a : (
+                      <>
+                        {a.field && <span style={{ fontFamily: "'JetBrains Mono', monospace",
+                          color: "var(--spot-warn)", fontWeight: 700 }}>{a.field}</span>}
+                        {a.field && a.reason && " — "}
+                        {a.reason || ""}
+                      </>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -282,16 +323,23 @@ function ReviewParseModal({ result, onClose, onApply }) {
           <table style={{ width: "100%", fontSize: 12 }}>
             <thead>
               <tr style={{ color: "var(--spot-text3)", textAlign: "left", borderBottom: "1px solid var(--spot-line)" }}>
-                <th style={{ width: 30 }}></th><th>Field</th><th>Value</th>
+                <th style={{ width: 28 }}></th>
+                <th>Field</th>
+                <th>Value</th>
+                <th style={{ width: 70 }}>Source</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(p)
-                .filter(([k]) => !["asks", "confidence", "_source"].includes(k))
+                .filter(([k]) => !["asks", "confidence", "_source", "sources", "method"].includes(k))
                 .map(([k, v]) => {
-                  const isNull = v === null || v === undefined || v === "" ||
-                    (Array.isArray(v) && v.length === 0) ||
-                    (v && typeof v === "object" && !Array.isArray(v) && Object.values(v).every((x) => x == null));
+                  const isNull = isFieldNull(v);
+                  const tag = sources[k];
+                  const tagColor = {
+                    RFQ: "var(--spot-green)", CAD: "var(--spot-accent)",
+                    REGISTRY: "var(--spot-purple)", CALC: "var(--spot-cyan)",
+                    DEFAULT: "var(--spot-text3)", ASK: "var(--spot-warn)",
+                  }[tag] || "var(--spot-text3)";
                   return (
                     <tr key={k} style={{ borderBottom: "1px solid var(--spot-line)" }}>
                       <td><input type="checkbox" disabled={isNull}
@@ -307,6 +355,15 @@ function ReviewParseModal({ result, onClose, onApply }) {
                           <pre style={{ margin: 0, fontFamily: "inherit", whiteSpace: "pre-wrap" }}>
                             {typeof v === "object" ? JSON.stringify(v, null, 0) : String(v)}
                           </pre>
+                        )}
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        {tag && (
+                          <span data-testid={`parse-source-${k}`} style={{
+                            fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 2,
+                            background: `${tagColor}22`, color: tagColor,
+                            border: `1px solid ${tagColor}55`, letterSpacing: ".06em",
+                          }}>{tag}</span>
                         )}
                       </td>
                     </tr>

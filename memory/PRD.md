@@ -95,6 +95,46 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
+### 2026-05-29 — Parser ported VERBATIM to legacy contract
+The Phase 2 parser had been simplified to a flat-output extraction. Brought to 1:1 with legacy `spot_server.js` (D-136 / D-141 / D-144 / D-145):
+
+**New module `/app/backend/parser_knowledge.py`** — ports the 5 embedded knowledge blocks verbatim:
+- `EMBEDDED_CANONICAL_TERMS` (CKB, MW, Kemi, Crest, CAD, Bobst, Inca, Buy Min, Paper uplift, FSC/SFI, Gloss/Satin, Graphic White)
+- `EMBEDDED_QUOTING_RULES` (10 SPOT hard rules — no routeOverride, estInitials=SPC, under5MsfFee=0, ECT→Mullen, Buy Min bypass, reset-first apply, Satin default, FOB Origin, PDF via Preview Quote)
+- `EMBEDDED_BOARD_LIBRARY` (singlewall/doublewall flutes + grades, canonical liner values, liner-upgrade rules, route eligibility for CAD/Crest/Bobst)
+- `EMBEDDED_CONTROL_DEFAULTS` (D-110 calibrated rates: Inca $485/hr, CAD $138/hr, Crest $45/hr, Bobst $350/hr; GM curve; FSC fee; paper uplift; ink rate)
+- `EMBEDDED_HARNESS_HIGHLIGHTS` (M1-M5 method derivation; source-tag taxonomy RFQ/CAD/DEFAULT/CALC/ASK/REGISTRY; display-vocabulary → boxStyle mapping)
+- `EXTRACTION_INSTRUCTIONS` (full multi-part composition rules, CAD board callout grammar, per-component RFQ-body instructions, email-signature ZIP extraction rules 1-6, strict rules)
+
+**Customer registry injection** — `_load_customer_registry()` pulls all 384 customers from Mongo into the system prompt as `<cust_code> | <cust_name>` lines. The parser emits `custCode` directly with `REGISTRY` source tag when it finds a match. Verified: "OnQ" → `custCode: "1334"` (no client typeahead round-trip needed).
+
+**Anthropic prompt caching** — system prompt sent with `cache_control: {type: "ephemeral"}`. Second parse hit cache with `cache_read_input_tokens: 10,071` and `input_tokens: 6` — ~10× cost reduction per subsequent parse within the 5-min cache window.
+
+**D-141 / D-144 pre-flight** — refuses requests > 80% of 450k/min TPM cap before hitting Anthropic. Estimator: PDFs/images @ bytes/250 (D-144 calibration), text @ bytes/4.
+
+**New output schema** (legacy contract):
+```
+{
+  "parsed":     { ...full SPOT intake object including bomItems[] for Multi-Part... },
+  "sources":    { "<fieldPath>": "RFQ|CAD|DEFAULT|CALC|ASK|REGISTRY", ... },
+  "method":     "M1"|"M2"|"M3"|"M4"|"M5",
+  "asks":       [ {"field": <path>, "reason": <short explanation>} ],
+  "confidence": 0.0-1.0
+}
+```
+
+**Frontend `FilesSec.jsx`** — review modal updated to render the new schema: method badge, float-confidence chip, per-field source tag pills (RFQ green / CAD blue / REGISTRY purple / CALC cyan / DEFAULT grey / ASK warn), `asks` rendered as `[field] — reason` pairs, cache-hit indicator. Apply maps legacy field names (`customerName`, `projectName`, `po`, `fobMode`, `glueReq`, `stripReq`, `tapeReq`) → cloud state fields.
+
+**Live verified against RFQ-2** (Square Terminal PDQ Tray):
+- Method M1, confidence 0.82
+- `custCode: "1334"` via REGISTRY (matched "OnQ" → "OnQ Solutions, Inc.")
+- `boxStyle: "D/C Tray"` (NOT RSC), `boardGrade: "ECT 32"` (NOT 200#)
+- `outsideLiner: "42# Kemi-Lite"` / `insideLiner: "None"` via REGISTRY (Kemi/Kraft → canonical)
+- `printReq: "Yes"` (Inca digital checked), `printMode: null` + ask (Gloss/Satin not specified)
+- `qtys: [150000, 200000, 250000, 300000]` from "150-300m" range + ask to confirm
+- `estInitials: "SPC"`, `under5MsfFee: "0"`, `fobMode: "Origin"`, `quoteType: "Simple"` — Rules 2/3/9 locked
+- 9 asks covering all uncertainties
+
 ### 2026-05-29 — Phase 3 frontend REWRITE (1:1 legacy layout)
 After the first Phase 3 pass diverged from the legacy SPOT structure, the entire UI was rebuilt to match legacy `spot_r1_5.jsx` section-for-section, in the exact same order, with no invented inputs/displays:
 
