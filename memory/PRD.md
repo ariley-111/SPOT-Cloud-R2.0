@@ -95,6 +95,21 @@ Detailed acceptance criteria for each phase live in `/app/memory/phase_plan.md` 
 
 ## 5. What's been implemented (grows over time)
 
+### 2026-06-01 — Preview Quote modal + New-Tab bug fix
+- **Preview Quote modal rewritten** (`PreviewPdfModal.jsx`) to match legacy `spot_r1_5.jsx` exactly:
+  - HTML-rendered modal (NOT a PDF iframe) — 780px wide, white bg
+  - Company header with embedded SPC logo + address bar
+  - Quote meta grid (Quote Number / Date / Customer / Valid Until / Project / Ship To)
+  - Item description bar with spec sub-line (`grade# flute · OL/IL · W×L · FSC`)
+  - Pricing table: `QTY / EACH / PER/M / TOTAL / CHARGES / QUOTE TOTAL`
+  - **Charges:** selector (`Lump Sum / By Type (default) / By Part`) — only renders when any line has die/freight/prepress/misc > 0
+  - **Export** button → calls backend `/api/pdf/preview-quote` with selected `chargeMode`; downloads PDF
+  - **Print** button → opens isolated print window of quote body
+  - Close × + ESC + backdrop-click all dismiss
+- **Backend PDF endpoint** (`/app/backend/routes/pdf.py`) rewritten to honor `chargeMode` and embed logo via base64 data-URI. WeasyPrint output verified (119KB, valid PDF-1.7).
+- **🐛 Fixed: "New Quote +" tab duplicated previous tab's state.** Root cause: when autosave promoted a `local-*` tab to a DB id (`setTabs(... id: created.id)`), `activeId` was NOT updated, so `useMemo(active)` fell back to `tabs[0]` (the prior tab). Fix in `QuoteContext.jsx`: sync `setActiveId((cur) => cur === oldId ? created.id : cur)` after promotion. Verified at 500ms AND 3500ms after `+` click — new tab stays blank.
+- Tests: testing agent confirmed 6/6 backend pytest + 100% frontend modal/charge-mode/export/close path checks (`/app/test_reports/iteration_2.json`).
+
 ### 2026-05-29 — Phase 3 UI fixes per legacy walkthrough
 - Toolbar: removed hex logo, simplified to "SPOT" text + version pill; **moved Initials chip to AFTER customer name** per legacy ordering (Est# → Customer — Project → Initials).
 - EstimateInfoSec: **split +Qty (adds a slot up to 8) from Auto-Fill (multiplies last × 1/2/5/10/20)** — they were one button before.
