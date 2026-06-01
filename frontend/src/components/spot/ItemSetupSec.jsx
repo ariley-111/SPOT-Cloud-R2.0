@@ -154,8 +154,11 @@ function routeColor(rt) {
 
 function BoardStatusBar({ s, r, setField }) {
   const [tilesOpen, setTilesOpen] = React.useState(false);
-  const olShort = String(s.outsideLiner || "").replace("42# ", "").replace("33# ", "").replace("56# ", "");
-  const ilShort = String(s.insideLiner  || "").replace("42# ", "").replace("33# ", "").replace("56# ", "");
+  // Legacy fmLnr (spot_r1_5.jsx L1218): "None" → "Kraft", strip weight prefix + "-Lite"/"-White"
+  const fmLnr = (l) => (!l || l === "None") ? "Kraft"
+    : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
+  const olShort = fmLnr(s.outsideLiner);
+  const ilShort = fmLnr(s.insideLiner);
   const med = s.medium || "None";
   const specLine = `${s.boardGrade || "—"} · ${s.flute || "—"} · ${olShort}/${ilShort}${med !== "None" ? " · " + String(med).replace("# Medium", "#") : ""}`;
   const isStock = !!r?._pipeline?.stockMode;

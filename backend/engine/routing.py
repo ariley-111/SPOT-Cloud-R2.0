@@ -3,8 +3,9 @@
 Verbatim Python port of:
   - selectBobstSheet  (spot_engine.js L283-333)
   - autoSelectSheet   (spot_engine.js L336-556)
-  - autoRoute         (spot_engine.js L559-634)
-  - compareRoutes     (spot_engine.js L993-1110)
+  - evaluateRoutes    (spot_engine.js L626-790) — D-124 shared route evaluator
+  - autoRoute         (spot_engine.js L792-832) — D-124 cost-aware (cheapest viable)
+  - compareRoutes     (spot_engine.js L834-900) — D-090 side-by-side panel data
 """
 from __future__ import annotations
 import math
@@ -292,91 +293,312 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
     return None
 
 
-def auto_route(cad_hrs: float, selected_sheet: Dict[str, Any], one_up_w: float, one_up_l: float,
-               board_spec: Dict[str, Any], total_qty: int, assumptions: Dict[str, Any]) -> Dict[str, Any]:
-    """Auto-routing (RULE-017 through RULE-021). Port of L559-634."""
-    # D-121 RULE-021 + D-123: Bobst first-preference
+# ─── D-124 (R1.6.1): Shared route evaluator. ALL-CANDIDATES-COMPETE pattern. ───
+# Verbatim port of legacy spot_r1_5.jsx L626-790 evaluateRoutes().
+# Returns {cad, crest, bobst, bobstReason, cheapest} where each route entry has
+#   {route, viable, totalCost, sheet, board, press, cut, hrs, ...}
+# Used by auto_route (cheapest viable) and compare_routes (full set).
+# Replaces D-121 hard-Bobst-first early return and the duplicate Crest sheet
+# selection logic that previously caused autoRoute/compareRoutes to disagree.
+def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
+                    total_qty: int, assumptions: Dict[str, Any],
+                    opts: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    if one_up_w <= 0 or one_up_l <= 0 or total_qty <= 0:
+        return None
+    opts = opts or {}
+
+    print_speed = PRINT_SPEEDS.get(opts.get("printMode"), 100)
+    c_comp = opts.get("crestComplexity", "Standard")
+    die_cost_in = pn(opts.get("dieCost"))
+    die_has_input = opts.get("dieTreatment") != "None" and die_cost_in > 0
+    print_on = opts.get("printReq") == "Yes" and print_speed > 0
+
+    inca_rate = assumptions.get("incaRate", 460)
+    inca_min = assumptions.get("incaMinCharge", 0)
+    cad_rate = assumptions.get("cadRate", 160)
+    cad_min = assumptions.get("cadMinCharge", 0)
+
+    # ─── CAD ───
+    cad_sel = opts.get("cadSelectedSheet") or auto_select_sheet(
+        one_up_w, one_up_l, board_spec, total_qty, assumptions)
+    cad = None
+    if cad_sel and cad_sel.get("bc") and cad_sel["bc"].get("pricable"):
+        cad_sh_w = (cad_sel.get("sheet") or {}).get("w", 0)
+        cad_sh_l = (cad_sel.get("sheet") or {}).get("l", 0)
+        cad_hrs_v = opts.get("cadHrs") if isinstance(opts.get("cadHrs"), (int, float)) else cad_sel.get("cadHrs", 0)
+        cad_press = max((cad_sel["sheetsReq"] / print_speed) * inca_rate, inca_min) if print_on else 0
+        cad_cut = max(cad_hrs_v * cad_rate, cad_min)
+        cad_board = cad_sel["bc"]["total"]
+        cad_total = cad_board + cad_press + cad_cut
+        # RULE-017: CAD viable when cadHrs <= 8 (within one shift)
+        cad_viable = cad_hrs_v <= 8
+        saber_needed = cad_sh_w > CREST_MAX_W or cad_sh_l > CREST_MAX_L
+        cad = {
+            "route": "CAD", "viable": cad_viable, "totalCost": cad_total, "sheet": cad_sel,
+            "board": cad_board, "press": cad_press, "cut": cad_cut, "hrs": cad_hrs_v,
+            "saberNeeded": saber_needed, "warning": None,
+        }
+
+    # ─── Crest (all-candidates-compete: custom + viable stock all sort by cost) ───
+    crest = None
+    c_n_up = math.floor((CREST_MAX_W - 2) / one_up_w)
+    c_n_out = math.floor((CREST_MAX_L - 2) / one_up_l)
+    if c_n_up >= 1 and c_n_out >= 1:
+        fb_grade = get_grade_fallback(board_spec["boardGrade"])
+        crest_rate = assumptions.get("crestRate", 45)
+        crest_speed = assumptions.get("crestSpeed", 150)
+        crest_min = assumptions.get("crestMinCharge", 0)
+        crest_setup_map = assumptions.get("crestSetup") or {}
+        crest_setup_min = crest_setup_map.get(c_comp, 45)
+        _pr_sh = inca_rate / 100
+        _cr_sh = crest_rate / (crest_speed or 150)
+        candidates = []
+
+        # Candidate: custom Crest imposition
+        c_sh_w = c_n_up * one_up_w + 2
+        c_sh_l = c_n_out * one_up_l + 2
+        c_pps = c_n_up * c_n_out
+        c_req = math.ceil(total_qty / c_pps)
+        c_bi = {**board_spec, "widthIn": c_sh_w, "lengthIn": c_sh_l}
+        c_bc = calc_board(c_bi, c_req)
+        if c_bc["pricable"]:
+            c_waste = 1 - ((c_n_up * one_up_w * c_n_out * one_up_l) / (c_sh_w * c_sh_l))
+            c_layout = {"numUp": c_n_up, "numOut": c_n_out, "pcsPerSheet": c_pps,
+                        "wastePct": c_waste, "sheetW": c_sh_w, "sheetL": c_sh_l}
+            c_sheet = {"id": f"CREST-{c_n_up}x{c_n_out}", "g": board_spec["boardGrade"],
+                       "f": board_spec["flute"], "ol": board_spec["outsideLiner"],
+                       "il": board_spec["insideLiner"], "md": board_spec["medium"],
+                       "w": c_sh_w, "l": c_sh_l}
+            candidates.append({
+                "sheet": c_sheet, "layout": c_layout, "sheetsReq": c_req, "bc": c_bc,
+                "totalCost": c_bc["total"], "allIn": c_bc["total"] + c_req * (_pr_sh + _cr_sh),
+                "stockMode": False, "customOrder": True, "isStock": False,
+                "gradeFallback": None,
+            })
+
+        # Candidates: stock sheets within Crest envelope
+        for sh in APPROVED_SHEETS:
+            if sh["w"] > CREST_MAX_W or sh["l"] > CREST_MAX_L:
+                continue
+            gm = sh["g"] == board_spec["boardGrade"] or (fb_grade and sh["g"] == fb_grade)
+            if (sh["f"] != board_spec["flute"] or not gm or
+                sh["ol"] != board_spec["outsideLiner"] or
+                sh["il"] != board_spec["insideLiner"] or sh["md"] != board_spec["medium"]):
+                continue
+            ly = compute_layout(one_up_w, one_up_l, sh["w"], sh["l"])
+            if not ly:
+                continue
+            req = math.ceil(total_qty / ly["pcsPerSheet"])
+            bi = {**board_spec, "widthIn": sh["w"], "lengthIn": sh["l"]}
+            bc = calc_board(bi, req, is_stock=True)
+            used_fallback = sh["g"] != board_spec["boardGrade"]
+            if bc["pricable"]:
+                candidates.append({
+                    "sheet": sh, "layout": ly, "sheetsReq": req, "bc": bc,
+                    "totalCost": bc["total"], "allIn": bc["total"] + req * (_pr_sh + _cr_sh),
+                    "stockMode": True, "customOrder": False, "isStock": True,
+                    "gradeFallback": fb_grade if used_fallback else None,
+                })
+            elif bc["hasPrice"] and not bc["meetMin"]:
+                sq_ft = (sh["w"] * sh["l"]) / 144
+                min_buy = max(1, math.ceil(bc["minSqFt"] / sq_ft))
+                sc = calc_board(bi, min_buy, is_stock=True)
+                if sc["pricable"]:
+                    scale = req / min_buy
+                    scaled = sc["total"] * scale
+                    stock_bc = {**bc, "pricable": True, "meetMin": True, "total": scaled,
+                                "effWithFsc": scaled / bc["oMsf"] if bc["oMsf"] > 0 else 0,
+                                "costPc": scaled / total_qty if total_qty > 0 else 0,
+                                "stockMode": True}
+                    candidates.append({
+                        "sheet": sh, "layout": ly, "sheetsReq": req, "bc": stock_bc,
+                        "totalCost": scaled, "allIn": scaled + req * (_pr_sh + _cr_sh),
+                        "stockMode": True, "customOrder": False, "isStock": True,
+                        "gradeFallback": fb_grade if used_fallback else None,
+                    })
+
+        if candidates:
+            candidates.sort(key=lambda a: a["allIn"])
+            cr_pick = candidates[0]
+            cr_board = cr_pick["bc"]["total"]
+            cr_press_hrs = (cr_pick["sheetsReq"] / print_speed) if print_on else 0
+            cr_press = max(cr_press_hrs * inca_rate, inca_min) if print_on else 0
+            c_setup = crest_setup_min / 60
+            eff_speed = (crest_speed * (assumptions.get("crestAdvSpeedFactor", 0.8))) if c_comp == "Advanced" else crest_speed
+            cr_cut_hrs = c_setup + (cr_pick["sheetsReq"] / eff_speed if eff_speed > 0 else 0)
+            cr_cut = max(cr_cut_hrs * crest_rate, crest_min)
+            rule_in = pn(assumptions.get("totalRuleInches"))
+            est_die = min(3000, max(500, rule_in * cr_pick["layout"]["pcsPerSheet"] * 1.15 * 0.02))
+            die_cost = die_cost_in if die_has_input else (est_die if rule_in > 0 else (pn(assumptions.get("crestDieCost")) or 1200))
+            die_estimated = not die_has_input
+            sheet_rule_inches = rule_in * cr_pick["layout"]["pcsPerSheet"] * 1.15 if rule_in > 0 else 0
+            warning = (f"Crest die has {round(sheet_rule_inches)} rule inches per sheet "
+                       f"(over 1,000) — needs approval before ordering die") if sheet_rule_inches > 1000 else None
+            cr_total = cr_board + cr_press + cr_cut + die_cost
+            crest = {
+                "route": "Crest", "viable": True, "totalCost": cr_total, "sheet": cr_pick,
+                "board": cr_board, "press": cr_press, "cut": cr_cut, "hrs": cr_cut_hrs,
+                "die": die_cost, "dieEstimated": die_estimated,
+                "sheetRuleInches": sheet_rule_inches, "warning": warning,
+            }
+
+    # ─── Bobst ───
+    bobst = None
+    bobst_reason = None
     if assumptions.get("bobstFirstSizing") != "false":
         b_sel = select_bobst_sheet(one_up_w, one_up_l, board_spec, total_qty, assumptions)
         if b_sel and b_sel.get("viable"):
-            return {"route": "Bobst", "sheet": b_sel, "warning": None, "cadHrs": cad_hrs}
+            b_board = b_sel["bc"]["total"]
+            b_press_hrs = (b_sel["sheetsReq"] / print_speed) if print_on else 0
+            b_press = max(b_press_hrs * inca_rate, inca_min) if print_on else 0
+            b_setup = assumptions.get("bobstSetup", 45) / 60
+            b_speed = assumptions.get("bobstSpeed", 3000)
+            b_cut_hrs = b_setup + (b_sel["sheetsReq"] / b_speed if b_speed > 0 else 0)
+            b_rate = assumptions.get("bobstRate", 350)
+            b_min = assumptions.get("bobstMinCharge", 0)
+            b_cut = max(b_cut_hrs * b_rate, b_min)
+            b_die_cost = die_cost_in if die_has_input else (pn(assumptions.get("bobstDieCost")) or 1800)
+            b_die_estimated = not die_has_input
+            b_total = b_board + b_press + b_cut + b_die_cost
+            bobst = {
+                "route": "Bobst", "viable": True, "totalCost": b_total, "sheet": b_sel,
+                "board": b_board, "press": b_press, "cut": b_cut, "hrs": b_cut_hrs,
+                "die": b_die_cost, "dieEstimated": b_die_estimated,
+                "isMillMinScaled": bool(b_sel.get("isMillMinScaled")),
+                "minBuySheets": b_sel.get("minBuySheets", 0),
+                "warning": None,
+            }
+        elif b_sel:
+            bobst_reason = b_sel.get("reason")
+    else:
+        bobst_reason = "Bobst auto-route eligibility disabled"
 
-    # RULE-017: CAD default
-    if cad_hrs <= 8:
+    # Determine cheapest viable. Order [cad, crest, bobst] preserves CAD>Crest>Bobst
+    # tiebreaker via Python's stable sort.
+    viable = [r for r in (cad, crest, bobst) if r and r.get("viable")]
+    viable.sort(key=lambda r: r["totalCost"])
+    cheapest = viable[0] if viable else None
+
+    return {"cad": cad, "crest": crest, "bobst": bobst,
+            "bobstReason": bobst_reason, "cheapest": cheapest}
+
+
+def auto_route(cad_hrs: float, selected_sheet: Dict[str, Any], one_up_w: float, one_up_l: float,
+               board_spec: Dict[str, Any], total_qty: int, assumptions: Dict[str, Any]) -> Dict[str, Any]:
+    """Auto-routing (RULE-017 through RULE-021). D-124 cost-aware version.
+
+    Returns the *cheapest viable* route across CAD / Crest / Bobst (delegated to
+    evaluate_routes). Replaces the pre-D-124 D-121 hard-Bobst-first early return.
+    Force-route in the caller still pins manually.
+    """
+    opts = {
+        "printReq": assumptions.get("printReq", "Yes"),
+        "printMode": assumptions.get("printMode", "Satin"),
+        "dieTreatment": assumptions.get("dieTreatment", "None"),
+        "dieCost": assumptions.get("dieCost"),
+        "crestComplexity": assumptions.get("crestComplexity", "Standard"),
+        "cadSelectedSheet": selected_sheet,
+        "cadHrs": cad_hrs,
+    }
+    ev = evaluate_routes(one_up_w, one_up_l, board_spec, total_qty, assumptions, opts)
+    if not ev or not ev.get("cheapest"):
+        # RULE-020: Saber + D/C fallback when no viable route
+        return {"route": "Saber + D/C", "sheet": selected_sheet,
+                "warning": "Too many CAD hours and no Crest/Bobst route viable — falling back to Saber + die cut",
+                "cadHrs": cad_hrs}
+    w = ev["cheapest"]
+    if w["route"] == "CAD":
         return {"route": "CAD", "sheet": selected_sheet, "warning": None}
-
-    # RULE-018: Crest threshold
-    n_up = math.floor((CREST_MAX_W - 2) / one_up_w)
-    n_out = math.floor((CREST_MAX_L - 2) / one_up_l)
-    if n_up >= 1 and n_out >= 1:
-        sh_w = n_up * one_up_w + 2
-        sh_l = n_out * one_up_l + 2
-        pcs_per_sheet = n_up * n_out
-        sheets_req = math.ceil(total_qty / pcs_per_sheet)
-        bi = {**board_spec, "widthIn": sh_w, "lengthIn": sh_l}
-        bc = calc_board(bi, sheets_req)
-        waste_pct = 1 - ((n_up * one_up_w * n_out * one_up_l) / (sh_w * sh_l))
-        layout = {"numUp": n_up, "numOut": n_out, "pcsPerSheet": pcs_per_sheet,
-                  "wastePct": waste_pct, "sheetW": sh_w, "sheetL": sh_l}
-        sheet = {"id": f"CREST-{n_up}x{n_out}", "g": board_spec["boardGrade"], "f": board_spec["flute"],
-                 "ol": board_spec["outsideLiner"], "il": board_spec["insideLiner"], "md": board_spec["medium"],
-                 "w": sh_w, "l": sh_l}
-        rule_in_per_pc = pn(assumptions.get("totalRuleInches", 0))
-        sheet_rule_inches = rule_in_per_pc * pcs_per_sheet * 1.15 if rule_in_per_pc > 0 else 0
-        warning = f"Crest die has {round(sheet_rule_inches)} rule inches per sheet (over 1,000) — needs approval before ordering die" if sheet_rule_inches > 1000 else None
-
-        if bc["pricable"]:
-            crest_result = {"sheet": sheet, "layout": layout, "sheetsReq": sheets_req, "bc": bc,
-                            "totalCost": bc["total"], "stockMode": False, "customOrder": True}
-            return {"route": "Crest", "sheet": crest_result, "warning": warning,
-                    "cadHrs": cad_hrs, "sheetRuleInches": sheet_rule_inches}
-
-        # Below min — try stock sheets within Crest limits
-        stock_candidates = []
-        crest_fb_grade = get_grade_fallback(board_spec["boardGrade"])
-        for sh in APPROVED_SHEETS:
-            crest_grade_match = sh["g"] == board_spec["boardGrade"] or (crest_fb_grade and sh["g"] == crest_fb_grade)
-            if (sh["f"] != board_spec["flute"] or not crest_grade_match or
-                sh["ol"] != board_spec["outsideLiner"] or sh["il"] != board_spec["insideLiner"] or
-                sh["md"] != board_spec["medium"]):
-                continue
-            if sh["w"] > CREST_MAX_W or sh["l"] > CREST_MAX_L:
-                continue
-            s_layout = compute_layout(one_up_w, one_up_l, sh["w"], sh["l"])
-            if not s_layout:
-                continue
-            s_req = math.ceil(total_qty / s_layout["pcsPerSheet"])
-            s_bi = {**board_spec, "widthIn": sh["w"], "lengthIn": sh["l"]}
-            s_bc = calc_board(s_bi, s_req, is_stock=True)
-            if s_bc["pricable"]:
-                crest_used_fallback = sh["g"] != board_spec["boardGrade"]
-                stock_candidates.append({"sheet": sh, "layout": s_layout, "sheetsReq": s_req, "bc": s_bc,
-                                         "totalCost": s_bc["total"], "stockMode": True, "customOrder": False,
-                                         "gradeFallback": crest_fb_grade if crest_used_fallback else None})
-            elif s_bc["hasPrice"] and not s_bc["meetMin"]:
-                stock_sq_ft = (sh["w"] * sh["l"]) / 144
-                min_buy = max(1, math.ceil(s_bc["minSqFt"] / stock_sq_ft))
-                stock_calc = calc_board(s_bi, min_buy, is_stock=True)
-                if stock_calc["pricable"]:
-                    scale = s_req / min_buy
-                    scaled_total = stock_calc["total"] * scale
-                    stock_bc = {**s_bc, "pricable": True, "meetMin": True, "total": scaled_total,
-                                "effWithFsc": scaled_total / s_bc["oMsf"] if s_bc["oMsf"] > 0 else 0,
-                                "costPc": scaled_total / total_qty if total_qty > 0 else 0,
-                                "stockMode": True}
-                    stock_candidates.append({"sheet": sh, "layout": s_layout, "sheetsReq": s_req, "bc": stock_bc,
-                                             "totalCost": scaled_total, "stockMode": True,
-                                             "gradeFallback": crest_fb_grade if sh["g"] != board_spec["boardGrade"] else None})
-        if stock_candidates:
-            inca_rate = assumptions.get("incaRate", 460)
-            cad_rate = assumptions.get("cadRate", 160)
-            _r_pr_sh = inca_rate / 100
-            _r_ct_sh = cad_rate / 240
-            stock_candidates.sort(key=lambda c: c["totalCost"] + c["sheetsReq"] * (_r_pr_sh + _r_ct_sh))
-            return {"route": "Crest", "sheet": stock_candidates[0], "warning": warning,
-                    "cadHrs": cad_hrs, "sheetRuleInches": sheet_rule_inches}
-
-    # RULE-020: Saber fallback
+    if w["route"] == "Crest":
+        return {"route": "Crest", "sheet": w["sheet"], "warning": w.get("warning"),
+                "cadHrs": cad_hrs, "sheetRuleInches": w.get("sheetRuleInches")}
+    if w["route"] == "Bobst":
+        return {"route": "Bobst", "sheet": w["sheet"], "warning": None, "cadHrs": cad_hrs}
+    # Defensive (shouldn't reach)
     return {"route": "Saber + D/C", "sheet": selected_sheet,
-            "warning": "Too many CAD hours and no Crest die fits — falling back to Saber + die cut",
-            "cadHrs": cad_hrs}
+            "warning": "Routing fallback — no expected route winner", "cadHrs": cad_hrs}
+
+
+# ─── D-090: Route comparison — side-by-side CAD vs Crest vs Bobst economics. ───
+# Delegates routing math to evaluate_routes (same helper auto_route uses).
+def compare_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
+                   total_qty: int, assumptions: Dict[str, Any],
+                   opts: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Returns flat fields {cad, crest, bobst, delta, winner, breakeven} for the
+    Route Comparison panel. Math identical to auto_route via evaluate_routes."""
+    opts = opts or {}
+    ev = evaluate_routes(one_up_w, one_up_l, board_spec, total_qty, assumptions, opts)
+    if not ev:
+        return None
+
+    cad = ev.get("cad")
+    crest = ev.get("crest")
+    bobst = ev.get("bobst")
+
+    cad_detail = None
+    if cad and cad.get("sheet"):
+        cs = cad["sheet"]
+        cad_detail = {
+            "viable": cad["viable"],
+            "totalCost": cad["totalCost"],
+            "board": cad["board"], "press": cad["press"], "cut": cad["cut"],
+            "hrs": cad["hrs"],
+            "sheetW": (cs.get("sheet") or {}).get("w"),
+            "sheetL": (cs.get("sheet") or {}).get("l"),
+            "pcsPerSheet": (cs.get("layout") or {}).get("pcsPerSheet"),
+            "sheetsReq": cs.get("sheetsReq"),
+            "wastePct": (cs.get("layout") or {}).get("wastePct"),
+            "saberNeeded": cad.get("saberNeeded"),
+        }
+
+    crest_detail = None
+    if crest:
+        cp = crest["sheet"]
+        crest_detail = {
+            "viable": crest["viable"],
+            "totalCost": crest["totalCost"],
+            "board": crest["board"], "press": crest["press"], "cut": crest["cut"],
+            "die": crest.get("die"), "dieEstimated": crest.get("dieEstimated"),
+            "hrs": crest["hrs"],
+            "sheetW": (cp.get("sheet") or {}).get("w"),
+            "sheetL": (cp.get("sheet") or {}).get("l"),
+            "pcsPerSheet": (cp.get("layout") or {}).get("pcsPerSheet"),
+            "sheetsReq": cp.get("sheetsReq"),
+            "wastePct": (cp.get("layout") or {}).get("wastePct"),
+            "isStock": cp.get("isStock"), "stockMode": cp.get("stockMode"),
+            "gradeFallback": cp.get("gradeFallback"),
+            "sheetRuleInches": crest.get("sheetRuleInches"),
+            "warning": crest.get("warning"),
+        }
+
+    bobst_detail = None
+    if bobst:
+        bp = bobst["sheet"]
+        bobst_detail = {
+            "viable": bobst["viable"],
+            "totalCost": bobst["totalCost"],
+            "board": bobst["board"], "press": bobst["press"], "cut": bobst["cut"],
+            "die": bobst.get("die"), "dieEstimated": bobst.get("dieEstimated"),
+            "hrs": bobst["hrs"],
+            "sheetW": (bp.get("sheet") or {}).get("w"),
+            "sheetL": (bp.get("sheet") or {}).get("l"),
+            "pcsPerSheet": (bp.get("layout") or {}).get("pcsPerSheet"),
+            "sheetsReq": bp.get("sheetsReq"),
+            "wastePct": (bp.get("layout") or {}).get("wastePct"),
+            "isMillMinScaled": bobst.get("isMillMinScaled"),
+            "minBuySheets": bobst.get("minBuySheets"),
+        }
+
+    # Delta + breakeven (semantics preserved from pre-D-124 contract: CAD vs Crest)
+    delta = None
+    breakeven_qty = None
+    if cad_detail and crest_detail:
+        delta = crest_detail["totalCost"] - cad_detail["totalCost"]
+
+    winner = ev["cheapest"]["route"] if ev.get("cheapest") else None
+
+    return {
+        "cad": cad_detail, "crest": crest_detail, "bobst": bobst_detail,
+        "bobstReason": ev.get("bobstReason"),
+        "delta": delta, "breakevenQty": breakeven_qty, "winner": winner,
+    }

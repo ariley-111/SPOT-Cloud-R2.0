@@ -63,9 +63,9 @@ export default function PreviewPdfModal({ onClose }) {
     (r.dieLineCost > 0) || (r.freightLine > 0) || (r.prepressLineCost > 0) || ((r.miscLineCost || 0) > 0)
   ), [previewRows]);
 
-  const fmLnr = (l) => (l && l !== "None")
-    ? String(l).replace("42# ", "").replace("33# ", "").replace("56# ", "")
-    : "Kraft";
+  // Legacy fmLnr (spot_r1_5.jsx L1218): "None" → "Kraft", strip weight + "-Lite"/"-White"
+  const fmLnr = (l) => (!l || l === "None") ? "Kraft"
+    : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
 
   // Item spec sub-line
   const specBits = [];

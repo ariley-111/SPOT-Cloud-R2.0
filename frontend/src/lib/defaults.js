@@ -151,8 +151,8 @@ export function deriveInitials(name) {
   return initials.slice(0, 4);
 }
 
-// Abbreviated liner short-form (for status bars)
+// Abbreviated liner short-form (for status bars) — legacy fmLnr (spot_r1_5.jsx L1218)
 export function liner_short(l) {
   if (!l || l === "None") return "Kraft";
-  return l.replace("42# ", "").replace("33# ", "").replace("56# ", "");
+  return String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
 }

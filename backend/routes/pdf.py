@@ -53,8 +53,12 @@ def _g(d: Dict[str, Any], *keys, default=""):
     return default
 
 def _liner_short(l: str) -> str:
-    if not l or l == "None": return "Kraft"
-    return str(l).replace("42# ", "").replace("33# ", "").replace("56# ", "")
+    """Legacy fmLnr (spot_r1_5.jsx L1218): None→Kraft, strip weight + -Lite/-White."""
+    if not l or l == "None":
+        return "Kraft"
+    import re as _re
+    s = _re.sub(r"^\d+#\s*", "", str(l))
+    return s.replace("-Lite", "").replace("-White", "")
 
 
 def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], charge_mode: str) -> str:
