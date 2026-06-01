@@ -412,7 +412,7 @@ function CostBuildup({ result }) {
         <Row label={<span>Margin <span style={{ color: "var(--spot-text3)" }}>{fmtPct(r.gmPct, 1)} of sell</span></span>} value={fmtMoney(r.gmDollar)} />
         <RowTotal label="Sell Total" value={fmtMoney(r.itemSell)} />
         <Row label={<span>Sell/Pc <span style={{ color: "var(--spot-text3)" }}>{fmtInt(r.qty)} pcs</span></span>}
-          value={fmtMoney(r.qty > 0 ? r.itemSell / r.qty : 0, 2)} />
+          value={fmtMoney(r.sellPc, 2)} />
 
         {(r.freightLine > 0 || r.dieLineCost > 0 || r.prepressLineCost > 0) && (
           <>
