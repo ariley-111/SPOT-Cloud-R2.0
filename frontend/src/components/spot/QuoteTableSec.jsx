@@ -97,7 +97,7 @@ export default function QuoteTableSec({ results }) {
                     {fmtInt(r.qty)}
                   </td>
                   <td style={{ padding: "4px 6px", textAlign: "right", color: r.forcedPrice ? "#a855f7" : "var(--spot-text)" }}>
-                    {fmtMoney(r.sellPc, 2)}
+                    {fmtMoney(r.qty > 0 ? r.itemSell / r.qty : 0, 2)}
                   </td>
                   <td style={{ padding: "4px 6px", textAlign: "right", color: r.gmPct >= 0 ? "var(--spot-green)" : "var(--spot-err)", fontWeight: 600 }}>
                     {fmtPct(r.gmPct, 1)}
@@ -105,7 +105,7 @@ export default function QuoteTableSec({ results }) {
                   <td style={{ padding: "4px 6px", textAlign: "right", color: r.gmDollar >= 0 ? "var(--spot-green)" : "var(--spot-err)" }}>
                     {fmtMoney(r.gmDollar)}
                   </td>
-                  <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 600 }}>{fmtMoney(r.sellTotal)}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 600 }}>{fmtMoney(r.itemSell)}</td>
                   <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(r.sellMSF)}</td>
                   <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(r.costMSF)}</td>
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11 }}>{fmtMoney(r.freightLine || r.freightEmbed || 0)}</td>

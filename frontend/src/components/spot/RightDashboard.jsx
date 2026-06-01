@@ -183,7 +183,7 @@ function EconomicsPanel({ s, result }) {
               {s.itemDesc || "Item"} <span style={{ color: "var(--spot-accent)", marginLeft: 6 }}>{fmtInt(r.qty)} pcs</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Metric label="Sell Total" value={fmtMoney(r.sellTotal)} big className="green" testid="metric-sell-total" />
+              <Metric label="Sell Total" value={fmtMoney(r.itemSell)} big className="green" testid="metric-sell-total" />
               <Metric label="Sell / Pc"  value={fmtMoney(r.sellPc, 3)} big testid="metric-sell-pc" />
               <div style={{ gridColumn: "span 2", fontSize: 11, color: "var(--spot-text3)" }}>
                 Freight: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(r.freightLine || 0)}</b>
