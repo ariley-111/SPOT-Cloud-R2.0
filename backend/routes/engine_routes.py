@@ -114,7 +114,21 @@ async def compare_routes_ep(
         "boardGrade": payload.get("boardGrade"), "flute": payload.get("flute"),
         "outsideLiner": payload.get("outsideLiner"), "insideLiner": payload.get("insideLiner"),
         "medium": payload.get("medium") or "None",
+        # ── Parity with runner build_board_spec — adders missing from compare-routes
+        # caused CAD/Crest Board cost to drop by gradeAdder×MSF (Lynk: -$15/MSF → -$10.93).
+        "fscEnabled": bool(payload.get("fscEnabled")),
+        "fscFee": float(payload.get("fscFee") or 25),
+        "kemiTariff": float(payload.get("kemiTariff") or 2.50),
+        "palletPrepFee": float(payload.get("palletPrepFee") or 17.50),
+        "under5MsfFee": float(payload.get("under5MsfFee") or RATE_DEFAULTS.get("under5MsfFee") or 0),
+        "gradeAdder": float(payload.get("gradeAdder") if payload.get("gradeAdder") is not None
+                            else (RATE_DEFAULTS.get("gradeAdder") if RATE_DEFAULTS.get("gradeAdder") is not None
+                                  else 0) or (lambda g: 0)(payload.get("boardGrade"))),
     }
+    # Compute gradeAdder default from GRADE_ADDER_DEFAULTS if caller didn't supply
+    if not payload.get("gradeAdder"):
+        from engine.core import GRADE_ADDER_DEFAULTS
+        board_spec["gradeAdder"] = float(GRADE_ADDER_DEFAULTS.get(payload.get("boardGrade", "200"), 0) or 0)
     asmp = {**ENGINE,
             "printReq": "Yes" if payload.get("printReq") in ("Yes", "On") else "No",
             "printMode": payload.get("printMode") or "Satin",
