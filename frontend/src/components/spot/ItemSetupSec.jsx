@@ -7,7 +7,7 @@ import {
   BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS, allowed_liners,
 } from "../../lib/defaults";
 import { sheetAvailability } from "../../api/spot";
-import { fmtMoney, fmtNum, fmtPct } from "../../lib/format";
+import { fmtMoney, fmtInt, fmtNum, fmtPct } from "../../lib/format";
 
 // ECT → Mullen equivalence (ported from legacy spot_r1_5.jsx line 270)
 // "200 meets 32ECT specs, but 32ECT does not meet 200 specs"
@@ -191,29 +191,177 @@ function BoardStatusBar({ s, r, setField }) {
     : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
   const olShort = fmLnr(s.outsideLiner);
   const ilShort = fmLnr(s.insideLiner);
+  // ─── D-070 Board Status Bar: SPEC vs RUNNING + substitution decision UX ───
+  // Verbatim port of legacy spot_r1_5.jsx L5894-5970.
+  const fmMed = (m) => !m || m === "None" ? "Std wt"
+    : String(m).replace("# Medium", "#").replace("# Bleached Medium", "# Bl");
+  const hasFb = !!(r?.gradeFallback || r?.mediumFallback);
+  const specGrade = s.boardGrade;
+  const runGrade = r?.gradeFallback || s.boardGrade;
+  const specMed = s.medium || "None";
+  const medChanged = r?.mediumFallback;
+  const runMed = medChanged?.medium || "None";
+  const isAccepted = s.boardSubstitution === "accepted";
+  const isForced = s.boardSubstitution === "forced";
+  const needsDecision = hasFb && !s.boardSubstitution;
+  const buyMinActive = !!r?.buyMinActive;
+  const buyMinSheets = r?.buyMinSheets;
+  const actualSheets = r?.sheetsReq;
+  const belowMin = !!(r && r.boardHasPrice && !r.boardMeetMin && !buyMinActive);
+  const machineCapacityFail = !!(r?.exceedsMachineCapacity);
+  const exceedsSheetLib = !!(r?.exceedsSheetLibrary);
+
+  const acceptSub = () => { setField("boardSubstitution", "accepted"); setField("fallbackAccepted", true); setTilesOpen(false); };
+  const forceSub  = () => { setField("boardSubstitution", "forced"); setField("fallbackAccepted", true); setField("buyMinBoard", "Yes"); setTilesOpen(false); };
+  const revertToStock = () => { setField("boardSubstitution", "accepted"); setField("buyMinBoard", "Auto"); setTilesOpen(false); };
+
   const med = s.medium || "None";
-  const specLine = `${s.boardGrade || "—"} · ${s.flute || "—"} · ${olShort}/${ilShort}${med !== "None" ? " · " + String(med).replace("# Medium", "#") : ""}`;
-  const isStock = !!r?._pipeline?.stockMode;
-  const isCustom = !!r?._pipeline?.customOrder && !isStock;
+  const specLine = `${s.boardGrade || "—"} · ${s.flute || "—"} · ${olShort}/${ilShort}${med !== "None" ? " · " + fmMed(med) : ""}`;
+  const runMedLabel = isForced && medChanged ? fmMed(specMed) : (medChanged ? fmMed(runMed) : (specMed !== "None" ? fmMed(specMed) : ""));
+  const runLine = `${runGrade}${hasFb ? " · " + s.flute + " · " + olShort + "/" + ilShort : ""}${runMedLabel ? " · " + runMedLabel : ""}`;
+
+  const isStock = !!r?.stockMode;
+  const isCustom = !!r?.customOrder && !isStock;
   const sheetInfo = r?.sheetW ? `${fmtNum(r.sheetW, 4)}×${fmtNum(r.sheetL, 4)}` : null;
+
+  // Banner background/border per state
+  const bannerBg = needsDecision ? "#f59e0b08"
+    : hasFb ? (isAccepted ? "var(--spot-green-soft)" : isForced ? "#3b82f608" : "var(--spot-bg3)")
+    : "var(--spot-bg3)";
+  const bannerBorder = needsDecision ? "#f59e0b44"
+    : hasFb ? (isAccepted ? "#22c55e33" : isForced ? "#3b82f633" : "var(--spot-border)")
+    : "var(--spot-border)";
 
   return (
     <div data-testid="board-status-bar" style={{ borderTop: "1px solid var(--spot-line)", paddingTop: 4 }}>
       <div style={{
-        background: "var(--spot-bg3)", border: "1px solid var(--spot-border)",
+        background: bannerBg, border: `1px solid ${bannerBorder}`,
         borderRadius: 6, padding: "8px 12px", marginBottom: 4,
       }}>
+        {/* Row 1: SPEC (or BOARD if no fallback) */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
-            textTransform: "uppercase", letterSpacing: ".04em", minWidth: 50 }}>BOARD</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: hasFb ? "#9ca3af" : "var(--spot-text3)",
+            textTransform: "uppercase", letterSpacing: ".04em", minWidth: 50 }}>{hasFb ? "SPEC" : "BOARD"}</span>
           <span style={{ fontWeight: 700, color: "var(--spot-text)" }}>{specLine}</span>
-          {isStock && <span className="sp-badge sp-badge-green" data-testid="board-stock-badge">IN STOCK</span>}
-          {isCustom && <span className="sp-badge sp-badge-blue" data-testid="board-order-badge">ORDER</span>}
-          {sheetInfo && <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-            {sheetInfo} · {r.pcsPerSheet} out · {fmtPct(r.wastePct, 1)} waste
-          </span>}
+          {!hasFb && isStock && sheetInfo && (
+            <span className="sp-badge sp-badge-green" data-testid="board-stock-badge">IN STOCK</span>
+          )}
+          {!hasFb && isCustom && (
+            <span className="sp-badge sp-badge-blue" data-testid="board-order-badge">ORDER</span>
+          )}
+          {!hasFb && sheetInfo && (
+            <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+              {sheetInfo} · {r.pcsPerSheet} out · {fmtPct(r.wastePct, 1)} waste
+            </span>
+          )}
         </div>
 
+        {/* Row 2: RUNNING (only when fallback) */}
+        {hasFb && (
+          <div data-testid="board-running-row"
+            style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12, marginTop: 3 }}>
+            <span style={{ fontSize: 10, fontWeight: 700,
+              color: isAccepted ? "#22c55e" : isForced ? "#3b82f6" : "#f59e0b",
+              textTransform: "uppercase", letterSpacing: ".04em", minWidth: 50 }}>RUNNING</span>
+            <span style={{ fontWeight: 700, color: "var(--spot-text)" }}>{runLine}</span>
+            {isStock && <span className="sp-badge sp-badge-green">IN STOCK</span>}
+            {isCustom && <span className="sp-badge sp-badge-blue">{isForced ? "CUSTOM ORDER" : "ORDER"}</span>}
+            {sheetInfo && <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+              {sheetInfo} · {r.pcsPerSheet} out · {fmtPct(r.wastePct, 1)} waste
+            </span>}
+          </div>
+        )}
+
+        {/* Fallback notes */}
+        {hasFb && r?.gradeFallback && (
+          <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 2, paddingLeft: 58 }}>
+            {runGrade}# meets {specGrade} spec{r?.mullenUpgrade ? " (Mullen upgrade)" : ""}
+          </div>
+        )}
+        {hasFb && medChanged && !isForced && (
+          <div style={{ fontSize: 11, marginTop: 1, paddingLeft: 58,
+            color: medChanged.isHigher ? "var(--spot-text3)" : "#f59e0b" }}>
+            {medChanged.isHigher ? "Stock has heavier medium — meets spec" : "Medium not in stock — running standard weight"}
+          </div>
+        )}
+
+        {/* Buy Min readout */}
+        {buyMinActive && buyMinSheets && (
+          <div data-testid="board-buy-min-info"
+            style={{ fontSize: 11, color: "#22c55e", fontWeight: 600, marginTop: 2, paddingLeft: 58 }}>
+            ✓ Buy Min — purchasing {fmtInt(buyMinSheets)} sheets, using {fmtInt(actualSheets || 0)}
+          </div>
+        )}
+        {belowMin && s.buyMinBoard !== "Yes" && (
+          <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 600, marginTop: 2, paddingLeft: 58 }}>
+            Below minimum board order{s.buyMinBoard === "No" ? "" : " — will auto-enable Buy Min"}
+          </div>
+        )}
+
+        {/* Machine capacity */}
+        {machineCapacityFail && (
+          <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, marginTop: 3, paddingLeft: 58 }}>
+            ⛔ Too large for any machine — cannot manufacture
+          </div>
+        )}
+        {exceedsSheetLib && !machineCapacityFail && (
+          <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 2, paddingLeft: 58 }}>
+            ⚠ Larger than any stock sheet — custom board order needed
+          </div>
+        )}
+
+        {/* Decision-needed UI */}
+        {needsDecision && (
+          <div data-testid="board-decision-needed"
+            style={{ marginTop: 6, padding: "6px 10px", background: "#f59e0b11",
+              borderRadius: 4, border: "1px solid #f59e0b33" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", marginBottom: 4 }}>
+              ⚠ Board substitution — {r?.gradeFallback ? "grade" : "medium"} changed from spec
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button onClick={acceptSub} data-testid="board-accept-sub-btn"
+                style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                  padding: "5px 12px", borderRadius: 4, background: "#22c55e", color: "#fff" }}>
+                Accept substitution
+              </button>
+              <button onClick={forceSub} data-testid="board-force-spec-btn"
+                style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                  padding: "5px 12px", borderRadius: 4, background: "#3b82f6", color: "#fff" }}>
+                Force spec'd board
+              </button>
+              <button onClick={() => setTilesOpen(true)} data-testid="board-edit-tiles-btn"
+                style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  padding: "5px 12px", borderRadius: 4, color: "var(--spot-text3)",
+                  border: "1px solid var(--spot-border)" }}>
+                Edit tiles
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Accepted flag */}
+        {isAccepted && hasFb && (
+          <div data-testid="board-accepted-flag"
+            style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", marginTop: 4, paddingLeft: 58 }}>
+            ✓ Substitution approved — {runGrade}# meets {specGrade} spec
+            {medChanged ? " · " + (!medChanged.isHigher
+              ? `standard weight (${fmMed(specMed)} unavailable)`
+              : "heavier medium meets spec") : ""}
+          </div>
+        )}
+
+        {/* Forced flag with Buy Min cost adder */}
+        {isForced && hasFb && (
+          <div data-testid="board-forced-flag"
+            style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginTop: 4, paddingLeft: 58 }}>
+            ℹ Spec'd board · {buyMinActive && buyMinSheets && r?.boardTotal ? (() => {
+              const perPcAdd = (r.boardTotal - (actualSheets * (r.boardTotal / buyMinSheets))) / (actualSheets * (r.pcsPerSheet || 1));
+              return `Buy Min ${fmtMoney(perPcAdd)}/pc · `;
+            })() : ""}3-5 day lead time
+          </div>
+        )}
+
+        {/* Footer toggle */}
         <div onClick={() => setTilesOpen((v) => !v)} data-testid="board-toggle-tiles"
           style={{
             display: "flex", gap: 8, alignItems: "center", marginTop: 4, paddingTop: 4,
@@ -230,8 +378,22 @@ function BoardStatusBar({ s, r, setField }) {
               color: s.fscEnabled ? "var(--spot-green)" : "var(--spot-text3)",
               border: `1px solid ${s.fscEnabled ? "var(--spot-green)" : "var(--spot-border)"}`,
             }}>
-            {s.fscEnabled ? `✓ FSC $${s.fscFee}` : "FSC"}
+            {s.fscEnabled ? `✓ FSC $${s.fscFee || 25}` : "FSC"}
           </span>
+          {hasFb && isAccepted && (
+            <span onClick={(e) => { e.stopPropagation(); forceSub(); }}
+              data-testid="board-force-orig-link"
+              style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", cursor: "pointer" }}>
+              Force original spec
+            </span>
+          )}
+          {hasFb && isForced && (
+            <span onClick={(e) => { e.stopPropagation(); revertToStock(); }}
+              data-testid="board-use-stock-link"
+              style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", cursor: "pointer" }}>
+              Use stock option
+            </span>
+          )}
           <span style={{
             marginLeft: "auto", fontSize: 11, color: "var(--spot-text3)",
             transform: tilesOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s",

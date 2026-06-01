@@ -86,5 +86,8 @@ export function buildPayload(state) {
     prepressCost: state.prepressCost, prepressTreatment: state.prepressTreatment,
     miscCharges: state.miscCharges, miscChargeMarkup: state.miscChargeMarkup,
     pricingBasis: state.pricingBasis,
+    // D-070 Board Status Bar — substitution decision & Buy Min toggle
+    buyMinBoard: state.buyMinBoard || "Auto",
+    boardSubstitution: state.boardSubstitution || null,
   };
 }

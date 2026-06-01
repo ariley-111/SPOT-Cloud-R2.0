@@ -282,6 +282,18 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "numUp": layout["numUp"], "numOut": layout["numOut"], "wastePct": layout["wastePct"],
         "sheetsReq": sheets_req,
         "oMSF": wf["oMSF"], "shippedMSF": wf["shippedMSF"], "msfTier": wf["matTier"],
+        # D-070 status-bar surface flags
+        "buyMinActive": bool(bc.get("buyMin")),
+        "buyMinSheets": bc.get("buyMinSheets"),
+        "gradeFallback": best.get("gradeFallback"),
+        "mediumFallback": best.get("mediumFallback"),
+        "mullenUpgrade": bool(best.get("mullenUpgrade")),
+        "stockMode": bool(best.get("stockMode") or bc.get("stockMode")),
+        "customOrder": bool(best.get("customOrder")),
+        "exceedsSheetLibrary": bool(best.get("exceedsSheetLibrary")),
+        "exceedsMachineCapacity": bool(best.get("exceedsMachineCapacity")),
+        "boardHasPrice": bool(bc.get("hasPrice")),
+        "boardMeetMin": bool(bc.get("meetMin")),
         "boardBase": bc["base"], "boardEffRate": bc["effRate"], "boardTotal": bc["total"],
         # Board PO breakdown (Board panel parity with legacy spot_r1_5.jsx L7980+)
         "boardSqFt": bc.get("sqft") or 0,
