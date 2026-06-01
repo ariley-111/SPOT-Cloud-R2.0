@@ -4,6 +4,7 @@ import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
 import { parserBudget, parseRfq } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
+import ProgressModal from "./ProgressModal";
 
 export default function FilesSec() {
   const { active, sec, toggleSec, setManyFields, pushToast } = useQuote();
@@ -170,6 +171,21 @@ export default function FilesSec() {
           onClose={() => setReviewOpen(false)}
           onApply={(patch) => { setManyFields(patch); pushToast("Parser fields applied", "ok"); setReviewOpen(false); }} />
       )}
+
+      {/* In-flight parser progress modal */}
+      <ProgressModal open={busy} accent="#a855f7"
+        title="Parsing RFQ"
+        subtitle={(() => {
+          const rfqs = files.filter((f) => f.class === "rfq");
+          const emails = rfqs.filter((f) => /\.(eml|msg)$/i.test(f.filename));
+          const pdfs   = rfqs.filter((f) => /\.pdf$/i.test(f.filename));
+          const bits = [];
+          if (emails.length) bits.push(`${emails.length} email${emails.length === 1 ? "" : "s"}`);
+          if (pdfs.length)   bits.push(`${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"}`);
+          const others = rfqs.length - emails.length - pdfs.length;
+          if (others > 0) bits.push(`${others} other`);
+          return `${bits.join(" + ") || rfqs.length + " file" + (rfqs.length === 1 ? "" : "s")} · Calling Anthropic Opus (typically 5-15 sec)`;
+        })()} />
     </Sec>
   );
 }
@@ -309,6 +325,43 @@ function ReviewParseModal({ result, onClose, onApply }) {
               </>
             )}
           </div>
+
+          {/* File ingestion summary — surfaces email expansion so estimators can see
+              if attached spec PDFs were actually extracted from .eml/.msg files. */}
+          {result.files && result.files.length > 0 && (
+            <div data-testid="parse-file-summary" style={{
+              marginBottom: 12, padding: "8px 12px", background: "var(--spot-bg3)",
+              border: "1px solid var(--spot-border)", borderRadius: 4, fontSize: 11,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+                marginBottom: 4, textTransform: "uppercase", letterSpacing: ".06em" }}>
+                Ingested
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {result.files.map((f, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 2,
+                      color: f.type === "email" ? "#06b6d4" : f.type === "pdf" ? "#a855f7"
+                        : f.type === "image" ? "#f59e0b" : "var(--spot-text3)",
+                      border: `1px solid ${f.type === "email" ? "#06b6d455" : f.type === "pdf" ? "#a855f755"
+                        : f.type === "image" ? "#f59e0b55" : "var(--spot-border)"}`,
+                      textTransform: "uppercase", minWidth: 36, textAlign: "center",
+                    }}>{f.type}</span>
+                    <span style={{ color: "var(--spot-text)", flex: 1, overflow: "hidden",
+                      textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                    {f.type === "email" && (
+                      <span style={{ color: "var(--spot-text3)" }}>
+                        body: {f.body_chars || 0} chars · {f.attachments || 0} attachment{f.attachments === 1 ? "" : "s"} extracted
+                      </span>
+                    )}
+                    {f.size && <span style={{ color: "var(--spot-text3)" }}>{fmtBytes(f.size)}</span>}
+                    {f.error && <span style={{ color: "var(--spot-err)" }}>error: {f.error}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {asksList.length > 0 && (
             <div style={{

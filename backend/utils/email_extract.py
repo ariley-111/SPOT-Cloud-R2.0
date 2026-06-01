@@ -83,18 +83,39 @@ def extract_eml(raw: bytes) -> Dict[str, Any]:
 
 
 def extract_msg(raw: bytes) -> Dict[str, Any]:
-    """Outlook .msg file. Uses extract-msg library."""
+    """Outlook .msg file. Uses extract-msg library.
+
+    Notes on Outlook quirks (verified 2026-06-01):
+    - `m.body` is often None when the message only has an HTML body. We fall
+      back to `m.htmlBody` and strip tags.
+    - Attachment filenames come back with a trailing NULL byte (\\x00). Must
+      strip before doing extension checks or whitelist lookup.
+    - Outlook auto-generates inline images named `imageNNN.png` for sig logos
+      and inline embeds. We filter those out — they're noise to the parser.
+    """
     import extract_msg as em
     m = em.openMsg(io.BytesIO(raw))
     attachments: List[Dict[str, Any]] = []
     for att in (m.attachments or []):
-        fname = getattr(att, "longFilename", None) or getattr(att, "shortFilename", None) or ""
+        fname_raw = (getattr(att, "longFilename", None) or
+                     getattr(att, "shortFilename", None) or "")
+        if isinstance(fname_raw, bytes):
+            fname_raw = fname_raw.decode("utf-8", errors="replace")
+        # Strip trailing NULLs + whitespace (extract-msg leaves \x00 terminators)
+        fname = str(fname_raw).strip("\x00").strip()
+
         payload = getattr(att, "data", None) or b""
         if isinstance(payload, str):
             payload = payload.encode("utf-8", errors="replace")
         if not payload:
             continue
-        # Sniff MIME from extension
+
+        # Skip Outlook inline auto-embeds (image001.png, image002.gif, etc).
+        # These are signature logos / inline embeds, not user attachments.
+        if re.match(r"^image\d+\.(png|gif|jpe?g|bmp)$", fname, re.I):
+            continue
+
+        # Sniff MIME from extension (Outlook's mimetype attr is unreliable)
         ext = "." + fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
         mime_map = {
             ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
@@ -108,16 +129,21 @@ def extract_msg(raw: bytes) -> Dict[str, Any]:
             continue
         attachments.append({"filename": fname, "mime": mime, "bytes": payload})
 
-    body = (getattr(m, "body", None) or "").strip()
+    # Body: prefer plain, fall back to html→text
+    body_raw = getattr(m, "body", None)
+    if isinstance(body_raw, bytes):
+        body_raw = body_raw.decode("utf-8", errors="replace")
+    body = (body_raw or "").strip()
     if not body and getattr(m, "htmlBody", None):
         html = m.htmlBody
         if isinstance(html, bytes):
             html = html.decode("utf-8", errors="replace")
         body = _html_to_text(html)
+
     return {
         "body": body,
-        "subject": str(getattr(m, "subject", "") or ""),
-        "from": str(getattr(m, "sender", "") or ""),
+        "subject": str(getattr(m, "subject", "") or "").strip("\x00").strip(),
+        "from": str(getattr(m, "sender", "") or "").strip("\x00").strip(),
         "attachments": attachments,
     }
 

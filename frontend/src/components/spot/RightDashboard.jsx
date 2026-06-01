@@ -5,6 +5,7 @@ import { useEngine } from "../../hooks/useEngine";
 import { freightQuote, compareRoutes } from "../../api/spot";
 import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
+import ProgressModal from "./ProgressModal";
 
 export default function RightDashboard() {
   const { active } = useQuote();
@@ -48,6 +49,10 @@ function FreightPanel({ s }) {
   };
 
   return (
+    <>
+      <ProgressModal open={busy} accent="#f59e0b"
+        title="Getting Freight Quote"
+        subtitle={`Calling UTS · ${s.destZip || ""}`} />
     <div data-testid="freight-panel" style={panelStyle("#f59e0b")}>
       <div style={panelHeader("#f59e0b")}>🚚 Freight</div>
       <div style={{ padding: "8px 10px" }}>
@@ -116,6 +121,7 @@ function FreightPanel({ s }) {
         {err && <div style={{ marginTop: 6, fontSize: 11, color: "var(--spot-err)" }} data-testid="freight-err">{err}</div>}
       </div>
     </div>
+    </>
   );
 }
 
