@@ -126,12 +126,23 @@ function FreightPanel({ s }) {
 }
 
 function RouteComparison({ s, primary }) {
+  const { active, setField } = useQuote();
+  const tabId = active?.id;
   const [open, setOpen] = useState(true);  // default expanded for visibility (legacy default)
   const [comp, setComp] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { setField } = useQuote();
   const qty = primary?.qty;
   const forced = !!(s.routeOverride && s.routeOverride !== "Auto");
+
+  // Clear stale comparison when switching tabs OR when inputs become invalid
+  // (new blank tab, board cleared, etc). Without this, the prior tab's CAD/Crest/
+  // Bobst numbers stick to the panel until the new tab gets valid inputs.
+  useEffect(() => {
+    if (!s.oneUpW || !s.oneUpL || !qty) {
+      setComp(null);
+      setBusy(false);
+    }
+  }, [tabId, s.oneUpW, s.oneUpL, qty]);
 
   // Debounced fetch (matches useEngine cadence)
   useEffect(() => {
