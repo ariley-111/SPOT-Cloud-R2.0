@@ -72,7 +72,7 @@ export const parseRfq = (files, emailBody, notes) => {
 };
 
 // ─── PDF ────────────────────────────────────────────────
-export const previewPdfBlob = (quote, results) =>
+export const previewPdfBlob = (quote, results, opts = {}) =>
   api
-    .post("/pdf/preview-quote", { quote, results }, { responseType: "blob" })
+    .post("/pdf/preview-quote", { quote, results, ...opts }, { responseType: "blob" })
     .then((r) => r.data);

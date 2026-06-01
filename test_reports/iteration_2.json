@@ -1,0 +1,39 @@
+{
+  "summary": "Validated both fixes — (1) the '+' New Quote tab bug is FIXED (new tab stays blank at 500ms AND 3.5s after click, even with prior tab populated and autosave running), and (2) the new HTML-rendered Preview Quote modal works end-to-end with all 3 charge modes, export, print, and close paths. Backend /api/pdf/preview-quote produces valid PDFs for By Type / Lump Sum / By Part / default. 6/6 backend tests pass, 100% of frontend assertions pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_preview_pdf.py",
+    "/app/test_reports/pytest/preview_pdf_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "QuoteContext.jsx autosave-promotion fix is correct: setActiveId((cur) => cur === oldId ? created.id : cur) prevents the useMemo fallback to tabs[0] that caused the new tab to inherit the previous tab's state. Verified at 500ms and 3.5s timing windows.",
+    "PreviewPdfModal.jsx faithfully ports legacy spot_r1_5.jsx — Charges selector defaults to 'By Type' (rgb(37,99,235) blue bg), only renders when hasLineItems is true. Lump Sum mode hides Charges column and shows the One-Time Charges: <amount> line below the table. By Part mode itemizes 'Die:/Freight:/Prepress:/Misc:' inline per row.",
+    "Backend /api/pdf/preview-quote correctly defaults chargeMode to 'By Type' when omitted, requires auth (401 unauth), and renders weasyprint PDFs >2KB starting with %PDF signature for all 3 modes.",
+    "Logo loads from /spc_logo.png (frontend) and base64-embedded in PDF (backend static_assets/spc_logo.png) — both verified visible.",
+    "Modal close paths all work: × button, ESC key (code path present), and backdrop mousedown (e.target === e.currentTarget guard prevents inner-content clicks from closing).",
+    "Minor: in PreviewPdfModal previewRows useMemo deps include only results; safe given the [active?.id] effect re-fetches on tab change. No issue.",
+    "Minor: lump-sum block uses rows[0] only — legacy parity preserved (the legacy tool only shows lump from the first priced qty)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_preview_pdf.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 pytest pass)",
+    "frontend": "100% (all 13 modal content checks + all 3 charge-mode toggles + export download + close paths verified)"
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — works",
+  "seed_data_creation": "None. Used existing draft + ad-hoc form input (BUG TEST CUSTOMER / BUG TEST PROJECT / BUG TEST ITEM DESC). Multiple drafts accumulated in DB from prior testing iterations; harmless.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both fixes from this round are PASSING and need no rework. Bug-fix verification approach: fill input-customer / input-project-name / input-item-desc on active tab → click [data-testid='tab-add-btn'] → assert those three inputs are '' at 500ms AND 3500ms (autosave debounce is 1500ms; promotion happens during this window). Preview modal opens via [data-testid='toolbar-preview'] → [data-testid='modal-preview-pdf']. Charges selector testids: preview-charges-by-type / preview-charges-lump-sum / preview-charges-by-part (default selected = By Type, blue rgb(37,99,235)). Export downloads via [data-testid='preview-pdf-export'] → POST /api/pdf/preview-quote (blob, application/pdf). Close: [data-testid='preview-pdf-close-btn'] OR backdrop mousedown on [data-testid='modal-backdrop-preview']. NOTE: backend PDF tests live at /app/backend/tests/test_preview_pdf.py — run with: pytest /app/backend/tests/test_preview_pdf.py -v. Many accumulated draft tabs (~15) exist from prior tests; consider cleaning DB before next major regression.",
+  "rca of the issue": "N/A — both items under review are confirmed working as intended."
+}

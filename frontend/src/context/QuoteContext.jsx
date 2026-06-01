@@ -144,7 +144,11 @@ export function QuoteProvider({ children }) {
           });
         } else if (hasContent) {
           const created = await createDraft({ label: active.label, state: active.state });
-          setTabs((cur) => cur.map((t) => t.id === active.id ? { ...t, id: created.id, persisted: true } : t));
+          const oldId = active.id;
+          setTabs((cur) => cur.map((t) => t.id === oldId ? { ...t, id: created.id, persisted: true } : t));
+          // Keep activeId in sync if the promoted tab was the active one — otherwise
+          // useMemo(active) will fall back to tabs[0] and the new tab will appear to "vanish".
+          setActiveId((cur) => cur === oldId ? created.id : cur);
         }
       } catch (_) {}
     }, 1500);
