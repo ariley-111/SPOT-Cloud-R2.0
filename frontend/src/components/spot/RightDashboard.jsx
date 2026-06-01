@@ -343,8 +343,10 @@ function EconomicsPanel({ s, result }) {
               <Metric label="Tier"   value={r.msfTier || "—"} small testid="metric-tier" />
             </div>
             <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-              {s.printReq === "Yes" && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Print {labelize(s.printMode)}</span>}
+              {(s.printReq === "Yes" || s.printReq === "On") && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Print {labelize(s.printMode)}</span>}
               {r.route && <span className="sp-pill" style={{ color: "#22c55e", background: "#22c55e22", borderColor: "#22c55e55" }}>Cut {r.route} {labelize(s.cadDifficulty)}</span>}
+              {s.handGluing === "Yes" && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Gluing {labelize(s.gluingComplexity)}</span>}
+              {s.tape === "Yes" && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Tape {labelize(s.tapeType || "Clear")}</span>}
               {s.handStripping === "Yes" && <span className="sp-pill" style={{ color: "#f59e0b", background: "#f59e0b22", borderColor: "#f59e0b55" }}>Strip {labelize(s.strippingComplexity)}</span>}
             </div>
           </>
