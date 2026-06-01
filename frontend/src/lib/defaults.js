@@ -132,6 +132,17 @@ export const GRADES       = ["125","150","175","200","250","275","350",
 export const LINERS       = [
   "None","42# Kemi-Lite","42# Kla-White","42# Bleached White","33# Kla-White","56# Kla-White",
 ];
+// ─── Legacy parity: liner grade enforcement (spot_r1_5.jsx L139-140, L265). ───
+// Map from liner → restricted board grades (if undefined: liner allowed for ALL grades).
+// Legacy semantics: `enforce:true` + `allowed_board_grades:[list]` means liner is
+// FILTERED OUT of the tile picker unless current board grade is in the list.
+export const LINER_ENFORCE = {
+  "33# Kla-White": ["175", "ECT 32"],
+  "56# Kla-White": ["250"],
+};
+export const allowed_liners = (boardGrade) => LINERS.filter((l) =>
+  !LINER_ENFORCE[l] || LINER_ENFORCE[l].includes(boardGrade)
+);
 export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","40# Medium","42# Bleached Medium"];
 export const PRINT_MODES  = ["Satin","Gloss","OnQ Styrene","OnQ Lightbox"];
 export const PRINT_SIDES  = ["1-Sided","2-Sided"];

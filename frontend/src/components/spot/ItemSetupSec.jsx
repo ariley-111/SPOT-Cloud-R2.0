@@ -4,8 +4,9 @@ import { useQuote } from "../../context/QuoteContext";
 import Sec, { F } from "./Sec";
 import Tile, { Num } from "./Tile";
 import {
-  BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS,
+  BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS, allowed_liners,
 } from "../../lib/defaults";
+import { sheetAvailability } from "../../api/spot";
 import { fmtMoney, fmtNum, fmtPct } from "../../lib/format";
 
 // ECT → Mullen equivalence (ported from legacy spot_r1_5.jsx line 270)
@@ -154,6 +155,37 @@ function routeColor(rt) {
 
 function BoardStatusBar({ s, r, setField }) {
   const [tilesOpen, setTilesOpen] = React.useState(false);
+  // Liners allowed for the current board grade (legacy spot_r1_5.jsx L265).
+  // 33# Kla-White → only 175/ECT 32. 56# Kla-White → only 250.
+  const allowed = React.useMemo(() => allowed_liners(s.boardGrade), [s.boardGrade]);
+  // Approved-stock liners for the current grade/flute/medium combo (legacy L5983).
+  const [avail, setAvail] = React.useState({ outside: new Set(), inside: new Set() });
+  React.useEffect(() => {
+    if (!s.boardGrade || !s.flute) return;
+    let cancelled = false;
+    sheetAvailability({ boardGrade: s.boardGrade, flute: s.flute, medium: s.medium || "None" })
+      .then((d) => { if (!cancelled) setAvail({
+        outside: new Set(d.outside || []), inside: new Set(d.inside || []),
+      }); })
+      .catch(() => { if (!cancelled) setAvail({ outside: new Set(), inside: new Set() }); });
+    return () => { cancelled = true; };
+  }, [s.boardGrade, s.flute, s.medium]);
+  // Auto-correct: if the persisted liner is NOT in the allowed list for the current
+  // grade (e.g., quote saved with 33# Kla-White then grade changed to 200), snap
+  // it to a sensible default. Matches legacy "setOutsideLiner('42# Kla-White')" cleanup.
+  React.useEffect(() => {
+    if (s.outsideLiner && !allowed.includes(s.outsideLiner)) {
+      const fallback = allowed.includes("42# Kla-White") ? "42# Kla-White"
+        : (allowed.includes("42# Kemi-Lite") ? "42# Kemi-Lite" : "None");
+      setField("outsideLiner", fallback);
+    }
+    if (s.insideLiner && !allowed.includes(s.insideLiner)) {
+      const fallback = allowed.includes("42# Kla-White") ? "42# Kla-White"
+        : (allowed.includes("42# Kemi-Lite") ? "42# Kemi-Lite" : "None");
+      setField("insideLiner", fallback);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowed]);
   // Legacy fmLnr (spot_r1_5.jsx L1218): "None" → "Kraft", strip weight prefix + "-Lite"/"-White"
   const fmLnr = (l) => (!l || l === "None") ? "Kraft"
     : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
@@ -258,22 +290,40 @@ function BoardStatusBar({ s, r, setField }) {
           </F>
           <F l="Outside" inline fw={60}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-              {LINERS.map((l) => (
-                <Tile key={l} label={l.replace("42# ", "").replace("33# ", "")}
-                  active={s.outsideLiner === l}
-                  data-testid={`tile-outside-${l.replace(/[^a-zA-Z]/g, '')}`}
-                  onClick={() => setField("outsideLiner", l)} small />
-              ))}
+              {allowed.map((l) => {
+                const hasStock = avail.outside.has(l);
+                const text = l === "None" ? "Kraft" : l.replace("42# ", "").replace("33# ", "").replace("56# ", "");
+                return (
+                  <Tile key={l}
+                    label={<span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      {text}
+                      {hasStock && <span style={{ width: 5, height: 5, borderRadius: 3, background: "var(--spot-green)" }} />}
+                    </span>}
+                    active={s.outsideLiner === l}
+                    data-testid={`tile-outside-${l.replace(/[^a-zA-Z0-9]/g, '')}`}
+                    title={hasStock ? `${l} (stock sheets available)` : `${l} (no stock — custom order)`}
+                    onClick={() => setField("outsideLiner", l)} small />
+                );
+              })}
             </div>
           </F>
           <F l="Inside" inline fw={60}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-              {LINERS.map((l) => (
-                <Tile key={l} label={l.replace("42# ", "").replace("33# ", "")}
-                  active={s.insideLiner === l}
-                  data-testid={`tile-inside-${l.replace(/[^a-zA-Z]/g, '')}`}
-                  onClick={() => setField("insideLiner", l)} small />
-              ))}
+              {allowed.map((l) => {
+                const hasStock = avail.inside.has(l);
+                const text = l === "None" ? "Kraft" : l.replace("42# ", "").replace("33# ", "").replace("56# ", "");
+                return (
+                  <Tile key={l}
+                    label={<span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      {text}
+                      {hasStock && <span style={{ width: 5, height: 5, borderRadius: 3, background: "var(--spot-green)" }} />}
+                    </span>}
+                    active={s.insideLiner === l}
+                    data-testid={`tile-inside-${l.replace(/[^a-zA-Z0-9]/g, '')}`}
+                    title={hasStock ? `${l} (stock sheets available)` : `${l} (no stock — custom order)`}
+                    onClick={() => setField("insideLiner", l)} small />
+                );
+              })}
             </div>
           </F>
           <F l="Medium" inline fw={60}>

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 
 from engine import run_estimate, CALIBRATION_BASELINE
 from engine.routing import auto_select_sheet, auto_route
-from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS
+from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, APPROVED_SHEETS, get_grade_fallback
 from models.schemas import User
 from routes.auth import get_current_user
 
@@ -67,3 +67,24 @@ async def defaults(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
         "sell_defaults": SELL_DEFAULTS,
         "calibration": CALIBRATION_BASELINE,
     }
+
+
+
+@router.get("/sheet-availability")
+async def sheet_availability(
+    boardGrade: str, flute: str, medium: str = "None",
+    _u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return which outside/inside liners have approved stock sheets for the given
+    grade/flute/medium combo. Used by the frontend to render the green stock-availability
+    dot on liner tiles (legacy spot_r1_5.jsx L5983)."""
+    fb_grade = get_grade_fallback(boardGrade)
+    ol_set, il_set = set(), set()
+    for sh in APPROVED_SHEETS:
+        if sh["f"] != flute or sh["md"] != medium:
+            continue
+        if sh["g"] != boardGrade and not (fb_grade and sh["g"] == fb_grade):
+            continue
+        ol_set.add(sh["ol"])
+        il_set.add(sh["il"])
+    return {"outside": sorted(ol_set), "inside": sorted(il_set)}

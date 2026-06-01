@@ -29,6 +29,14 @@ export const calculateAll = (payload) =>
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 
+// Returns {outside: [liner names], inside: [liner names]} that have approved
+// stock sheets for the given board grade/flute/medium. Used by liner-tile
+// stock-availability dots (legacy spot_r1_5.jsx L5983).
+export const sheetAvailability = ({ boardGrade, flute, medium = "None" }) =>
+  api.get("/engine/sheet-availability", {
+    params: { boardGrade, flute, medium },
+  }).then((r) => r.data);
+
 // ─── Drafts ────────────────────────────────────────────
 export const listDrafts = () =>
   api.get("/drafts").then((r) => r.data);

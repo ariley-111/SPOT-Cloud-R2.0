@@ -48,8 +48,54 @@
 
 | Item | Why it matters | Effort |
 |---|---|---|
-| **Multi-Part per-item state isolation** | Legacy stores full pricing state per bomItem (`it.state` snapshot via `gatherItemState`). Cloud only stores `{id, desc, type, pcsPerSet}` — top-level state is shared. Switching active item does NOT preserve dims/board/qtys per component. | Medium (1 day) |
+| **Multi-Part per-item state isolation** | Legacy stores full pricing state per bomItem (`it.state` snapshot via `gatherItemState`). Cloud only stores `{id, desc, type, pcsPerSize}` — top-level state is shared. Switching active item does NOT preserve dims/board/qtys per component. | Medium (1 day) |
 | **Phase 4 Pricing Console** | Admin UI for D-110 calibrated rates, GM curve editing, audit log. | Medium-Large |
+
+---
+
+## 🐛 Second batch fix (later 2026-06-01) — Liner grade enforcement + stock dots
+
+**User found a Lynk Pkg quote producing $6,487.81 / $129/ea total at Qty 50** vs legacy's $981.72 / $19.63/ea. Root cause investigated with API + browser diff:
+
+### Root cause: silent persisted `33# Kla-White` liners
+
+The persisted quote draft had `outsideLiner: "33# Kla-White"` and `insideLiner: "33# Kla-White"`. The board library has **zero stock sheets at `33# Kla-White`** for any grade — so the engine fell back to a custom-cut 18.25×91 1-out sheet ($72.58/sheet) instead of the stock 63×98 (3-out, $5.74/sheet eff).
+
+**Two parity behaviors missing from cloud:**
+
+| Legacy ref | Behavior | Cloud status before | Action |
+|---|---|---|---|
+| L139-140, L265 `allowed_board_grades + enforce:true` | `33# Kla-White` is only allowed for `["175","ECT 32"]` grades. `56# Kla-White` only for `["250"]`. For any other grade the liner is FILTERED OUT of the tile picker entirely. | ❌ All 6 liners always shown; user could click 33# while on 200 grade (which has no stock at that liner) | ✅ FIXED |
+| L5983 stock-availability green dot | Every viable liner tile shows a green dot when there's at least one approved stock sheet with that liner at the current grade/flute/medium. | ❌ No indicator anywhere | ✅ FIXED |
+
+### Fix applied
+
+- `/app/frontend/src/lib/defaults.js`: added `LINER_ENFORCE` map + `allowed_liners(grade)` helper.
+- `/app/backend/routes/engine_routes.py`: new `GET /api/engine/sheet-availability?boardGrade=...&flute=...&medium=...` returns `{outside: [liners], inside: [liners]}` of approved stock liners.
+- `/app/frontend/src/api/spot.js`: `sheetAvailability(...)` wrapper.
+- `/app/frontend/src/components/spot/ItemSetupSec.jsx`:
+  - `BoardStatusBar` now memoizes `allowed_liners(s.boardGrade)`, fetches sheet-availability on grade/flute/medium changes.
+  - Outside/Inside tile lists render only allowed liners; each tile shows a green stock dot when stock exists.
+  - Auto-correct hook: if persisted `outsideLiner`/`insideLiner` is NOT in the current allowed list (e.g., loaded a saved quote with grade-mismatched liner), snap to `42# Kla-White` (or `42# Kemi-Lite` / `None` fallback). Ensures a single page-load self-heals the bad state.
+
+### Verification
+
+Same Lynk Pkg quote loaded after fix:
+
+| | Before | After fix |
+|---|---|---|
+| Liner | 33# Kla-White (no stock) | **42# Kla-White** (auto-corrected) ✅ |
+| Sheet | 18.25×91 custom, 1-out, 50 sheets | **63×98 stock, 3-out, 17 sheets** ✅ |
+| Route | Saber + D/C | **CAD** ✅ |
+| Sell/ea | $129.76 | **$21.82** ✅ |
+| Total | $6,487.81 | **$1,090.97** ✅ |
+| Board badge | ORDER | **IN STOCK** ✅ |
+| Outside tile count | 6 (incl 33#/56#) | **4** (33#/56# filtered) ✅ |
+| Stock dot | none | **shown on every viable liner** ✅ |
+
+vs legacy target ($981.72 / $19.63) → cloud now lands within ~11% (calibration delta, not routing/sheet).
+
+### Test plan (post-fix)
 
 ---
 
