@@ -17,6 +17,7 @@ export default function RightDashboard() {
       width: 360, flexShrink: 0, overflow: "auto",
       background: "var(--spot-bg2)", borderLeft: "1px solid var(--spot-line)",
       display: "flex", flexDirection: "column",
+      paddingBottom: 80,  // keep last row clear of the "Made with Emergent" badge
     }}>
       <FreightPanel s={s} />
       <RouteComparison s={s} primary={primary} />
@@ -417,7 +418,7 @@ function CostBuildup({ result }) {
           <>
             <SubHead label="One-Time Line Items" color="#3b82f6" />
             {r.freightLine > 0 && (
-              <Row label={<span style={{ fontStyle: "italic" }}>Freight <span style={{ color: "var(--spot-text3)" }}>{fmtMoney(r.freightLine / (1 + Number(r.freightMarkup || 0) || 1))} + {(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup</span></span>}
+              <Row label={<span style={{ fontStyle: "italic" }}>Freight <span style={{ color: "var(--spot-text3)" }}>{fmtMoney(r.freightCost || 0)} + {(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup</span></span>}
                 value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.freightLine)}</span>} />
             )}
             {r.dieLineCost > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}

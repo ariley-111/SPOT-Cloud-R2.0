@@ -319,4 +319,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "shipWeight": ship["totalWeight"], "skidCount": ship["skidCount"],
         "skidKey": ship["skidKey"], "trailerFeet": ship["trailerFeet"],
         "boardLbsMSF": ship["boardLbsMSF"],
+        # ── Display fields surfaced for Cost Buildup ────────────────────
+        "freightMarkup": float(json.get("freightMarkup") or 0),
+        "freightCost": float(json.get("freightCost") or 0),
     }
