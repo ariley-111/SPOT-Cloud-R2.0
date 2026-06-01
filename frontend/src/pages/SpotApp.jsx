@@ -14,6 +14,7 @@ import PreviewPdfModal from "../components/spot/PreviewPdfModal";
 import CostReportModal from "../components/spot/CostReportModal";
 import LoadQuoteModal from "../components/spot/LoadQuoteModal";
 import SheetLibraryModal from "../components/spot/SheetLibraryModal";
+import QuoteHeaderModal from "../components/spot/QuoteHeaderModal";
 import { useQuote } from "../context/QuoteContext";
 import { useEngine } from "../hooks/useEngine";
 
@@ -68,6 +69,7 @@ export default function SpotApp() {
       {modal === "preview"     && <PreviewPdfModal onClose={() => setModal(null)} />}
       {modal === "cost-report" && <CostReportModal onClose={() => setModal(null)} />}
       {modal === "load"        && <LoadQuoteModal  onClose={() => setModal(null)} />}
+      {modal === "quote-header" && <QuoteHeaderModal onClose={() => setModal(null)} />}
       {modal === "sheet-library" && (
         <SheetLibraryModal
           onClose={() => setModal(null)}
