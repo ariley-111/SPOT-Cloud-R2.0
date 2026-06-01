@@ -270,32 +270,74 @@ async def parse_rfq(
     if notes:
         content_parts.append({"type": "text", "text": f"ESTIMATOR NOTES:\n\n{notes}"})
 
+    # ─── Email file expansion ───────────────────────────────────────
+    # If any uploaded file is .eml or .msg, extract body text + attachments and
+    # promote them into content_parts. User requested behavior (2026-06-01).
+    expanded_files: List[Dict[str, Any]] = []
     for f in files:
-        content = await f.read()
+        name_lower = (f.filename or "").lower()
+        if name_lower.endswith(".eml") or name_lower.endswith(".msg"):
+            try:
+                from utils.email_extract import extract_email_file
+                raw = await f.read()
+                ext = extract_email_file(f.filename, raw)
+                # Append email body as a text block (subject + from + body)
+                body_chunks = []
+                if ext.get("subject"): body_chunks.append(f"SUBJECT: {ext['subject']}")
+                if ext.get("from"):    body_chunks.append(f"FROM: {ext['from']}")
+                if ext.get("body"):    body_chunks.append(ext["body"])
+                if body_chunks:
+                    content_parts.append({"type": "text",
+                        "text": f"EMAIL ({f.filename}):\n\n" + "\n\n".join(body_chunks)})
+                # Re-inject each attachment as a synthetic UploadFile-ish dict (we'll
+                # process them inline below — simpler than wrapping UploadFile here).
+                for att in ext.get("attachments", []):
+                    expanded_files.append({
+                        "filename": att["filename"], "mime": att["mime"],
+                        "content": att["bytes"],
+                    })
+                file_summary.append({"name": f.filename, "type": "email",
+                                     "attachments": len(ext.get("attachments", [])),
+                                     "body_chars": len(ext.get("body") or "")})
+            except Exception as e:
+                file_summary.append({"name": f.filename, "type": "email", "error": str(e)})
+            continue
+        # Non-email files: read inline (matches original loop)
+        content_bytes = await f.read()
+        if not content_bytes:
+            continue
+        expanded_files.append({
+            "filename": f.filename, "mime": f.content_type or "application/octet-stream",
+            "content": content_bytes,
+        })
+
+    for ef in expanded_files:
+        content = ef["content"]
         if not content:
             continue
         size = len(content)
         b64 = base64.standard_b64encode(content).decode("utf-8")
-        media_type = f.content_type or "application/octet-stream"
-        if media_type == "application/pdf" or (f.filename or "").lower().endswith(".pdf"):
+        media_type = ef["mime"] or "application/octet-stream"
+        fname = ef["filename"]
+        if media_type == "application/pdf" or (fname or "").lower().endswith(".pdf"):
             content_parts.append({
                 "type": "document",
                 "source": {"type": "base64", "media_type": "application/pdf", "data": b64},
             })
-            file_summary.append({"name": f.filename, "type": "pdf", "size": size})
+            file_summary.append({"name": fname, "type": "pdf", "size": size})
         elif media_type.startswith("image/"):
             content_parts.append({
                 "type": "image",
                 "source": {"type": "base64", "media_type": media_type, "data": b64},
             })
-            file_summary.append({"name": f.filename, "type": "image", "size": size})
+            file_summary.append({"name": fname, "type": "image", "size": size})
         else:
             try:
                 text = content.decode("utf-8", errors="replace")
             except Exception:
                 text = "<binary content>"
-            content_parts.append({"type": "text", "text": f"ATTACHMENT ({f.filename}):\n\n{text[:50000]}"})
-            file_summary.append({"name": f.filename, "type": "text", "size": size})
+            content_parts.append({"type": "text", "text": f"ATTACHMENT ({fname}):\n\n{text[:50000]}"})
+            file_summary.append({"name": fname, "type": "text", "size": size})
 
     result = await _call_anthropic(content_parts)
     return {

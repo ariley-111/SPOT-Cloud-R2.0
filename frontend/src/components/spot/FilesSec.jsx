@@ -21,12 +21,24 @@ export default function FilesSec() {
   useEffect(() => { parserBudget().then(setBudget).catch(() => {}); }, []);
 
   const isRfqLike = (name) => /\.(pdf|docx?|eml|msg|txt|jpg|jpeg|png|webp|heic)$/i.test(name || "");
+  const isEmailFile = (name) => /\.(eml|msg)$/i.test(name || "");
   const ingestFiles = (list) => {
     const arr = Array.from(list || []).map((f) => ({
       filename: f.name, size: f.size, mime: f.type || "",
       class: isRfqLike(f.name) ? "rfq" : "file", file: f,
     }));
     setFiles((cur) => [...cur, ...arr]);
+    // Auto-parse on email-file drop — user requested behavior (2026-06-01).
+    // Email files usually have the spec PDF attached + body context, so kick the
+    // parser immediately so the estimator doesn't have to click Parse.
+    const hasEmail = arr.some((f) => isEmailFile(f.filename));
+    if (hasEmail) {
+      // Defer to next tick so setFiles flushes before runParse reads `files`.
+      setTimeout(() => {
+        const all = [...files, ...arr].filter((f) => f.class === "rfq").map((f) => f.file);
+        runParseDirect(all);
+      }, 50);
+    }
   };
 
   const onDrop = (e) => {
@@ -40,17 +52,21 @@ export default function FilesSec() {
   const hasCached = !!parseResult;
   const canParse = hasRfq && !busy;
 
-  const runParse = async () => {
+  const runParseDirect = async (rfqFiles) => {
+    if (!rfqFiles || rfqFiles.length === 0 || busy) return;
     setBusy(true); setParserError(""); setParseResult(null);
     try {
-      const onlyRfq = files.filter((f) => f.class === "rfq").map((f) => f.file);
-      const r = await parseRfq(onlyRfq, "", "");
+      const r = await parseRfq(rfqFiles, "", "");
       setParseResult(r);
       setReviewOpen(true);
       parserBudget().then(setBudget).catch(() => {});
     } catch (e) {
       setParserError(e?.response?.data?.detail || e.message);
     } finally { setBusy(false); }
+  };
+  const runParse = async () => {
+    const onlyRfq = files.filter((f) => f.class === "rfq").map((f) => f.file);
+    await runParseDirect(onlyRfq);
   };
 
   return (
