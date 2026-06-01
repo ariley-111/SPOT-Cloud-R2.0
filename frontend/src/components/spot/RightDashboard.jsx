@@ -1,8 +1,8 @@
 /* eslint-disable */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuote } from "../../context/QuoteContext";
-import { useEngine, useRouteCompare } from "../../hooks/useEngine";
-import { freightQuote } from "../../api/spot";
+import { useEngine } from "../../hooks/useEngine";
+import { freightQuote, compareRoutes } from "../../api/spot";
 import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 
@@ -22,6 +22,7 @@ export default function RightDashboard() {
       <RouteComparison s={s} primary={primary} />
       <EconomicsPanel s={s} result={primary} />
       <CostBuildup result={primary} />
+      <BoardPanel result={primary} s={s} />
     </div>
   );
 }
@@ -118,50 +119,187 @@ function FreightPanel({ s }) {
 }
 
 function RouteComparison({ s, primary }) {
-  const { routes } = useRouteCompare(s, 0);
+  const [open, setOpen] = useState(true);  // default expanded for visibility (legacy default)
+  const [comp, setComp] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const { setField } = useQuote();
   const qty = primary?.qty;
-  const forced = !!s.routeOverride;
+  const forced = !!(s.routeOverride && s.routeOverride !== "Auto");
+
+  // Debounced fetch (matches useEngine cadence)
+  useEffect(() => {
+    if (!s.oneUpW || !s.oneUpL || !qty) return;
+    let cancel = false;
+    const t = setTimeout(() => {
+      setBusy(true);
+      compareRoutes({
+        oneUpW: s.oneUpW, oneUpL: s.oneUpL, qty,
+        boardGrade: s.boardGrade, flute: s.flute,
+        outsideLiner: s.outsideLiner, insideLiner: s.insideLiner, medium: s.medium,
+        printReq: s.printReq, printMode: s.printMode,
+        dieTreatment: s.dieTreatment, cuttingDieCost: s.cuttingDieCost,
+        totalRuleInches: s.totalRuleInches, crestComplexity: s.crestComplexity,
+        cadDifficulty: s.cadDifficulty,
+      }).then((d) => { if (!cancel) setComp(d); })
+        .catch(() => { if (!cancel) setComp(null); })
+        .finally(() => { if (!cancel) setBusy(false); });
+    }, 500);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [s.oneUpW, s.oneUpL, qty, s.boardGrade, s.flute, s.outsideLiner, s.insideLiner, s.medium,
+      s.printReq, s.printMode, s.dieTreatment, s.cuttingDieCost, s.totalRuleInches,
+      s.crestComplexity, s.cadDifficulty]);
+
+  const winner = comp?.winner;
+  const winnerLabel = winner ? `${winner.toUpperCase()} ${forced ? "FORCED" : "WINS"}` : (primary?.route ? `${primary.route} AUTO` : "");
+  const winnerColor = forced ? "sp-badge-warn" : "sp-badge-green";
+
+  // Build column data for visible routes
+  const cols = [];
+  if (comp?.cad) cols.push({ key: "CAD", label: "CAD", d: comp.cad });
+  if (comp?.crest) cols.push({ key: "Crest", label: "Crest", d: comp.crest });
+  if (comp?.bobst) cols.push({ key: "Bobst", label: "Bobst", d: comp.bobst });
+
+  const switchTo = (rt) => {
+    setField("routeOverride", s.routeOverride === rt ? "Auto" : rt);
+  };
+
   return (
     <div data-testid="route-comparison" style={panelStyle("#22c55e")}>
-      <div style={panelHeader("#22c55e")}>
-        <span>Route Comparison{qty ? ` · QTY ${fmtInt(qty)}` : ""}</span>
-        {primary?.route && (
-          <span className={`sp-badge ${forced ? "sp-badge-warn" : "sp-badge-green"}`}
-            data-testid="route-winner-badge">
-            {primary.route} {forced ? "FORCED" : "AUTO"}
-          </span>
-        )}
+      <div style={{ ...panelHeader("#22c55e"), cursor: "pointer", userSelect: "none" }}
+        onClick={() => setOpen((v) => !v)} data-testid="route-comparison-toggle">
+        <span>Route Comparison{qty ? ` — Qty ${fmtInt(qty)}` : ""}</span>
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {winnerLabel && (
+            <span className={`sp-badge ${winnerColor}`} data-testid="route-winner-badge">
+              {winnerLabel}
+            </span>
+          )}
+          <span style={{ fontSize: 11, transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform .15s" }}>▸</span>
+        </span>
       </div>
-      <div style={{ padding: "8px 10px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-        {(routes.length > 0 ? routes : ["CAD", "Crest", "Bobst"].map((r) => ({ route: r }))).map((r) => {
-          const isWinner = r.route === primary?.route;
-          return (
-            <div key={r.route} data-testid={`route-cmp-${r.route}`} style={{
-              padding: "6px 8px", borderRadius: 4,
-              background: isWinner ? "var(--spot-green-soft)" : "var(--spot-bg3)",
-              border: `1px solid ${isWinner ? "var(--spot-green)" : "var(--spot-border)"}`,
-            }}>
-              <div style={{
-                fontSize: 10, color: isWinner ? "var(--spot-green)" : "var(--spot-text3)",
-                fontWeight: 700, textTransform: "uppercase",
-              }}>{r.route}{isWinner ? " ✓" : ""}</div>
-              {r.error ? (
-                <div style={{ fontSize: 10, color: "var(--spot-text3)", marginTop: 2 }}>n/a</div>
-              ) : r.sellTotal ? (
-                <>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)", marginTop: 2 }}>
-                    {fmtMoney(r.sellTotal, 0)}
+      {open && (
+        <div style={{ padding: "8px 10px", fontSize: 12 }}>
+          {busy && !comp ? (
+            <div style={{ color: "var(--spot-text3)" }}>Computing…</div>
+          ) : !comp || cols.length === 0 ? (
+            <div style={{ color: "var(--spot-text3)" }}>Enter dimensions, board, and quantity.</div>
+          ) : (
+            <>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+                <thead>
+                  <tr style={{ color: "var(--spot-text)", fontWeight: 700 }}>
+                    <th style={{ textAlign: "left", padding: "2px 4px" }}></th>
+                    {cols.map((c) => (
+                      <th key={c.key} style={{ textAlign: "right", padding: "2px 4px" }}>{c.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody style={{ color: "var(--spot-text2)" }}>
+                  <CmpRow label="Sheet" cols={cols} get={(d) => (d.sheetW && d.sheetL) ? `${fmtNum(d.sheetW, 0)}×${fmtNum(d.sheetL, 0)}` : "—"} />
+                  <CmpRow label="Layout" cols={cols} get={(d) => d.pcsPerSheet ? `${d.pcsPerSheet} out` : "—"} />
+                  <CmpRow label="Sheets" cols={cols} get={(d) => d.sheetsReq ? fmtInt(d.sheetsReq) : "—"} />
+                  <CmpRow label="" cols={cols} get={() => ""} sep />
+                  <CmpRow label="Board" cols={cols} get={(d) => d.board ? fmtMoney(d.board) : "—"} />
+                  <CmpRow label="Press" cols={cols} get={(d) => d.press ? fmtMoney(d.press) : "—"} />
+                  <CmpRow label="Cutting" cols={cols} get={(d) => d.cut ? (
+                    <span>{fmtMoney(d.cut)} <span style={{ color: "var(--spot-text3)" }}>({fmtNum(d.hrs, 1)}h)</span></span>
+                  ) : "—"} />
+                  <CmpRow label="Die" cols={cols} get={(d) => d.die ? (
+                    <span>{fmtMoney(d.die)} {d.dieEstimated ? <span style={{ color: "var(--spot-text3)", fontStyle: "italic" }}>(est.)</span> : ""}</span>
+                  ) : "—"} />
+                  <CmpRow label="" cols={cols} get={() => ""} sep />
+                  <CmpRow label="Total" cols={cols} bold get={(d, idx) => (
+                    <span style={{ color: cols[idx].key === winner ? "var(--spot-green)" : "var(--spot-text)" }}>
+                      {d.totalCost ? fmtMoney(d.totalCost) : "—"}
+                    </span>
+                  )} />
+                  <CmpRow label="Per piece" cols={cols} get={(d) => (d.totalCost && qty) ? fmtMoney(d.totalCost / qty) : "—"} />
+                </tbody>
+              </table>
+
+              {/* Verdict + warnings (legacy L7800 messaging) */}
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--spot-line)" }}>
+                {winner && comp.cad && comp.crest && (() => {
+                  const delta = Math.abs(comp.cad.totalCost - comp.crest.totalCost);
+                  const winnerCost = winner === "CAD" ? comp.cad.totalCost : comp.crest.totalCost;
+                  const loser = winner === "CAD" ? "Crest" : "CAD";
+                  const loserCost = winner === "CAD" ? comp.crest.totalCost : comp.cad.totalCost;
+                  return (
+                    <div style={{ fontWeight: 700, color: "var(--spot-green)", marginBottom: 4 }}>
+                      {winner === "Bobst" ? winner : winner} is {fmtMoney(delta)} cheaper than {loser} at {fmtInt(qty)} pcs
+                    </div>
+                  );
+                })()}
+                {comp.bobstReason && (
+                  <div style={{ fontSize: 11, color: "var(--spot-text3)", fontStyle: "italic", marginTop: 4 }}>
+                    {comp.bobstReason}
                   </div>
-                  <div style={{ fontSize: 10, color: "var(--spot-text3)" }}>GM {fmtPct(r.gmPct, 1)}</div>
-                </>
-              ) : (
-                <div style={{ fontSize: 10, color: "var(--spot-text3)", marginTop: 2 }}>—</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                )}
+                {comp.crest?.warning && (
+                  <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
+                    ⚠ {comp.crest.warning}
+                  </div>
+                )}
+                {comp.cad?.saberNeeded && (
+                  <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
+                    ⚠ CAD sheet exceeds Crest max — Saber needed to switch routes later
+                  </div>
+                )}
+              </div>
+
+              {/* Switch buttons */}
+              <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {cols.map((c) => {
+                  if (c.key === winner) return null;
+                  return (
+                    <button key={c.key} onClick={() => switchTo(c.key)}
+                      data-testid={`route-switch-${c.key.toLowerCase()}`}
+                      style={{
+                        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                        padding: "4px 10px", borderRadius: 3,
+                        background: s.routeOverride === c.key ? "var(--spot-accent-soft)" : "transparent",
+                        color: c.key === "CAD" ? "#3b82f6" : c.key === "Crest" ? "#f59e0b" : "#a855f7",
+                        border: `1px solid ${c.key === "CAD" ? "#3b82f6" : c.key === "Crest" ? "#f59e0b" : "#a855f7"}`,
+                      }}>
+                      Switch to {c.label}
+                    </button>
+                  );
+                })}
+                {forced && (
+                  <button onClick={() => setField("routeOverride", "Auto")}
+                    data-testid="route-switch-auto"
+                    style={{
+                      all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                      padding: "4px 10px", borderRadius: 3,
+                      color: "var(--spot-green)", border: "1px solid var(--spot-green)",
+                    }}>Back to Auto</button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function CmpRow({ label, cols, get, bold, sep }) {
+  if (sep) return (
+    <tr><td colSpan={cols.length + 1}>
+      <div style={{ borderTop: "1px solid var(--spot-line)", margin: "4px 0" }} />
+    </td></tr>
+  );
+  return (
+    <tr>
+      <td style={{ padding: "2px 4px", color: "var(--spot-text3)" }}>{label}</td>
+      {cols.map((c, i) => (
+        <td key={c.key} style={{
+          textAlign: "right", padding: "2px 4px",
+          fontWeight: bold ? 700 : 500,
+        }}>{get(c.d, i)}</td>
+      ))}
+    </tr>
   );
 }
 
@@ -219,6 +357,8 @@ function CostBuildup({ result }) {
   const [view, setView] = useState("summary"); // summary | detail
   if (!result || result.error) return null;
   const r = result;
+  const detail = view === "detail";
+  const spoilSheets = Math.max(0, Math.round((r.matMakeready || 0) / Math.max(0.01, (r.boardEffRate || 1) * (r.boardOSqFt / 1000 || 0.001))));
 
   return (
     <div data-testid="cost-buildup" style={panelStyle("#06b6d4")}>
@@ -231,34 +371,99 @@ function CostBuildup({ result }) {
       </div>
       <div style={{ padding: "8px 10px", fontSize: 12 }}>
         <SubHead label="Direct Production" color="var(--spot-green)" />
-        <Row label="Material" value={fmtMoney(r.matTotal)} />
+        <Row label={detail ? <RowInline main="Material" sub={`${r.msfTier || "—"} tier, ${fmtMoney(r.boardEffRate)}/MSF`} /> : "Material"} value={fmtMoney(r.matTotal)} />
+        {detail && (r.matMakeready > 0) && (
+          <SubRow label={`MR/Spoil Board ${spoilSheets || ""} extra sheets`.trim()} value={fmtMoney(r.matMakeready)} />
+        )}
+        {detail && r.pressHrs > 0 && (
+          <SubRow label={`Press ${fmtNum(r.pressHrs, 1)}h @ ${fmtMoney(r.incaRate)}/hr`} value={fmtMoney(r.pressCost)} />
+        )}
+        {detail && r.inkCost > 0 && (
+          <SubRow label={`Ink ${fmtInt(r.inkSqFt)} sqft @ ${fmtMoney(r.inkRate, 2)}/sqft`} value={fmtMoney(r.inkCost)} />
+        )}
         <Row label="Print"    value={fmtMoney(r.printDirect)} />
+        {detail && r.cutterDirect > 0 && (
+          <SubRow label={`${r.route} ${labelize(r.cadDifficulty || "Standard")}`} value={fmtMoney(r.cutterDirect)} />
+        )}
         <Row label={`Cutting ${r.route}`} value={fmtMoney(r.cutterDirect)} />
+        {detail && r.assemblyCost > 0 && (
+          <SubRow label={`Glue ${labelize(r.gluingComplexity || "Standard")}, ${r.jointsPerPiece || 1} jt @ $23.00/hr`} value={fmtMoney(r.assemblyCost)} />
+        )}
         <Row label="Finishing" value={fmtMoney(r.assemblyCost)} />
         <RowTotal label="Total Direct" value={fmtMoney(r.totalDirect)} />
 
-        <SubHead label="Indirect" color="var(--spot-green)" />
-        <Row label="Overhead" value={fmtMoney(r.overhead)} />
-        <Row label="Prepress (amort)" value={fmtMoney(r.prepressEmbedded)} />
-        <Row label="Die (amort)" value={fmtMoney(r.dieEmbedded || 0)} />
-        <Row label="Freight (embed)" value={fmtMoney(r.freightEmbed || 0)} />
+        <SubHead label="Indirect" color="#f59e0b" />
+        <Row label={`Overhead ${detail ? `${fmtPct(0, 0)}` : ""}`} value={fmtMoney(r.overhead)} />
+        <Row label={
+          <span style={{ fontStyle: "italic" }}>
+            Prepress amort.{detail && r.prepressEmbedded > 0 ? <span style={{ color: "var(--spot-text3)" }}> {fmtMoney(r.prepressEmbedded)}, no OH/GM</span> : ""}
+          </span>
+        } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.prepressEmbedded)}</span>} />
+        <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
+          value={<span style={{ fontStyle: "italic" }}>{(r.dieEmbedded > 0) ? fmtMoney(r.dieEmbedded) : "None"}</span>} />
+        {(r.freightEmbed || 0) > 0 && (
+          <Row label={<span style={{ fontStyle: "italic" }}>Freight (embed)</span>}
+            value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.freightEmbed)}</span>} />
+        )}
         <RowTotal label="Total Cost" value={fmtMoney(r.totalMfg)} />
 
         <SubHead label="Pricing" color="var(--spot-purple)" />
-        <Row label={`Margin ${fmtPct(r.gmPct, 1)}`} value={fmtMoney(r.gmDollar)} />
+        <Row label={<span>Margin <span style={{ color: "var(--spot-text3)" }}>{fmtPct(r.gmPct, 1)} of sell</span></span>} value={fmtMoney(r.gmDollar)} />
         <RowTotal label="Sell Total" value={fmtMoney(r.itemSell)} />
-        <Row label={`Sell/Pc ${fmtInt(r.qty)} pcs`} value={fmtMoney(r.sellPc, 3)} />
+        <Row label={<span>Sell/Pc <span style={{ color: "var(--spot-text3)" }}>{fmtInt(r.qty)} pcs</span></span>}
+          value={fmtMoney(r.qty > 0 ? r.itemSell / r.qty : 0, 2)} />
 
         {(r.freightLine > 0 || r.dieLineCost > 0 || r.prepressLineCost > 0) && (
           <>
-            <SubHead label="One-Time Line Items" color="var(--spot-accent)" />
-            {r.freightLine > 0 && <Row label={`Freight + ${(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup`} value={fmtMoney(r.freightLine)} />}
-            {r.dieLineCost > 0 && <Row label="Die" value={fmtMoney(r.dieLineCost)} />}
-            {r.prepressLineCost > 0 && <Row label="Prepress" value={fmtMoney(r.prepressLineCost)} />}
+            <SubHead label="One-Time Line Items" color="#3b82f6" />
+            {r.freightLine > 0 && (
+              <Row label={<span style={{ fontStyle: "italic" }}>Freight <span style={{ color: "var(--spot-text3)" }}>{fmtMoney(r.freightLine / (1 + Number(r.freightMarkup || 0) || 1))} + {(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup</span></span>}
+                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.freightLine)}</span>} />
+            )}
+            {r.dieLineCost > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
+              value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.dieLineCost)}</span>} />}
+            {r.prepressLineCost > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Prepress</span>}
+              value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.prepressLineCost)}</span>} />}
             <RowTotal label="Quote Total" value={fmtMoney(r.sellTotal)} accent="var(--spot-purple)" />
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function BoardPanel({ result, s }) {
+  const [open, setOpen] = useState(false);  // default COLLAPSED (legacy default)
+  if (!result || result.error) return null;
+  const r = result;
+  const sheetLbl = (r.sheetW && r.sheetL) ? `${fmtNum(r.sheetW, 0)}×${fmtNum(r.sheetL, 0)}` : "—";
+  const isStock = !!r?._pipeline?.stockMode;
+  const mode = isStock ? "STOCK" : "ORDER";
+  const sqFt = Math.round(r.boardOSqFt || (r.oMSF * 1000));
+  const wastePct = r.wastePct || 0;
+
+  return (
+    <div data-testid="board-panel" style={panelStyle("#a855f7")}>
+      <div style={{ ...panelHeader("#a855f7"), cursor: "pointer", userSelect: "none" }}
+        onClick={() => setOpen((v) => !v)} data-testid="board-panel-toggle">
+        <span>Board {sheetLbl} — {mode} {fmtMoney(r.boardTotal)}</span>
+        <span style={{ fontSize: 11, transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          transition: "transform .15s" }}>▸</span>
+      </div>
+      {open && (
+        <div style={{ padding: "8px 10px", fontSize: 12 }}>
+          <Row label="Sq Ft" value={fmtInt(sqFt)} />
+          <Row label="MSF" value={fmtNum(r.oMSF, 4)} />
+          <Row label="Tier" value={r.msfTier || "—"} />
+          <Row label={<b>Base</b>} value={<b>{fmtMoney(r.boardBase)}</b>} />
+          <Row label={<b>Eff Rate</b>} value={<b>{fmtMoney(r.boardEffRate)}</b>} />
+          <Row label="FSC" value={fmtMoney(r.boardFscAmt || 0)} />
+          <Row label="Setup" value={fmtMoney(r.boardSetup || 0)} />
+          <Row label="Pallet" value={fmtMoney(r.boardPp || 0)} />
+          <RowTotal label="Board PO" value={fmtMoney(r.boardTotal)} />
+          <Row label="Waste" value={fmtPct(wastePct, 1)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -288,6 +493,17 @@ function SubHead({ label, color }) {
     fontSize: 10, fontWeight: 800, color, textTransform: "uppercase", letterSpacing: ".08em",
     borderBottom: `1px solid ${color}33`, paddingBottom: 4, marginTop: 8, marginBottom: 4,
   }}>{label}</div>;
+}
+function RowInline({ main, sub }) {
+  return <span>{main} <span style={{ color: "var(--spot-text3)", fontSize: 11 }}>{sub}</span></span>;
+}
+function SubRow({ label, value }) {
+  return <div style={{
+    display: "flex", justifyContent: "space-between", padding: "1px 0 1px 14px",
+    color: "var(--spot-text3)", fontSize: 11,
+  }}>
+    <span>{label}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
+  </div>;
 }
 function Row({ label, value }) {
   return <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", color: "var(--spot-text2)" }}>

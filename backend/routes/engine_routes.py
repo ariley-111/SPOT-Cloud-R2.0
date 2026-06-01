@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
 
 from engine import run_estimate, CALIBRATION_BASELINE
-from engine.routing import auto_select_sheet, auto_route
-from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, APPROVED_SHEETS, get_grade_fallback
+from engine.routing import auto_select_sheet, auto_route, compare_routes
+from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, APPROVED_SHEETS, get_grade_fallback, ENGINE
 from models.schemas import User
 from routes.auth import get_current_user
 
@@ -88,3 +88,60 @@ async def sheet_availability(
         ol_set.add(sh["ol"])
         il_set.add(sh["il"])
     return {"outside": sorted(ol_set), "inside": sorted(il_set)}
+
+
+@router.post("/compare-routes")
+async def compare_routes_ep(
+    payload: Dict[str, Any] = Body(...),
+    _u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """D-090: side-by-side CAD vs Crest vs Bobst route economics for one qty.
+
+    Body: {oneUpW, oneUpL, qty, boardGrade, flute, outsideLiner, insideLiner, medium,
+           printReq, printMode, dieTreatment, dieCost, crestComplexity, totalRuleInches, ...}
+    """
+    try:
+        from engine.runner import _build_assumptions  # type: ignore[attr-defined]
+    except Exception:
+        _build_assumptions = None
+
+    one_w = float(payload.get("oneUpW") or 0)
+    one_l = float(payload.get("oneUpL") or 0)
+    qty = int(payload.get("qty") or 0)
+    if one_w <= 0 or one_l <= 0 or qty <= 0:
+        return {"error": "Need oneUpW, oneUpL, and qty"}
+    board_spec = {
+        "boardGrade": payload.get("boardGrade"), "flute": payload.get("flute"),
+        "outsideLiner": payload.get("outsideLiner"), "insideLiner": payload.get("insideLiner"),
+        "medium": payload.get("medium") or "None",
+    }
+    asmp = {**ENGINE,
+            "printReq": "Yes" if payload.get("printReq") in ("Yes", "On") else "No",
+            "printMode": payload.get("printMode") or "Satin",
+            "dieTreatment": payload.get("dieTreatment") or "None",
+            "dieCost": payload.get("dieCost") or payload.get("cuttingDieCost") or 0,
+            "totalRuleInches": payload.get("totalRuleInches") or 0,
+            "crestComplexity": payload.get("crestComplexity") or "Standard",
+            "cadDifficulty": payload.get("cadDifficulty") or "Standard",
+            "bobstFirstSizing": "true",
+            "incaRate": float(RATE_DEFAULTS.get("incaRate", 485) or 485),
+            "cadRate": float(RATE_DEFAULTS.get("cadRate", 138) or 138),
+            "crestRate": float(RATE_DEFAULTS.get("crestRate", 45) or 45),
+            "bobstRate": float(RATE_DEFAULTS.get("bobstRate", 350) or 350),
+            "crestSpeed": float(RATE_DEFAULTS.get("crestSpeed", 150) or 150),
+            "bobstSpeed": float(RATE_DEFAULTS.get("bobstSpeed", 3000) or 3000),
+            "incaMinCharge": float(RATE_DEFAULTS.get("incaMinCharge", 0) or 0),
+            "cadMinCharge": float(RATE_DEFAULTS.get("cadMinCharge", 0) or 0),
+            "crestMinCharge": float(RATE_DEFAULTS.get("crestMinCharge", 0) or 0),
+            "bobstMinCharge": float(RATE_DEFAULTS.get("bobstMinCharge", 0) or 0)}
+    opts = {
+        "printReq": asmp["printReq"], "printMode": asmp["printMode"],
+        "dieTreatment": asmp["dieTreatment"], "dieCost": asmp["dieCost"],
+        "crestComplexity": asmp["crestComplexity"],
+    }
+    try:
+        comp = compare_routes(one_w, one_l, board_spec, qty, asmp, opts)
+        return comp or {"error": "no result"}
+    except Exception as e:
+        raise HTTPException(500, f"Route compare error: {type(e).__name__}: {e}")
+

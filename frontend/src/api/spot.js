@@ -37,6 +37,11 @@ export const sheetAvailability = ({ boardGrade, flute, medium = "None" }) =>
     params: { boardGrade, flute, medium },
   }).then((r) => r.data);
 
+// D-090: side-by-side CAD/Crest/Bobst comparison for one qty. Used by the
+// RouteComparison panel.
+export const compareRoutes = (payload) =>
+  api.post("/engine/compare-routes", payload).then((r) => r.data);
+
 // ─── Drafts ────────────────────────────────────────────
 export const listDrafts = () =>
   api.get("/drafts").then((r) => r.data);

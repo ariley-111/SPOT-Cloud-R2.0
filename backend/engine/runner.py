@@ -283,6 +283,23 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "sheetsReq": sheets_req,
         "oMSF": wf["oMSF"], "shippedMSF": wf["shippedMSF"], "msfTier": wf["matTier"],
         "boardBase": bc["base"], "boardEffRate": bc["effRate"], "boardTotal": bc["total"],
+        # Board PO breakdown (Board panel parity with legacy spot_r1_5.jsx L7980+)
+        "boardSqFt": bc.get("sqft") or 0,
+        "boardOSqFt": bc.get("oSqFt") or 0,
+        "boardVarCost": bc.get("varCost") or 0,
+        "boardFscAmt": bc.get("fscAmt") or 0,
+        "boardSetup": bc.get("setup") or 0,
+        "boardPp": bc.get("pp") or 0,
+        "boardKemiChg": bc.get("kemiChg") or 0,
+        # Press detail rows for Cost Buildup DETAIL view
+        "pressHrs": wf.get("pressHrs") or 0,
+        "incaRate": asmp.get("incaRate", 485),
+        "inkSqFt": wf.get("grossSqFt") or 0,
+        "inkRate": asmp.get("inkPerSqFt") or 0.05,
+        # Cutting / Finishing detail
+        "cutterBasis": wf.get("cutterBasis") or "",
+        "jointsPerPiece": json.get("jointsPerPiece"),
+        "gluingComplexity": json.get("gluingComplexity"),
         "route": routing.get("route") or wf["route"], "cadHrs": wf["cadHrs"],
         "matTotal": wf["matTotal"], "matMakeready": wf["matMakeready"],
         "pressCost": wf["pressCost"], "inkCost": wf["inkCost"], "whiteCost": wf["whiteCost"],
