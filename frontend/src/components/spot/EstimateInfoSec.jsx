@@ -39,10 +39,18 @@ export default function EstimateInfoSec() {
         <F l="Customer">
           <CustomerInput value={s.custName}
             onChange={(v) => setField("custName", v)}
-            onSelect={(r) => setManyFields({
-              custName: r.name, custCode: r.code, customerRecord: r,
-              destZip: r.zip || "", shipTo: [r.city, r.state, r.zip].filter(Boolean).join(", "),
-            })} />
+            onSelect={(r) => {
+              // Build full ship-to address from customer record (legacy parity:
+              // includes street + city + state, ZIP held in destZip).
+              const parts = [r.address_1, r.address_2, r.city, r.state].filter(Boolean);
+              const ship = parts.join(", ");
+              setManyFields({
+                custName: r.name, custCode: r.code, customerRecord: r,
+                destZip: r.zip || "",
+                quoteShipTo: ship,    // legacy reads this for PDF Ship To row
+                shipTo: ship,         // back-compat
+              });
+            }} />
         </F>
         <F l="Project Name">
           <input className="sp-input" value={s.custRef || ""}
@@ -108,6 +116,27 @@ export default function EstimateInfoSec() {
             padding: "4px 8px", border: "1px solid var(--spot-green)", borderRadius: 3,
           }}
           title="Auto-fill 5 tiers from last entered (×1, ×2, ×5, ×10, ×20)">Auto-Fill</button>
+      </div>
+
+      {/* Ship-To row — legacy parity (spot_r1_5.jsx L7619). Editable address + ZIP. */}
+      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "nowrap", marginTop: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
+          textTransform: "uppercase", letterSpacing: ".06em", width: 64, flexShrink: 0 }}>Ship To</span>
+        <input className="sp-input" data-testid="input-ship-to" placeholder="Address, city, state"
+          value={s.quoteShipTo || ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            const patch = { quoteShipTo: v, shipTo: v };
+            // Auto-extract 5-digit ZIP into destZip if not set
+            const m = v.match(/\b(\d{5})\b/);
+            if (m && !s.destZip) patch.destZip = m[1];
+            setManyFields(patch);
+          }}
+          style={{ flex: 1, minWidth: 200 }} />
+        <input className="sp-input" data-testid="input-dest-zip" placeholder="ZIP"
+          value={s.destZip || ""}
+          onChange={(e) => setField("destZip", e.target.value)}
+          style={{ width: 80 }} />
       </div>
     </Sec>
   );

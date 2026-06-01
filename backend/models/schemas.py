@@ -56,6 +56,8 @@ class Customer(BaseModel):
     model_config = ConfigDict(extra="allow")
     code: str
     name: str
+    address_1: Optional[str] = None
+    address_2: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     zip: Optional[str] = None

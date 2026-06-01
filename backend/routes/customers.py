@@ -29,6 +29,8 @@ async def _load_csv_rows(rows: List[dict]) -> int:
         docs.append({
             "code": code,
             "name": (r.get("cust_name") or r.get("name") or "").strip(),
+            "address_1": (r.get("address_1") or r.get("address1") or r.get("street") or "").strip() or None,
+            "address_2": (r.get("address_2") or r.get("address2") or "").strip() or None,
             "city": (r.get("city") or "").strip() or None,
             "state": (r.get("state") or "").strip() or None,
             "zip": (r.get("zip") or "").strip() or None,
