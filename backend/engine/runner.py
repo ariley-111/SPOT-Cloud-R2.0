@@ -176,6 +176,17 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     sh_w = (use_sheet.get("sheet") or {}).get("w") or use_sheet.get("w") or 0
     sh_l = (use_sheet.get("sheet") or {}).get("l") or use_sheet.get("l") or 0
 
+    # PARITY FIX (2026-06-01): if a grade fallback fired, use the RUNNING grade
+    # for any downstream calc_board re-calls (saber recalc, Buy Min recalc).
+    # Without this, those paths look up the SPEC grade's base rate, contradicting
+    # the running grade used at sheet selection.
+    _fb_grade = best.get("gradeFallback") or (use_sheet.get("gradeFallback"))
+    if _fb_grade:
+        _fb_adder = GRADE_ADDER_DEFAULTS.get(_fb_grade, 0)
+        board_spec_running = {**board_spec, "boardGrade": _fb_grade, "gradeAdder": _fb_adder}
+    else:
+        board_spec_running = board_spec
+
     # STEP 5: Saber yield recalc
     saber_on = json.get("saber", "No") == "Yes"
     try:
@@ -190,7 +201,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         effective_pcs = saber_blank_layout["pcsPerSheet"] * saber_bo
         if effective_pcs > 0 and effective_pcs < layout["pcsPerSheet"]:
             sheets_req = math.ceil(qty / effective_pcs)
-            bc = calc_board({**board_spec, "widthIn": sh_w, "lengthIn": sh_l}, sheets_req,
+            bc = calc_board({**board_spec_running, "widthIn": sh_w, "lengthIn": sh_l}, sheets_req,
                             is_stock=use_sheet.get("stockMode", False))
 
     # STEP 6: Auto Buy Min
@@ -204,7 +215,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     if buy_min_board == "Yes" and bc and bc["hasPrice"] and ((not bc["pricable"] and not bc["meetMin"]) or force_custom_order):
         bm_sq_ft = (sh_w * sh_l) / 144
         bm_min_sheets = max(1, math.ceil((bc.get("minSqFt") or 15000) / bm_sq_ft))
-        bm_bc = calc_board({**board_spec, "widthIn": sh_w, "lengthIn": sh_l}, bm_min_sheets, is_stock=False)
+        bm_bc = calc_board({**board_spec_running, "widthIn": sh_w, "lengthIn": sh_l}, bm_min_sheets, is_stock=False)
         if bm_bc and bm_bc["pricable"]:
             bc = {**bm_bc, "pricable": True, "meetMin": True, "buyMin": True,
                   "buyMinSheets": bm_min_sheets, "actualSheets": sheets_req}

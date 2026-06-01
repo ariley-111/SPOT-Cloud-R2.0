@@ -126,7 +126,18 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
             if not layout:
                 continue
             sheets_req = math.ceil(total_qty / layout["pcsPerSheet"])
-            bi = {**board_spec, "medium": use_medium, "widthIn": sh["w"], "lengthIn": sh["l"]}
+            # PARITY FIX (2026-06-01): when grade fallback fires (ECT 32 → 200),
+            # swap boardGrade + gradeAdder to the RUNNING grade for the base-rate
+            # lookup, mirroring the Mullen-upgrade path at L221. Without this,
+            # calc_board looks up the SPEC grade's base ($95.31 for ECT 32) instead
+            # of the RUNNING grade's base ($102.98 for 200) → ~$5.59/MSF understated
+            # material cost (Lynk Pkg case 2026-06-01).
+            if used_grade_fallback:
+                fb_adder = GRADE_ADDER_DEFAULTS.get(fb_grade, 0)
+                bi = {**board_spec, "boardGrade": fb_grade, "gradeAdder": fb_adder,
+                      "medium": use_medium, "widthIn": sh["w"], "lengthIn": sh["l"]}
+            else:
+                bi = {**board_spec, "medium": use_medium, "widthIn": sh["w"], "lengthIn": sh["l"]}
             bc = calc_board(bi, sheets_req, is_stock=True)
             cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
             cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
@@ -389,9 +400,15 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
             if not ly:
                 continue
             req = math.ceil(total_qty / ly["pcsPerSheet"])
-            bi = {**board_spec, "widthIn": sh["w"], "lengthIn": sh["l"]}
-            bc = calc_board(bi, req, is_stock=True)
             used_fallback = sh["g"] != board_spec["boardGrade"]
+            # PARITY FIX: swap to running grade for base lookup when fallback fires.
+            if used_fallback:
+                fb_adder = GRADE_ADDER_DEFAULTS.get(fb_grade, 0)
+                bi = {**board_spec, "boardGrade": fb_grade, "gradeAdder": fb_adder,
+                      "widthIn": sh["w"], "lengthIn": sh["l"]}
+            else:
+                bi = {**board_spec, "widthIn": sh["w"], "lengthIn": sh["l"]}
+            bc = calc_board(bi, req, is_stock=True)
             if bc["pricable"]:
                 candidates.append({
                     "sheet": sh, "layout": ly, "sheetsReq": req, "bc": bc,
