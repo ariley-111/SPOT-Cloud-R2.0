@@ -114,7 +114,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     spec_line = " \u00B7 ".join([p for p in spec_parts if p])
 
     title = item_desc or box_style or "Item"
-    fob_disp = "Canton, OH (Our Dock)" if str(quote_fob).startswith("Origin") else "Destination"
+    fob_disp = "Will-Call" if str(quote_fob).startswith("Origin") else "Ship (Destination)"
     ship_addr = _ship_to_addr(ship_to, dest_zip)
 
     # ─── Pricing rows (legacy L4602: filter wf.pricable, not excluded) ─

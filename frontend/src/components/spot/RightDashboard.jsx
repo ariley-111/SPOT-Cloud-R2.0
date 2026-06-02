@@ -64,66 +64,79 @@ function FreightPanel({ s }) {
           </div>
         </div>
 
-        <div style={rowSpaced}>
-          <span style={lbl}>Type</span>
-          <div style={{ display: "flex", gap: 2 }}>
-            <Tile label="None"  active={s.freightTreatment === "None"}          onClick={() => setField("freightTreatment", "None")} small data-testid="tile-freight-none" />
-            <Tile label="Line"  active={s.freightTreatment === "Separate Line"} onClick={() => setField("freightTreatment", "Separate Line")} small tint="#22c55e" data-testid="tile-freight-line" />
-            <Tile label="Amort" active={s.freightTreatment === "Amortize"}      onClick={() => setField("freightTreatment", "Amortize")} small data-testid="tile-freight-amort" />
+        {s.quoteFOB === "Origin" ? (
+          // Will-Call: legacy parity (spot_r1_5.jsx L3890, L4264-4265). Skip Type /
+          // Ship-To / Markup / Update All — there's nothing to ship, customer picks up.
+          // Engine + PDF already gate on quoteFOB===Destination so no freight is added.
+          <div data-testid="freight-willcall-info"
+            style={{ marginTop: 8, padding: "10px 12px", background: "var(--spot-bg3)",
+              border: "1px solid var(--spot-border)", borderRadius: 4, textAlign: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)" }}>
+              No freight — customer will pick up at our dock
+            </div>
+            <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 4 }}>
+              Canton, OH (1115 Cherry Ave NE)
+            </div>
           </div>
-        </div>
-
-        <div style={rowSpaced}>
-          <span style={lbl}>Ship To</span>
-          <input className="sp-input" value={s.destZip || ""}
-            data-testid="freight-zip-input"
-            onChange={(e) => setField("destZip", e.target.value)}
-            style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
-          <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
-          <input className="sp-input" value={s.freightMarkup || ""}
-            data-testid="freight-markup-input"
-            onChange={(e) => setField("freightMarkup", e.target.value)}
-            style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
-        </div>
-
-        <div style={{ marginTop: 8, padding: "6px 8px", background: "var(--spot-accent-soft)",
-          border: "1px solid var(--spot-accent)", borderRadius: 4 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-accent)",
-            textTransform: "uppercase", letterSpacing: ".06em" }}>Item Freight</div>
-          {(() => {
-            // Display freightCost × (1 + markup) per legacy convention. The
-            // underlying state.freightCost remains the RAW UTS cost so engine
-            // math (which applies markup itself) is unaffected.
-            const raw = Number(s.freightCost) || 0;
-            const mk  = Number(s.freightMarkup) || 0;
-            const display = raw * (1 + mk);
-            return (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>{s.quoteFOB === "Origin" ? "ORIG" : "DEST"}</span>
-                <span style={{ fontSize: 16, fontWeight: 800, color: "var(--spot-accent)" }}
-                  data-testid="freight-amount-display"
-                  title={mk > 0 ? `Raw ${fmtMoney(raw)} + ${(mk * 100).toFixed(0)}% markup` : undefined}>
-                  {fmtMoney(display)}
-                </span>
+        ) : (
+          <>
+            <div style={rowSpaced}>
+              <span style={lbl}>Type</span>
+              <div style={{ display: "flex", gap: 2 }}>
+                <Tile label="None"  active={s.freightTreatment === "None"}          onClick={() => setField("freightTreatment", "None")} small data-testid="tile-freight-none" />
+                <Tile label="Line"  active={s.freightTreatment === "Separate Line"} onClick={() => setField("freightTreatment", "Separate Line")} small tint="#22c55e" data-testid="tile-freight-line" />
+                <Tile label="Amort" active={s.freightTreatment === "Amortize"}      onClick={() => setField("freightTreatment", "Amortize")} small data-testid="tile-freight-amort" />
               </div>
-            );
-          })()}
-        </div>
+            </div>
 
-        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 11, color: Number(s.freightCost) > 0 ? "var(--spot-green)" : "var(--spot-text3)" }}>
-            {Number(s.freightCost) > 0 ? "● Freight verified — OK to quote" : "○ No freight yet"}
-          </span>
-        </div>
+            <div style={rowSpaced}>
+              <span style={lbl}>Ship To</span>
+              <input className="sp-input" value={s.destZip || ""}
+                data-testid="freight-zip-input"
+                onChange={(e) => setField("destZip", e.target.value)}
+                style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
+              <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
+              <input className="sp-input" value={s.freightMarkup || ""}
+                data-testid="freight-markup-input"
+                onChange={(e) => setField("freightMarkup", e.target.value)}
+                style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
+            </div>
 
-        <div style={{ marginTop: 6, display: "flex", gap: 4 }}>
-          <button onClick={updateFreight} disabled={busy} data-testid="btn-freight-update"
-            style={{
-              all: "unset", cursor: busy ? "wait" : "pointer", fontSize: 11, fontWeight: 700,
-              padding: "5px 10px", borderRadius: 3,
-              background: "var(--spot-accent)", color: "#fff",
-              opacity: busy ? 0.7 : 1,
-            }}>{busy ? "…" : "Update All"}</button>
+            <div style={{ marginTop: 8, padding: "6px 8px", background: "var(--spot-accent-soft)",
+              border: "1px solid var(--spot-accent)", borderRadius: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-accent)",
+                textTransform: "uppercase", letterSpacing: ".06em" }}>Item Freight</div>
+              {(() => {
+                const raw = Number(s.freightCost) || 0;
+                const mk  = Number(s.freightMarkup) || 0;
+                const display = raw * (1 + mk);
+                return (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>DEST</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: "var(--spot-accent)" }}
+                      data-testid="freight-amount-display"
+                      title={mk > 0 ? `Raw ${fmtMoney(raw)} + ${(mk * 100).toFixed(0)}% markup` : undefined}>
+                      {fmtMoney(display)}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: Number(s.freightCost) > 0 ? "var(--spot-green)" : "var(--spot-text3)" }}>
+                {Number(s.freightCost) > 0 ? "● Freight verified — OK to quote" : "○ No freight yet"}
+              </span>
+            </div>
+
+            <div style={{ marginTop: 6, display: "flex", gap: 4 }}>
+              <button onClick={updateFreight} disabled={busy} data-testid="btn-freight-update"
+                style={{
+                  all: "unset", cursor: busy ? "wait" : "pointer", fontSize: 11, fontWeight: 700,
+                  padding: "5px 10px", borderRadius: 3,
+                  background: "var(--spot-accent)", color: "#fff",
+                  opacity: busy ? 0.7 : 1,
+                }}>{busy ? "…" : "Update All"}</button>
           <button data-testid="btn-freight-dash" style={{
             all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
             padding: "5px 10px", borderRadius: 3,
@@ -132,6 +145,8 @@ function FreightPanel({ s }) {
           }}>Dashboard</button>
         </div>
         {err && <div style={{ marginTop: 6, fontSize: 11, color: "var(--spot-err)" }} data-testid="freight-err">{err}</div>}
+          </>
+        )}
       </div>
     </div>
     </>
