@@ -7,9 +7,9 @@
 Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool, ~9k LOC in `spot_r1_5.jsx`) to a multi-user cloud application. Must retain 100% pricing math + UX parity. Multi-tab drafts. AI parser for RFQs (Anthropic). UTS freight integration. PDF generation. Phase 4: Pricing Console admin. Phase 5: SSO + SharePoint.
 
 ## 2. Users
-- **Estimators** — primary users (Rich Walter, Andrew, others). Quote 50-100 RFQs/month.
+- **Estimators** — primary users (Rich Walter, Ashley, others). Quote 50-100 RFQs/month.
 - **Estimating manager** — Rich Walter, oversees estimator team, role=`estimator`.
-- **Admin** — Andrew (rebuild owner), role=`admin`.
+- **Admin** — Ashley (rebuild owner), role=`admin`.
 
 ## 3. Core requirements
 - Cloud-native React + FastAPI + MongoDB
