@@ -14,6 +14,19 @@ export default function Toolbar({ openModal }) {
   const [saving, setSaving] = React.useState(false);
   const fileCbRef = React.useRef(null);
 
+  // Theme: default LIGHT (Rich Walter preference 2026-06-02). Persist to
+  // localStorage so it survives reload. <html data-theme="..."> is read by
+  // /app/frontend/src/theme.css to swap CSS variable palettes.
+  const [theme, setTheme] = React.useState(() => {
+    if (typeof window === "undefined") return "light";
+    return localStorage.getItem("spot_theme") || "light";
+  });
+  React.useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("spot_theme", theme);
+  }, [theme]);
+  const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
+
   const onSave = async () => {
     if (!active) return;
     if (saving) return;
@@ -81,6 +94,11 @@ export default function Toolbar({ openModal }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <button data-testid="toolbar-theme-toggle" onClick={toggleTheme}
+          title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          style={{ ...btn, minWidth: 32, padding: "0 8px", fontSize: 14 }}>
+          {theme === "light" ? "🌙" : "☀"}
+        </button>
         <button data-testid="toolbar-undo" title="Undo (Ctrl+Z)" style={btn}>↩</button>
         <button data-testid="toolbar-save" onClick={onSave} disabled={saving} style={{ ...btn,
           background: "var(--spot-green-soft)", color: "var(--spot-green)",

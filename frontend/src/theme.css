@@ -1,4 +1,5 @@
-/* SPOT Cloud — dark theme tokens ported from legacy spot_r1_5.jsx (themes.dark) */
+/* SPOT Cloud — theme tokens ported from legacy spot_r1_5.jsx (themes.dark + themes.light).
+   Toggle via <html data-theme="light"> — set by Toolbar sun/moon button. */
 :root {
   /* Surface */
   --spot-bg:        #0b0d11;
@@ -33,6 +34,43 @@
   --spot-inp:       #0e1118;
   --spot-inp-bd:    #2b3348;
   --spot-inp-foc:   #3b82f6;
+}
+
+/* ─── LIGHT theme overrides ─── (legacy spot_r1_5.jsx T.light) */
+html[data-theme="light"] {
+  /* Surface */
+  --spot-bg:        #f0f4f8;
+  --spot-bg2:       #ffffff;
+  --spot-bg3:       #f7f9fc;
+  --spot-card:      #ffffff;
+  --spot-line:      #e2e8f0;
+  --spot-border:    #cbd5e1;
+
+  /* Text */
+  --spot-text:      #0f172a;
+  --spot-text2:     #475569;
+  --spot-text3:     #94a3b8;
+
+  /* Accents */
+  --spot-accent:    #2563eb;
+  --spot-accent-soft: #dbeafe;
+  --spot-green:     #16a34a;
+  --spot-green-soft:#dcfce7;
+  --spot-green-bg:  #d1fae5;
+  --spot-warn:      #ca8a04;
+  --spot-warn-bg:   #fef9c3;
+  --spot-err:       #dc2626;
+  --spot-err-bg:    #fee2e2;
+  --spot-purple:    #9333ea;
+  --spot-purple-bg: #f3e8ff;
+  --spot-orange:    #d97706;
+  --spot-orange-bg: #ffedd5;
+  --spot-cyan:      #0891b2;
+
+  /* Inputs */
+  --spot-inp:       #ffffff;
+  --spot-inp-bd:    #cbd5e1;
+  --spot-inp-foc:   #2563eb;
 }
 
 html, body, #root { height: 100%; }
