@@ -90,11 +90,24 @@ function FreightPanel({ s }) {
           border: "1px solid var(--spot-accent)", borderRadius: 4 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-accent)",
             textTransform: "uppercase", letterSpacing: ".06em" }}>Item Freight</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>{s.quoteFOB === "Origin" ? "ORIG" : "DEST"}</span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: "var(--spot-accent)" }}
-              data-testid="freight-amount-display">{fmtMoney(s.freightCost || 0)}</span>
-          </div>
+          {(() => {
+            // Display freightCost × (1 + markup) per legacy convention. The
+            // underlying state.freightCost remains the RAW UTS cost so engine
+            // math (which applies markup itself) is unaffected.
+            const raw = Number(s.freightCost) || 0;
+            const mk  = Number(s.freightMarkup) || 0;
+            const display = raw * (1 + mk);
+            return (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>{s.quoteFOB === "Origin" ? "ORIG" : "DEST"}</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: "var(--spot-accent)" }}
+                  data-testid="freight-amount-display"
+                  title={mk > 0 ? `Raw ${fmtMoney(raw)} + ${(mk * 100).toFixed(0)}% markup` : undefined}>
+                  {fmtMoney(display)}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>

@@ -17,10 +17,11 @@ const COLS = [
   { k: "sheet",   lbl: "Sheet",    align: "right" },
   { k: "out",     lbl: "#Out",     align: "right" },
   { k: "route",   lbl: "Route",    align: "right" },
+  { k: "copy",    lbl: "",         align: "center", w: 36 },
 ];
 
 export default function QuoteTableSec({ results }) {
-  const { active, sec, toggleSec } = useQuote();
+  const { active, sec, toggleSec, pushToast } = useQuote();
   const s = active?.state || {};
   const rows = (results || []).filter((r) => Number(r.qty) > 0);
   const activeCount = rows.filter((r) => !r.error).length;
@@ -29,6 +30,27 @@ export default function QuoteTableSec({ results }) {
   const onPreview = () => window.dispatchEvent(new CustomEvent("spot:open-preview"));
   const onExport  = () => window.dispatchEvent(new CustomEvent("spot:export-csv"));
   const onPrint   = () => window.print();
+
+  // Copy a single row as tab-separated values for Excel paste. Mirrors legacy
+  // (spot_r1_5.jsx — per-row "Copy" button). Columns match the table headers.
+  const copyRow = async (r) => {
+    const sellEa = r.qty > 0 ? r.itemSell / r.qty : 0;
+    const cells = [
+      r.qty, sellEa.toFixed(2), (r.gmPct * 100).toFixed(1) + "%",
+      r.gmDollar.toFixed(2), r.itemSell.toFixed(2),
+      (r.sellMSF || 0).toFixed(2), (r.costMSF || 0).toFixed(2),
+      (r.freightLine || r.freightEmbed || 0).toFixed(2),
+      r.sheetW ? `${r.sheetW}x${r.sheetL}` : "",
+      r.pcsPerSheet || "", r.route || "",
+    ];
+    const tsv = cells.join("\t");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      pushToast(`Row Qty ${r.qty} copied`, "ok");
+    } catch (e) {
+      pushToast("Copy failed — clipboard blocked", "err");
+    }
+  };
 
   return (
     <Sec label="Quote Table" hue="#a855f7" open={sec.quoteTable} onToggle={() => toggleSec("quoteTable")}
@@ -116,6 +138,15 @@ export default function QuoteTableSec({ results }) {
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: routeColor(r.route), fontWeight: 600 }}>
                     {r.route || "—"}
                   </td>
+                  <td style={{ padding: "4px 4px", textAlign: "center" }}>
+                    <button data-testid={`qt-copy-row-${i}`} onClick={() => copyRow(r)}
+                      title="Copy row to clipboard (Excel-friendly)"
+                      style={{
+                        all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 700,
+                        padding: "2px 6px", borderRadius: 3,
+                        color: "var(--spot-accent)", border: "1px solid var(--spot-accent)",
+                      }}>Copy</button>
+                  </td>
                 </tr>
               );
             })}
@@ -123,22 +154,37 @@ export default function QuoteTableSec({ results }) {
         </table>
       </div>
 
-      {/* Order Total Breakdown for selected qty */}
+      {/* Order Total Breakdown for selected qty — legacy parity: left cluster
+          (QTY · Items · Freight · Die · Prepress) + right-justified Order Total. */}
       {rows.length > 0 && rows[s.selSlot || 0] && !rows[s.selSlot || 0].error && (
         <div data-testid="quote-order-total" style={{
-          borderTop: "1px solid var(--spot-line)", padding: "6px 0", marginTop: 4,
-          display: "flex", gap: 16, alignItems: "baseline", fontSize: 13, flexWrap: "wrap",
+          borderTop: "1px solid var(--spot-line)", padding: "8px 4px", marginTop: 4,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontSize: 13, gap: 24, flexWrap: "wrap",
         }}>
           {(() => {
             const r = rows[s.selSlot || 0];
-            const parts = [];
-            parts.push(<span key="q" style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-text3)", textTransform: "uppercase" }}>QTY {fmtInt(r.qty)} </span>);
-            parts.push(<span key="i"><span style={{ color: "var(--spot-text2)" }}>Item: </span><b>{fmtMoney(r.itemSell)}</b></span>);
-            if (r.freightLine > 0)  parts.push(<span key="f"><span style={{ color: "var(--spot-text2)" }}>Freight: </span><b>{fmtMoney(r.freightLine)}</b></span>);
-            if (r.dieLineCost > 0)  parts.push(<span key="d"><span style={{ color: "var(--spot-text2)" }}>Die: </span><b>{fmtMoney(r.dieLineCost)}</b></span>);
-            if (r.prepressLineCost > 0) parts.push(<span key="p"><span style={{ color: "var(--spot-text2)" }}>Prepress: </span><b>{fmtMoney(r.prepressLineCost)}</b></span>);
-            parts.push(<span key="ot" style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-accent)", marginLeft: "auto" }}>Order Total: {fmtMoney(r.sellTotal)}</span>);
-            return parts;
+            return (
+              <>
+                <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                    QTY {fmtInt(r.qty)}
+                  </span>
+                  <span><span style={{ color: "var(--spot-text2)" }}>Items: </span><b>{fmtMoney(r.itemSell)}</b></span>
+                  {r.freightLine > 0    && <span><span style={{ color: "var(--spot-text2)" }}>Freight: </span><b>{fmtMoney(r.freightLine)}</b></span>}
+                  {r.dieLineCost > 0    && <span><span style={{ color: "var(--spot-text2)" }}>Die: </span><b>{fmtMoney(r.dieLineCost)}</b></span>}
+                  {r.prepressLineCost > 0 && <span><span style={{ color: "var(--spot-text2)" }}>Prepress: </span><b>{fmtMoney(r.prepressLineCost)}</b></span>}
+                </div>
+                <div style={{
+                  fontSize: 13, fontWeight: 700, color: "var(--spot-accent)",
+                  padding: "4px 10px", borderRadius: 3,
+                  background: "var(--spot-accent-soft)", border: "1px solid var(--spot-accent)",
+                  whiteSpace: "nowrap",
+                }}>
+                  Order Total: <span data-testid="quote-order-total-amt" style={{ fontSize: 14 }}>{fmtMoney(r.sellTotal)}</span>
+                </div>
+              </>
+            );
           })()}
         </div>
       )}
