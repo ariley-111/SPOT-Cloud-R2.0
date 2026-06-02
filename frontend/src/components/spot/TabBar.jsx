@@ -52,17 +52,8 @@ export default function TabBar() {
           );
         })}
 
-        {/* Initials chip — sits LEFT of "+", carries the user's initials */}
-        {initials && (
-          <span data-testid="tab-initials-chip" style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            padding: "4px 8px", marginLeft: 6, fontSize: 11, fontWeight: 700,
-            color: "var(--spot-accent)", background: "var(--spot-accent-soft)",
-            border: "1px solid var(--spot-accent)", borderRadius: 4,
-            letterSpacing: ".05em", height: 22,
-          }} title="Your initials">{initials}</span>
-        )}
-
+        {/* "+" New Quote button (initials chip removed — already shown in toolbar
+            header next to customer/project name per user request 2026-06-02). */}
         <button onClick={newTab} data-testid="tab-add-btn" style={{
           all: "unset", cursor: "pointer", fontSize: 16, fontWeight: 700,
           padding: "0 12px", color: "var(--spot-green)", whiteSpace: "nowrap",
