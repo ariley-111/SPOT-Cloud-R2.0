@@ -2,14 +2,48 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
+import { createQuote } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
 
 /** Matches legacy SPOT top bar: cube logo + SPOT + version + Est#/Initials/Customer
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
 export default function Toolbar({ openModal }) {
   const { user, logout } = useAuth();
-  const { active } = useQuote();
+  const { active, pushToast } = useQuote();
   const s = active?.state || {};
+  const [saving, setSaving] = React.useState(false);
+  const fileCbRef = React.useRef(null);
+
+  const onSave = async () => {
+    if (!active) return;
+    if (saving) return;
+    if (!s.estNum && !s.custName && !s.itemDesc) {
+      pushToast("Add an estimate # or customer first", "warn");
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await createQuote({
+        est_num: s.estNum || `DRAFT-${Date.now()}`,
+        label: s.custRef || s.itemDesc || s.custName || "Untitled",
+        state: s,
+      });
+      pushToast(`Saved ${saved.est_num || s.estNum || "quote"}`, "ok");
+      // If "File" checkbox is checked, also download a .json snapshot
+      if (fileCbRef.current?.checked) {
+        const blob = new Blob([JSON.stringify({ est_num: saved.est_num, state: s }, null, 2)],
+          { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${(saved.est_num || s.estNum || "quote").replace(/[^A-Za-z0-9_.-]/g, "_")}.json`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 200);
+      }
+    } catch (e) {
+      pushToast(`Save failed — ${e?.response?.data?.detail || e.message}`, "err");
+    } finally { setSaving(false); }
+  };
 
   return (
     <div data-testid="spot-toolbar" style={{
@@ -48,12 +82,15 @@ export default function Toolbar({ openModal }) {
 
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <button data-testid="toolbar-undo" title="Undo (Ctrl+Z)" style={btn}>↩</button>
-        <button data-testid="toolbar-save" style={{ ...btn,
+        <button data-testid="toolbar-save" onClick={onSave} disabled={saving} style={{ ...btn,
           background: "var(--spot-green-soft)", color: "var(--spot-green)",
-          border: "1px solid var(--spot-green)" }}>Save</button>
+          border: "1px solid var(--spot-green)",
+          opacity: saving ? 0.6 : 1, cursor: saving ? "wait" : "pointer" }}>
+          {saving ? "Saving…" : "Save"}
+        </button>
         <label title="Also export .json on Save"
           style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11, color: "var(--spot-text3)" }}>
-          <input type="checkbox" data-testid="toolbar-file-checkbox" /> File
+          <input ref={fileCbRef} type="checkbox" data-testid="toolbar-file-checkbox" /> File
         </label>
         <button data-testid="toolbar-load" onClick={() => openModal("load")} style={btn}>Load</button>
         <span style={{ width: 1, height: 16, background: "var(--spot-border)" }} />

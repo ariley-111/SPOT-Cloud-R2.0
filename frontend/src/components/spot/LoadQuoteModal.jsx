@@ -5,7 +5,7 @@ import { listDrafts, listQuotes } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
 
 export default function LoadQuoteModal({ onClose }) {
-  const { loadDraftIntoActive } = useQuote();
+  const { replaceState, pushToast } = useQuote();
   const [tab, setTab] = useState("drafts");
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(true);
@@ -28,7 +28,8 @@ export default function LoadQuoteModal({ onClose }) {
   });
 
   const onPick = (it) => {
-    loadDraftIntoActive(it.state || {});
+    replaceState(it.state || {});
+    pushToast(`Loaded ${it.label || it.est_num || "draft"}`, "ok");
     onClose();
   };
 
