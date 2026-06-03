@@ -33,7 +33,7 @@ export default function RightDashboard() {
       <FreightPanel s={s} />
       <RouteComparison s={s} primary={primary} />
       <EconomicsPanel s={s} result={primary} aggregate={aggregate} isMultiPart={isMultiPart} activeItemIdx={activeItemIdx} />
-      <CostBuildup result={primary} />
+      <CostBuildup result={primary} isMultiPart={isMultiPart} aggregate={aggregate} />
       <BoardPanel result={primary} s={s} />
     </div>
   );
@@ -580,7 +580,7 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
   );
 }
 
-function CostBuildup({ result }) {
+function CostBuildup({ result, isMultiPart, aggregate }) {
   const [view, setView] = useState("summary"); // summary | detail
   if (!result || result.error) return null;
   const r = result;
@@ -668,20 +668,47 @@ function CostBuildup({ result }) {
         <Row label={<span>Sell/Pc <span style={{ color: "var(--spot-text3)" }}>{fmtInt(r.qty)} pcs</span></span>}
           value={fmtMoney(r.sellPc, 2)} />
 
-        {(r.freightLine > 0 || r.dieLineCost > 0 || r.prepressLineCost > 0) && (
-          <>
-            <SubHead label="One-Time Line Items" color="#3b82f6" />
-            {r.freightLine > 0 && (
-              <Row label={<span style={{ fontStyle: "italic" }}>Freight <span style={{ color: "var(--spot-text3)" }}>{fmtMoney(r.freightCost || 0)} + {(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup</span></span>}
-                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.freightLine)}</span>} />
-            )}
-            {r.dieLineCost > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
-              value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.dieLineCost)}</span>} />}
-            {r.prepressLineCost > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Prepress</span>}
-              value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.prepressLineCost)}</span>} />}
-            <RowTotal label="Quote Total" value={fmtMoney(r.sellTotal)} accent="var(--spot-purple)" />
-          </>
-        )}
+        {(() => {
+          // In MP mode, the One-Time Line Items section should reflect the
+          // JOB-LEVEL totals (matches Quote Table "Order Total"), not the
+          // active component's slice. r.freightLine on a component is its
+          // share; the aggregate row carries the full job freight.
+          const agg = isMultiPart ? (aggregate || {}) : null;
+          const freight = isMultiPart ? (agg.freightLine || 0) : (r.freightLine || 0);
+          const die = isMultiPart ? (agg.dieLineCost || 0) : (r.dieLineCost || 0);
+          const prepress = isMultiPart ? (agg.prepressLineCost || 0) : (r.prepressLineCost || 0);
+          // Job-level item sell = sum of all components' sell at this qty.
+          const itemsSell = isMultiPart
+            ? (agg.itemsSell != null ? agg.itemsSell : (agg.jobSell || 0) - freight - die - prepress)
+            : r.itemSell;
+          const grandTotal = isMultiPart
+            ? (agg.sellTotal || itemsSell + freight + die + prepress)
+            : r.sellTotal;
+          const hasAnyLine = freight > 0 || die > 0 || prepress > 0;
+          if (!hasAnyLine) return null;
+          const footerLabel = isMultiPart ? "Order Total" : "Quote Total";
+          const itemsLabel = isMultiPart ? "Items (all components)" : "Items";
+          return (
+            <>
+              <SubHead label="One-Time Line Items" color="#3b82f6" />
+              {isMultiPart && (
+                <Row label={<span style={{ color: "var(--spot-text3)" }}>{itemsLabel}</span>}
+                  value={<span style={{ color: "var(--spot-text3)" }}>{fmtMoney(itemsSell)}</span>} />
+              )}
+              {freight > 0 && (
+                <Row label={<span style={{ fontStyle: "italic" }}>Freight {!isMultiPart && (
+                  <span style={{ color: "var(--spot-text3)" }}>{fmtMoney(r.freightCost || 0)} + {(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup</span>
+                )}</span>}
+                  value={<span style={{ fontStyle: "italic" }}>{fmtMoney(freight)}</span>} />
+              )}
+              {die > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
+                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />}
+              {prepress > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Prepress</span>}
+                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />}
+              <RowTotal label={footerLabel} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
+            </>
+          );
+        })()}
       </div>
     </div>
   );

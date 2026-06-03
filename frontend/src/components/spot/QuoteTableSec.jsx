@@ -37,12 +37,19 @@ export default function QuoteTableSec({ results }) {
   const onExport  = () => window.dispatchEvent(new CustomEvent("spot:export-csv"));
   const onPrint   = () => window.print();
 
-  // Toggle a single qty slot's exclusion from PDF/Preview/Export (legacy "Act" checkbox)
+  // Toggle a single qty slot's exclusion from PDF/Preview/Export (legacy "Act" checkbox).
+  // If excluding the currently selected slot, move selection to the next active row.
   const toggleExclude = (slot) => {
-    const next = isExcluded(slot)
+    const currentlyExcluded = isExcluded(slot);
+    const next = currentlyExcluded
       ? excludeArr.filter((x) => x !== slot)
       : [...excludeArr, slot];
     setField("exportExclude", next);
+    // If we just excluded the currently-selected slot, jump to the first remaining active row.
+    if (!currentlyExcluded && slot === selSlot) {
+      const firstActive = rows.findIndex((_, i) => i !== slot && !next.includes(i));
+      if (firstActive >= 0) setField("selSlot", firstActive);
+    }
   };
   // Reset all exclusions (legacy "All Active" button)
   const allActive = () => {
@@ -235,12 +242,24 @@ export default function QuoteTableSec({ results }) {
         }}>
           {(() => {
             const r = rows[selSlot];
+            const selExcluded = isExcluded(selSlot);
             return (
               <>
                 <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
                     QTY {fmtInt(r.qty)}
                   </span>
+                  {selExcluded && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: "var(--spot-warn)",
+                      padding: "1px 6px", borderRadius: 3,
+                      background: "var(--spot-warn-soft, #f59e0b22)",
+                      border: "1px solid var(--spot-warn)",
+                      textTransform: "uppercase", letterSpacing: ".06em",
+                    }} data-testid="order-total-excluded-badge">
+                      Excluded from PDF
+                    </span>
+                  )}
                   <span><span style={{ color: "var(--spot-text2)" }}>Items: </span><b>{fmtMoney(r.itemSell)}</b></span>
                   {r.freightLine > 0    && <span><span style={{ color: "var(--spot-text2)" }}>Freight: </span><b>{fmtMoney(r.freightLine)}</b></span>}
                   {r.dieLineCost > 0    && <span><span style={{ color: "var(--spot-text2)" }}>Die: </span><b>{fmtMoney(r.dieLineCost)}</b></span>}

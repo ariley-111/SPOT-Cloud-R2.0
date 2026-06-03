@@ -370,8 +370,17 @@ async def calculate_multi_part(
         # ── Aggregate at job level ──────────────────────────────────────
         job_cost = sum(_safe_float(pc.get("totalMfg")) for pc in per_comp)
         job_sell_components = sum(_safe_float(pc.get("itemSell")) for pc in per_comp)
-        line_charges = sum(max(0.0, _safe_float(pc.get("sellTotal")) - _safe_float(pc.get("itemSell")))
-                           for pc in per_comp)
+        # Split line charges by type so the right-rail Cost Buildup can
+        # display Freight / Die / Prepress separately (matches Quote Table)
+        line_freight = sum(_safe_float(pc.get("freightLine")) for pc in per_comp
+                           if _safe_float(pc.get("freightLine")) > 0)
+        line_die = sum(_safe_float(pc.get("dieLineCost")) for pc in per_comp
+                       if _safe_float(pc.get("dieLineCost")) > 0)
+        line_prepress = sum(_safe_float(pc.get("prepressLineCost")) for pc in per_comp
+                            if _safe_float(pc.get("prepressLineCost")) > 0)
+        line_misc = sum(_safe_float(pc.get("miscLineCost")) for pc in per_comp
+                        if _safe_float(pc.get("miscLineCost")) > 0)
+        line_charges = line_freight + line_die + line_prepress + line_misc
         omsf_total = sum(_safe_float(pc.get("oMSF")) for pc in per_comp)
 
         if pricing_mode == "Matched Set" and set_margin_ovride:
@@ -400,7 +409,11 @@ async def calculate_multi_part(
             "oMSF": omsf_total,
             "sellMSF": (job_sell / omsf_total) if omsf_total > 0 else 0,
             "costMSF": (job_cost / omsf_total) if omsf_total > 0 else 0,
-            "freightLine": line_charges,
+            "freightLine": line_freight,
+            "dieLineCost": line_die,
+            "prepressLineCost": line_prepress,
+            "miscLineCost": line_misc,
+            "itemsSell": job_sell_components,
             "route": pricing_mode,
             "pricable": all(pc.get("pricable", True) for pc in per_comp) and job_sell > 0,
             "lineCharges": line_charges,
