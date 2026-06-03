@@ -159,6 +159,25 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Main-UI Board Engine section unchanged (still read-only documentation cards
   per user — "keep how legacy has it")
 
+### 2026-06-03 — MP-7 BOM Builder modal ✅
+- **10 built-in DISPLAY_TEMPLATES** ported verbatim from legacy
+  (Counter / Dump Bin / Endcap / Floor / FSDU / Pallet / PDQ / Power Wing /
+  Shipper / Weekender) — each with default qtys + per-component on/off + opt badge
+- **BOM Builder modal auto-opens** when user clicks "→ Multi-Part" toolbar button
+  (replaces the previous "just add blank Item 1" behavior — per legacy workflow)
+- **Templates tab + Manual tab** in modal: visual template cards or empty manual list
+- Each row inline-editable: MFG/PUR/FUL badge, on/off checkbox, desc, Cust ID,
+  type dropdown, pcs-per-set, up/down reorder, remove
+- **Default qtys footer** — auto-filled from template, editable per quote
+- **Save BOM** commits the active rows via `convertToMultiPart(draft, {defaultQtys})`,
+  which seeds each item's state with the current intake's common fields
+- **Edit in BOM Builder button** in BomSec strip — reopens the modal with current
+  items preloaded, lets user add/remove components from templates
+- Workflow now mirrors legacy: parser auto-detect path (MP-3) AND template/manual
+  path (MP-7) both arrive at the same per-component tabs (MP-1) + math (MP-2)
+- Note: cloud has no auto-apply on parser (always manual confirm in diff modal)
+  so the legacy 0.75/0.85 confidence threshold tuning is a no-op in cloud
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅

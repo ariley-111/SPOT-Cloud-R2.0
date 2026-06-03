@@ -528,6 +528,14 @@ export function BomSec() {
               border: "1px solid var(--spot-border)",
             }}>⎘ Duplicate</button>
           )}
+          <button onClick={() => window.dispatchEvent(new CustomEvent("spot:open-bom-builder"))}
+            data-testid="bom-edit-builder-btn" title="Reopen BOM Builder to add/edit components from templates"
+            style={{
+              all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+              padding: "5px 10px", borderRadius: 3,
+              background: "var(--spot-bg3)", color: "#3b82f6",
+              border: "1px solid #3b82f655",
+            }}>✎ Edit in BOM Builder</button>
         </div>
         <div style={{ fontSize: 10, color: "var(--spot-text3)", paddingLeft: 4 }}>
           Drag a component to reorder · Click a component tab to make it active · Edits to the

@@ -7,7 +7,7 @@ import ApiStatusPill from "./ApiStatusPill";
 
 /** Matches legacy SPOT top bar: cube logo + SPOT + version + Est#/Initials/Customer
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
-export default function Toolbar({ openModal, onOpenAdmin }) {
+export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const { user, logout } = useAuth();
   const { active, pushToast, convertToMultiPart, convertToSimple } = useQuote();
   const s = active?.state || {};
@@ -17,14 +17,16 @@ export default function Toolbar({ openModal, onOpenAdmin }) {
   const fileCbRef = React.useRef(null);
 
   const onToggleMP = () => {
-    if (isMP) {
+    if (isMP && itemCount >= 1) {
+      // Already MP with items — convert back to Simple (only allowed if 1 item)
       if (itemCount > 1) {
         pushToast("Cannot convert — remove extra components first", "warn");
         return;
       }
       convertToSimple();
     } else {
-      convertToMultiPart();
+      // Simple OR Multi-Part with 0 items: open BOM Builder (templates / manual)
+      if (onOpenBomBuilder) onOpenBomBuilder();
     }
   };
 

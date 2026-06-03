@@ -346,32 +346,55 @@ export function QuoteProvider({ children }) {
     }));
   }, [activeId]);
 
-  /** Convert the current Simple quote → Multi-Part by wrapping current state as Item 1. */
-  const convertToMultiPart = useCallback(() => {
+  /** Convert the current Simple quote → Multi-Part. If `bomDraft` is provided
+   *  (array of `{desc, type, pcsPerSet, custIdent?}`), the BOM is built from
+   *  the draft and the current intake becomes Item 1's state-template.
+   *  Otherwise the current Simple state becomes a single MFG item. */
+  const convertToMultiPart = useCallback((bomDraft = null, opts = {}) => {
     setTabs((cur) => cur.map((t) => {
       if (t.id !== activeId) return t;
-      if (t.state.quoteType === "Multi-Part") return t;
       const snap = gatherItemState(t.state);
-      const firstItem = makeBomItem({
-        desc: t.state.itemDesc || "Item 1",
-        type: "Manufactured",
-        pcsPerSet: 1,
-        custIdent: t.state.custIdent || "",
-        state: snap,
-      });
-      return {
-        ...t,
-        state: {
-          ...t.state,
-          quoteType: "Multi-Part",
-          pricingMode: "Matched Set",
-          bomItems: [firstItem],
-          activeItemIdx: 0,
-        },
-        updatedAt: Date.now(),
-      };
+      let items;
+      if (Array.isArray(bomDraft) && bomDraft.length > 0) {
+        // Build from BOM Builder draft — each row gets a fresh item state,
+        // seeded with shared common fields from the current intake so flute,
+        // grade, liners, etc. carry through as defaults the estimator can tweak.
+        const seed = {
+          flute: snap.flute, boardGrade: snap.boardGrade,
+          outsideLiner: snap.outsideLiner, insideLiner: snap.insideLiner, medium: snap.medium,
+          printReq: snap.printReq, printMode: snap.printMode, printSides: snap.printSides,
+          colorsFront: snap.colorsFront, colorsBack: snap.colorsBack, whiteInk: snap.whiteInk,
+          cadDifficulty: snap.cadDifficulty,
+          qtys: opts.defaultQtys || snap.qtys || ["", "", "", "", ""],
+        };
+        items = bomDraft.map((row, i) => makeBomItem({
+          desc: row.desc || `Item ${i + 1}`,
+          type: row.type || "Manufactured",
+          pcsPerSet: row.pcsPerSet || row.pcs || 1,
+          custIdent: row.custIdent || "",
+          state: freshItemState({ ...seed, itemDesc: row.desc || `Item ${i + 1}` }),
+        }));
+      } else {
+        // Convert existing Simple intake to Item 1
+        if (t.state.quoteType === "Multi-Part") return t;
+        items = [makeBomItem({
+          desc: t.state.itemDesc || "Item 1",
+          type: "Manufactured", pcsPerSet: 1,
+          custIdent: t.state.custIdent || "",
+          state: snap,
+        })];
+      }
+      const newState = applyItemStateTo(t.state, items[0].state);
+      newState.quoteType = "Multi-Part";
+      newState.pricingMode = t.state.pricingMode || "Matched Set";
+      newState.bomItems = items;
+      newState.activeItemIdx = 0;
+      newState.itemDesc = items[0].desc;
+      newState.custIdent = items[0].custIdent || "";
+      if (opts.defaultQtys) newState.qtys = opts.defaultQtys.slice(0, 5);
+      return { ...t, state: newState, updatedAt: Date.now() };
     }));
-    pushToast("Converted to Multi-Part", "ok");
+    pushToast(bomDraft ? `Built ${bomDraft.length} components` : "Converted to Multi-Part", "ok");
   }, [activeId, pushToast]);
 
   /** Convert Multi-Part → Simple. Only allowed if there's exactly one item.

@@ -15,6 +15,7 @@ import CostReportModal from "../components/spot/CostReportModal";
 import LoadQuoteModal from "../components/spot/LoadQuoteModal";
 import SheetLibraryModal from "../components/spot/SheetLibraryModal";
 import QuoteHeaderModal from "../components/spot/QuoteHeaderModal";
+import BomBuilderModal from "../components/spot/BomBuilderModal";
 import { useQuote } from "../context/QuoteContext";
 import { useEngine } from "../hooks/useEngine";
 
@@ -43,11 +44,14 @@ export default function SpotApp({ onOpenAdmin }) {
   useEffect(() => {
     const onPreview = () => setModal("preview");
     const onSheetLib = () => setModal("sheet-library");
+    const onBomBuilder = () => setModal("bom-builder");
     window.addEventListener("spot:open-preview", onPreview);
     window.addEventListener("spot:open-sheet-library", onSheetLib);
+    window.addEventListener("spot:open-bom-builder", onBomBuilder);
     return () => {
       window.removeEventListener("spot:open-preview", onPreview);
       window.removeEventListener("spot:open-sheet-library", onSheetLib);
+      window.removeEventListener("spot:open-bom-builder", onBomBuilder);
     };
   }, []);
 
@@ -56,7 +60,7 @@ export default function SpotApp({ onOpenAdmin }) {
       height: "100vh", display: "flex", flexDirection: "column",
       background: "var(--spot-bg)", overflow: "hidden",
     }}>
-      <Toolbar openModal={setModal} onOpenAdmin={onOpenAdmin} />
+      <Toolbar openModal={setModal} onOpenAdmin={onOpenAdmin} onOpenBomBuilder={() => setModal("bom-builder")} />
       <TabBar />
 
       {/* Main + Right rail */}
@@ -91,6 +95,7 @@ export default function SpotApp({ onOpenAdmin }) {
           onPick={({ w, l }) => {/* future: setField("overrideSheetId", `${w}x${l}`) */}}
         />
       )}
+      <BomBuilderModal open={modal === "bom-builder"} onClose={() => setModal(null)} />
 
       {/* Initials gate (first-launch popup) */}
       <InitialsGate />
