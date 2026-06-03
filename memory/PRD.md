@@ -91,6 +91,30 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - **MP-6** Per-component confidence ⚠ badges in parse-review modal, Spin-off
   action (↗ button → new Simple tab with carry-over identity)
 
+### 2026-06-03 — P1 Sprint: DB Split + Pricing Admin Console ✅
+- **DB Split**: Preview backend renamed to `DB_NAME=spot_preview` so testing
+  doesn't corrupt production data. Production still uses `spot_db` (user locks
+  this in Emergent deploy env-vars). Re-seeded `admin@` and `rwalter@` users.
+- **Pricing Admin Console** (P4 phase 1):
+  - 93 calibrated values editable across 4 categories: rates, GM tier curve,
+    sell tier curve, grade adders
+  - Per-row override + Reset-to-baseline + Reset-all (per-category + master)
+  - Append-only audit log retained forever (timestamp · action · category · key ·
+    before · after · baseline · user); filterable + paginated
+  - Calibration baseline tab — read-only D-110 FINAL metadata
+  - Defaults live in code (`engine/core.py`), overrides in MongoDB
+    (`rate_overrides`), engine sees mutations live via `_RATE_TO_ASMP` map
+    into `runner.py:ASMP_DEFAULTS`
+  - Verified end-to-end: override(incaRate=$1000) raises a 12×18 Inca quote at
+    1000pcs from $1,122.01 → $1,557.99 (+$435.98); reset restores to exact penny
+  - Admin-only route gating (testid `toolbar-admin`); estimator users see no
+    Admin button
+  - 20/20 backend pytest pass + Playwright UI walkthrough verified
+- Added `services/__init__.py` package
+- Routes: `/api/admin/rates` (GET/PUT/DELETE), `/api/admin/rates/reset-all`,
+  `/api/admin/rates/audit`, `/api/admin/rates/categories`,
+  `/api/admin/rates/calibration`
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅
@@ -108,13 +132,16 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 ## 8. Backlog (P1-P3)
 - ~~Multi-Part per-item state isolation~~ ✅ shipped 2026-06-03 (MP-1)
-- Separate `bom_items` MongoDB collection (currently lives in `quote_drafts.state` JSON blob) — enables cross-quote analytics
-- Separate Preview/Production database (`DB_NAME` split — preview/prod currently share)
-- Phase 4: Pricing Admin Console (D-110 rates, GM curve, audit log)
-- Phase 5: Entra SSO + SharePoint customer sync + PDF archive (blocked on IT)
-- Side-by-side last-accepted quote comparison in Preview modal
-- Quote analytics / win-loss reporting
-- ERP/Automator API integration
+- ~~Split Preview/Production database~~ ✅ shipped 2026-06-03 (DB rename)
+- ~~Phase 4: Pricing Admin Console~~ ✅ shipped 2026-06-03 (full 6-tab UI)
+- Separate `bom_items` MongoDB collection (currently lives in `quote_drafts.state` JSON blob) — enables cross-quote analytics — **P3**
+- Phase 5a: Entra SSO — **P2** (user owns this, working on it 2026-06-03 afternoon)
+- Phase 5b: SharePoint customer sync — **P2** (user owns this, working on it 2026-06-03 afternoon)
+- Phase 5c: SharePoint PDF archive (PDFs auto-saved on signed quotes) — **P2** (user owns)
+- Side-by-side last-accepted quote comparison in Preview modal — **P3**
+- Quote analytics / win-loss reporting — **P3**
+- ERP/Automator API integration — **P3**
+- Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3** (enhancement suggestion)
 
 ## 9. Deployment
 - Preview URL: `https://ai-connect-33.preview.emergentagent.com` (this dev sandbox)
