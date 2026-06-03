@@ -444,6 +444,34 @@ function CostBuildup({ result }) {
   const detail = view === "detail";
   const spoilSheets = Math.max(0, Math.round((r.matMakeready || 0) / Math.max(0.01, (r.boardEffRate || 1) * (r.boardOSqFt / 1000 || 0.001))));
 
+  // ─── Multi-Part empty state ──────────────────────────────────────────
+  // When the active BOM component lacks dims/specs, run_estimate returns
+  // no breakdown fields (matTotal, totalDirect, sheetW, etc). Show a
+  // helpful empty state rather than a wall of dashes.
+  const hasBreakdown = (r.matTotal != null && r.matTotal > 0) ||
+                       (r.totalDirect != null && r.totalDirect > 0) ||
+                       (r.sheetW && r.sheetL);
+  if (!hasBreakdown) {
+    return (
+      <div data-testid="cost-buildup-empty" style={panelStyle("#06b6d4")}>
+        <div style={panelHeader("#06b6d4")}><span>Cost Buildup</span></div>
+        <div style={{ padding: "14px 12px", fontSize: 11, color: "var(--spot-text3)",
+          lineHeight: 1.55 }}>
+          <div style={{ fontWeight: 700, color: "var(--spot-text2)", marginBottom: 4 }}>
+            No breakdown yet for the active component
+          </div>
+          This BOM component needs <b>One-Up Width / Length</b> and a <b>board spec</b>
+          (flute · grade · liners) before the engine can price the material, print, cutting,
+          and finishing detail.
+          <div style={{ marginTop: 8, padding: "5px 8px", background: "var(--spot-bg)",
+            borderRadius: 3, color: "var(--spot-text3)", fontSize: 10 }}>
+            Tip: pick the component tab above, then fill the Item Setup section.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div data-testid="cost-buildup" style={panelStyle("#06b6d4")}>
       <div style={panelHeader("#06b6d4")}>
@@ -525,6 +553,21 @@ function BoardPanel({ result, s }) {
   const mode = isStock ? "STOCK" : "ORDER";
   const sqFt = Math.round(r.boardOSqFt || (r.oMSF * 1000));
   const wastePct = r.wastePct || 0;
+  const hasBoard = !!(r.sheetW && r.sheetL && r.boardTotal > 0);
+
+  if (!hasBoard) {
+    return (
+      <div data-testid="board-panel-empty" style={panelStyle("#a855f7")}>
+        <div style={panelHeader("#a855f7")}>
+          <span>Board — no sheet selected</span>
+        </div>
+        <div style={{ padding: "10px 12px", fontSize: 11, color: "var(--spot-text3)" }}>
+          Fill the active component's <b>One-Up dims + board spec</b> for sheet picking and
+          board cost detail.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="board-panel" style={panelStyle("#a855f7")}>
