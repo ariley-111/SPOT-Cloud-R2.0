@@ -20,9 +20,11 @@ from routes import parser as parser_routes
 from routes import pdf as pdf_routes
 from routes import admin_rates as admin_rates_routes
 from routes import admin_integrations as admin_integrations_routes
+from routes import admin_sheets as admin_sheets_routes
 from routes.customers import ensure_customers_loaded
 from services.rate_overrides import load_overrides_from_db
 from services.integrations import load_integrations_from_db
+from services.sheet_library import load_sheets_from_db
 
 app = FastAPI(
     title="SPOT Cloud",
@@ -50,6 +52,7 @@ app.include_router(parser_routes.router)
 app.include_router(pdf_routes.router)
 app.include_router(admin_rates_routes.router)
 app.include_router(admin_integrations_routes.router)
+app.include_router(admin_sheets_routes.router)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -65,6 +68,8 @@ async def on_startup():
     logger.info(f"Rate overrides applied: {n}")
     ni = await load_integrations_from_db()
     logger.info(f"Integration overrides applied: {ni}")
+    ns = await load_sheets_from_db()
+    logger.info(f"Sheet library loaded: {ns}")
 
 
 @app.on_event("shutdown")

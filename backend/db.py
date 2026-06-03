@@ -26,3 +26,4 @@ COL_CALIBRATION_LOCK = "calibration_lock"
 COL_FILES = "fs.files"  # GridFS files collection
 COL_INTEGRATIONS = "integrations"      # Anthropic / UTS keys (masked, audit-logged)
 COL_PARSER_USAGE = "parser_usage"      # Per-parse-call usage log (tokens, $, customer)
+COL_SHEETS = "sheet_library"           # Admin-managed sheet adds / edits / disables

@@ -53,6 +53,26 @@ export const adminResetIntegration  = (key) =>
 export const adminGetUsage          = (params = {}) =>
   api.get("/admin/usage", { params }).then((r) => r.data);
 
+// ─── Sheet Library admin ───────────────────────────────────────────────
+export const adminGetSheets    = () => api.get("/admin/sheets").then((r) => r.data);
+export const adminAddSheet     = (body) => api.post("/admin/sheets", body).then((r) => r.data);
+export const adminEditSheet    = (id, body) =>
+  api.put(`/admin/sheets/${encodeURIComponent(id)}`, body).then((r) => r.data);
+export const adminDisableSheet = (id, reason) =>
+  api.delete(`/admin/sheets/${encodeURIComponent(id)}`,
+    { params: reason ? { reason } : {} }).then((r) => r.data);
+export const adminEnableSheet  = (id) =>
+  api.post(`/admin/sheets/${encodeURIComponent(id)}/enable`).then((r) => r.data);
+export const adminExportSheetsCsv = () =>
+  api.get("/admin/sheets/csv", { responseType: "text" }).then((r) => r.data);
+export const adminImportSheetsCsv = (file, reason) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (reason) fd.append("reason", reason);
+  return api.post("/admin/sheets/csv", fd,
+    { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+};
+
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 

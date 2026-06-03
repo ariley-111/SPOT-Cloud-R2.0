@@ -141,6 +141,24 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   `est_initials` form fields; frontend passes them automatically from active quote
 - New collections: `integrations` (key storage) + `parser_usage` (per-parse log)
 
+### 2026-06-03 — Sheet Library admin tab ✅
+- **Admin Console → Sheet Library tab** added (admin-only):
+  - All 216 baseline sheets visible with status pills (active / added / edited / disabled)
+  - Filters: active · user-added · disabled · all + search bar
+  - + Add Sheet form (flute, grade, liners, medium, w, l, reason)
+  - Disable / Enable (soft-delete — historical quotes still see disabled sheets)
+  - CSV Import (header: flute,grade,outsideLiner,insideLiner,medium,width,length;
+    legacy short names accepted)
+  - CSV Export — full library snapshot with status + audit metadata
+  - Every change audit-logged with timestamp · user · before/after · reason
+- Backend service `services/sheet_library.py` mutates `engine.core.APPROVED_SHEETS`
+  in place from DB on startup (idempotent); engine sees merged effective set
+- Soft-delete pattern: `disabled: True` flag instead of physical delete so
+  load of historical quotes still resolves the original sheet
+- IDs: baseline = `SH-001…SH-216`, user-added = `USR-0001+`
+- Main-UI Board Engine section unchanged (still read-only documentation cards
+  per user — "keep how legacy has it")
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅
@@ -159,15 +177,34 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 ## 8. Backlog (P1-P3)
 - ~~Multi-Part per-item state isolation~~ ✅ shipped 2026-06-03 (MP-1)
 - ~~Split Preview/Production database~~ ✅ shipped 2026-06-03 (DB rename)
-- ~~Phase 4: Pricing Admin Console~~ ✅ shipped 2026-06-03 (full 6-tab UI)
-- Separate `bom_items` MongoDB collection (currently lives in `quote_drafts.state` JSON blob) — enables cross-quote analytics — **P3**
-- Phase 5a: Entra SSO — **P2** (user owns this, working on it 2026-06-03 afternoon)
-- Phase 5b: SharePoint customer sync — **P2** (user owns this, working on it 2026-06-03 afternoon)
-- Phase 5c: SharePoint PDF archive (PDFs auto-saved on signed quotes) — **P2** (user owns)
+- ~~Phase 4: Pricing Admin Console~~ ✅ shipped 2026-06-03 (full 9-tab UI)
+- ~~Sheet Library admin editor~~ ✅ shipped 2026-06-03 (add / edit / disable / CSV)
+- **Approval-workflow governance layer** (P1 — high-value, deferred per user 2026-06-03):
+   * Multi-step approval for sheet additions AND rate/price changes
+   * Approver UI shows DIFF — old vs new in dollars AND % change
+   * "Pending changes" queue for added stocks needing approval
+   * Reason field required on every change (rate, sheet, integration)
+   * Approver-identity captured (who approved, when, what they saw)
+   * Executive read-only view: estimating manager, VP, CEO can browse:
+       - when pricing was updated · by whom · reason · who approved
+       - all sheet additions/removals with same trail
+       - all `base_matrix` cost-rate changes with $-delta and %-delta
+   * `price_history` ledger as a separate "executive ledger" view layered
+     on top of the existing audit_log
+- **Board Cost editor for `base_matrix`** (P1 — sister feature to above):
+   * Edit per-grade × per-tier $/MSF rates
+   * Bulk-% increase tool ("apply +5% to all 200# rates")
+   * CSV import/export of the cost matrix
+   * Used 3-4x/year for supplier-driven price-list updates
+- "Request New Sheet" estimator workflow (queue → admin approves → enters library) — **P2**
+- Separate `bom_items` MongoDB collection (currently in `quote_drafts.state` JSON blob) — **P3**
+- Phase 5a: Entra SSO — **P2** (user owns this, 2026-06-03 afternoon)
+- Phase 5b: SharePoint customer sync — **P2** (user owns this)
+- Phase 5c: SharePoint PDF archive — **P2** (user owns this)
 - Side-by-side last-accepted quote comparison in Preview modal — **P3**
 - Quote analytics / win-loss reporting — **P3**
 - ERP/Automator API integration — **P3**
-- Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3** (enhancement suggestion)
+- Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3**
 
 ## 9. Deployment
 - Preview URL: `https://ai-connect-33.preview.emergentagent.com` (this dev sandbox)

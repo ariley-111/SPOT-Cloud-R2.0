@@ -9,6 +9,8 @@ import {
   adminGetRates, adminGetCategories, adminGetCalibration,
   adminSetRate, adminResetRate, adminResetAll, adminGetAudit,
   adminGetIntegrations, adminSetIntegration, adminResetIntegration, adminGetUsage,
+  adminGetSheets, adminAddSheet, adminEditSheet, adminDisableSheet, adminEnableSheet,
+  adminExportSheetsCsv, adminImportSheetsCsv,
 } from "../api/spot";
 
 const TAB_LABELS = {
@@ -16,12 +18,14 @@ const TAB_LABELS = {
   gm_tier:      "GM Curve",
   sell_tier:    "Sell Curve",
   grade_adder:  "Grade Adders",
+  sheets:       "Sheet Library",
   integrations: "Integrations",
   usage:        "Usage",
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
-const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "integrations", "usage", "audit", "calibration"];
+const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "sheets",
+                   "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
   const { user } = useAuth();
@@ -147,6 +151,7 @@ export default function AdminPage({ onClose }) {
                 onResetAll={() => onResetAll(tab)}
               />
             )}
+            {tab === "sheets" && <SheetLibraryPanel />}
             {tab === "integrations" && <IntegrationsPanel />}
             {tab === "usage" && <UsagePanel />}
             {tab === "audit" && <AuditPanel />}
@@ -380,6 +385,310 @@ function actionLabel(t) {
   return t;
 }
 function fmtVal(v) { return v === null || v === undefined ? "—" : String(v); }
+
+// ─── Sheet Library panel ────────────────────────────────────────────────
+function SheetLibraryPanel() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [toast, setToast] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("active");  // "active" | "all" | "disabled" | "added"
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [showImport, setShowImport] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    try { setData(await adminGetSheets()); }
+    catch (e) { setToast(`✗ ${e?.response?.data?.detail || e.message}`); }
+    finally { setLoading(false); }
+  }, []);
+  React.useEffect(() => { reload(); }, [reload]);
+  const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+
+  const onDisable = async (id) => {
+    const reason = window.prompt(`Reason for disabling ${id}? (optional)`);
+    if (reason === null) return;
+    try { await adminDisableSheet(id, reason || undefined); await reload(); flash(`Disabled ${id}`); }
+    catch (e) { flash(`✗ ${e?.response?.data?.detail || e.message}`); }
+  };
+  const onEnable = async (id) => {
+    try { await adminEnableSheet(id); await reload(); flash(`Re-enabled ${id}`); }
+    catch (e) { flash(`✗ ${e?.response?.data?.detail || e.message}`); }
+  };
+  const onExport = async () => {
+    try {
+      const csv = await adminExportSheetsCsv();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "spot_sheet_library.csv"; a.click();
+      URL.revokeObjectURL(url);
+      flash("Exported sheet library CSV");
+    } catch (e) { flash(`✗ ${e.message}`); }
+  };
+
+  if (loading || !data) return <div style={{ color: "var(--spot-text3)" }}>Loading sheet library…</div>;
+  const counts = data.counts;
+  const rows = data.rows
+    .filter((r) => {
+      if (statusFilter === "active") return r.status === "active" || r.status === "added" || r.status === "edited";
+      if (statusFilter === "disabled") return r.status === "disabled";
+      if (statusFilter === "added") return r.status === "added" || r.status === "edited";
+      return true;  // "all"
+    })
+    .filter((r) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (`${r.f} ${r.g} ${r.ol} ${r.il} ${r.md} ${r.w}x${r.l} ${r.id}`).toLowerCase().includes(q);
+    });
+
+  return (
+    <div data-testid="sheets-panel">
+      {/* Header + counts */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>Approved Sheet Library</div>
+          <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+            {counts.active} active · {counts.added} user-added · {counts.disabled} disabled · {counts.baseline} baseline
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowAdd(true)} data-testid="sheets-add-btn"
+            style={{ ...btnStyle, background: "var(--spot-accent)", color: "#fff",
+              borderColor: "var(--spot-accent)" }}>+ Add Sheet</button>
+          <button onClick={() => setShowImport(true)} data-testid="sheets-import-btn" style={btnStyle}>Import CSV</button>
+          <button onClick={onExport} data-testid="sheets-export-btn" style={btnStyle}>Export CSV</button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by spec…"
+          data-testid="sheets-search"
+          style={{ flex: 1, padding: "5px 8px", fontSize: 12, background: "var(--spot-bg2)",
+            color: "var(--spot-text)", border: "1px solid var(--spot-border)", borderRadius: 3 }} />
+        {["active", "added", "disabled", "all"].map((s) => (
+          <button key={s} onClick={() => setStatusFilter(s)} data-testid={`sheets-filter-${s}`}
+            style={{ ...btnSmall,
+              background: statusFilter === s ? "var(--spot-accent)" : "var(--spot-bg3)",
+              color: statusFilter === s ? "#fff" : "var(--spot-text2)",
+              borderColor: statusFilter === s ? "var(--spot-accent)" : "var(--spot-border)" }}>
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }} data-testid="sheets-table">
+        <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
+          <th style={th}>ID</th>
+          <th style={th}>Flute</th>
+          <th style={th}>Grade</th>
+          <th style={th}>Out Liner</th>
+          <th style={th}>In Liner</th>
+          <th style={th}>Medium</th>
+          <th style={{ ...th, textAlign: "right" }}>W</th>
+          <th style={{ ...th, textAlign: "right" }}>L</th>
+          <th style={{ ...th, textAlign: "center" }}>Status</th>
+          <th style={th}>Updated by</th>
+          <th style={th}></th>
+        </tr></thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={11} style={{ ...td, color: "var(--spot-text3)", textAlign: "center", padding: 20 }}>
+              No sheets match filter
+            </td></tr>
+          ) : rows.map((r) => {
+            const isDisabled = r.status === "disabled";
+            return (
+              <tr key={r.id} style={{ borderBottom: "1px solid var(--spot-line)",
+                opacity: isDisabled ? 0.55 : 1 }} data-testid={`sheets-row-${r.id}`}>
+                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{r.id}</td>
+                <td style={td}>{r.f}</td>
+                <td style={td}>{r.g}</td>
+                <td style={td}>{r.ol}</td>
+                <td style={td}>{r.il}</td>
+                <td style={td}>{r.md}</td>
+                <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{r.w}</td>
+                <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{r.l}</td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <StatusPill status={r.status} />
+                </td>
+                <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>
+                  {r.updated_by ? <>{r.updated_by}<br/><span style={{ fontSize: 9 }}>{(r.updated_at || "").slice(0, 16)}</span></> : "—"}
+                </td>
+                <td style={{ ...td, whiteSpace: "nowrap", textAlign: "right" }}>
+                  {isDisabled ? (
+                    <button onClick={() => onEnable(r.id)} data-testid={`sheets-enable-${r.id}`}
+                      style={{ ...btnSmall, background: "var(--spot-green)", color: "#fff",
+                        borderColor: "var(--spot-green)" }}>Enable</button>
+                  ) : (
+                    <button onClick={() => onDisable(r.id)} data-testid={`sheets-disable-${r.id}`}
+                      style={{ ...btnSmall, color: "var(--spot-err)",
+                        borderColor: "var(--spot-err)" }}>Disable</button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {showAdd && <AddSheetModal onClose={() => setShowAdd(false)}
+        onSaved={(msg) => { setShowAdd(false); reload(); flash(msg); }} />}
+      {showImport && <ImportSheetsModal onClose={() => setShowImport(false)}
+        onSaved={(msg) => { setShowImport(false); reload(); flash(msg); }} />}
+
+      {toast && (
+        <div data-testid="sheets-toast" style={{
+          position: "fixed", bottom: 20, right: 20,
+          background: toast.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)",
+          color: "#fff", padding: "8px 14px", borderRadius: 5, fontSize: 12, fontWeight: 600,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+        }}>{toast}</div>
+      )}
+    </div>
+  );
+}
+
+function StatusPill({ status }) {
+  const styles = {
+    active:   { bg: "#22c55e22", fg: "#22c55e", border: "#22c55e66" },
+    added:    { bg: "#3b82f622", fg: "#3b82f6", border: "#3b82f666" },
+    edited:   { bg: "#f59e0b22", fg: "#f59e0b", border: "#f59e0b66" },
+    disabled: { bg: "#ef444422", fg: "#ef4444", border: "#ef444466" },
+  }[status] || { bg: "var(--spot-bg3)", fg: "var(--spot-text3)", border: "var(--spot-border)" };
+  return (
+    <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, fontWeight: 700,
+      background: styles.bg, color: styles.fg, border: `1px solid ${styles.border}` }}>
+      {status.toUpperCase()}
+    </span>
+  );
+}
+
+function AddSheetModal({ onClose, onSaved }) {
+  const [form, setForm] = React.useState({
+    flute: "C", grade: "200", outsideLiner: "42# Kemi-Lite",
+    insideLiner: "None", medium: "None", width: "", length: "", reason: "",
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const submit = async () => {
+    try {
+      await adminAddSheet({
+        ...form, width: parseFloat(form.width), length: parseFloat(form.length),
+      });
+      onSaved(`Added sheet`);
+    } catch (e) { alert(e?.response?.data?.detail || e.message); }
+  };
+  return (
+    <ModalShell title="Add Sheet to Library" onClose={onClose} testid="add-sheet-modal">
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 12px", fontSize: 12 }}>
+        {[
+          ["Flute",         "flute"],
+          ["Grade",         "grade"],
+          ["Outside Liner", "outsideLiner"],
+          ["Inside Liner",  "insideLiner"],
+          ["Medium",        "medium"],
+          ["Width (in)",    "width"],
+          ["Length (in)",   "length"],
+          ["Reason",        "reason"],
+        ].map(([label, k]) => (
+          <React.Fragment key={k}>
+            <span style={{ color: "var(--spot-text3)" }}>{label}</span>
+            <input value={form[k]} onChange={(e) => set(k, e.target.value)}
+              data-testid={`add-sheet-${k}`}
+              type={(k === "width" || k === "length") ? "number" : "text"}
+              step="0.01"
+              style={{ padding: "5px 8px", fontSize: 12, background: "var(--spot-bg2)",
+                color: "var(--spot-text)", border: "1px solid var(--spot-border)",
+                borderRadius: 3, fontFamily: (k === "width" || k === "length") ? "'JetBrains Mono', monospace" : "inherit" }} />
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+        <button onClick={onClose} style={btnStyle}>Cancel</button>
+        <button onClick={submit} data-testid="add-sheet-submit"
+          style={{ ...btnStyle, background: "var(--spot-accent)", color: "#fff",
+            borderColor: "var(--spot-accent)" }}>Add Sheet</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ImportSheetsModal({ onClose, onSaved }) {
+  const [file, setFile] = React.useState(null);
+  const [reason, setReason] = React.useState("");
+  const [result, setResult] = React.useState(null);
+  const submit = async () => {
+    if (!file) return;
+    try {
+      const r = await adminImportSheetsCsv(file, reason || undefined);
+      setResult(r);
+      if (!r.errors.length) onSaved(`Imported ${r.added_count} sheets`);
+    } catch (e) { alert(e?.response?.data?.detail || e.message); }
+  };
+  return (
+    <ModalShell title="Import Sheets CSV" onClose={onClose} testid="import-sheets-modal">
+      <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 10, lineHeight: 1.5 }}>
+        CSV columns (header required): <code>flute, grade, outsideLiner, insideLiner, medium, width, length</code>.
+        Legacy short names (f, g, ol, il, md, w, l) are also accepted.
+        Each row becomes a new <b>USR-</b> sheet — no duplicate-detection. Audit-logged.
+      </div>
+      <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0])}
+        data-testid="import-sheets-file"
+        style={{ marginBottom: 10, fontSize: 12 }} />
+      <input value={reason} onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (audit log)" data-testid="import-sheets-reason"
+        style={{ width: "100%", padding: "5px 8px", fontSize: 12,
+          background: "var(--spot-bg2)", color: "var(--spot-text)",
+          border: "1px solid var(--spot-border)", borderRadius: 3, marginBottom: 12 }} />
+      {result && (
+        <div style={{ background: "var(--spot-bg2)", padding: 8, borderRadius: 4, fontSize: 11,
+          maxHeight: 200, overflow: "auto", marginBottom: 12 }}>
+          Added: {result.added_count}.{" "}
+          {result.errors.length > 0 && (
+            <span style={{ color: "var(--spot-err)" }}>{result.errors.length} errors:
+              <ul style={{ margin: "4px 0 0 16px" }}>
+                {result.errors.slice(0, 10).map((e, i) =>
+                  <li key={i}>Row {e.row}: {e.error}</li>
+                )}
+              </ul>
+            </span>
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button onClick={onClose} style={btnStyle}>Close</button>
+        <button onClick={submit} disabled={!file} data-testid="import-sheets-submit"
+          style={{ ...btnStyle, background: file ? "var(--spot-accent)" : "var(--spot-bg3)",
+            color: file ? "#fff" : "var(--spot-text3)",
+            borderColor: file ? "var(--spot-accent)" : "var(--spot-border)",
+            cursor: file ? "pointer" : "not-allowed" }}>Import</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ModalShell({ title, children, onClose, testid }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 11000,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }} data-testid={testid}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--spot-bg)", border: "1px solid var(--spot-border)",
+        borderRadius: 8, padding: 20, minWidth: 420, maxWidth: 600,
+        boxShadow: "0 8px 28px rgba(0,0,0,0.4)",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>{title}</div>
+          <button onClick={onClose} style={{ all: "unset", cursor: "pointer", fontSize: 18, color: "var(--spot-text3)" }}>×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 // ─── Integrations panel (Anthropic, UTS) ────────────────────────────────
 function IntegrationsPanel() {
