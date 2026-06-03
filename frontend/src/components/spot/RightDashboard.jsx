@@ -524,7 +524,8 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                 const dieSep = !!r.dieSep && (r.dieLineCost || 0) > 0;
                 const freightSep = !!r.freightSep && (r.freightLine || 0) > 0;
                 const prepressSep = !!r.prepressSep && (r.prepressLineCost || 0) > 0;
-                const hasAnyLine = dieSep || freightSep || prepressSep;
+                const miscSep = (r.miscLineCost || 0) > 0;
+                const hasAnyLine = dieSep || freightSep || prepressSep || miscSep;
                 if (!hasAnyLine) {
                   return (
                     <div style={{ marginTop: 4, fontSize: 11, color: "var(--spot-text3)" }}>
@@ -538,6 +539,7 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                     {freightSep && <span>Freight: {fmtMoney(r.freightLine)}</span>}
                     {dieSep && <span>Die: {fmtMoney(r.dieLineCost)}</span>}
                     {prepressSep && <span>Prepress: {fmtMoney(r.prepressLineCost)}</span>}
+                    {miscSep && <span>Misc: {fmtMoney(r.miscLineCost)}</span>}
                     <span style={{ fontWeight: 700, color: "var(--spot-accent)", fontStyle: "normal" }}>
                       Order: {fmtMoney(r.sellTotal)}
                     </span>
@@ -677,14 +679,15 @@ function CostBuildup({ result, isMultiPart, aggregate }) {
           const freight = isMultiPart ? (agg.freightLine || 0) : (r.freightLine || 0);
           const die = isMultiPart ? (agg.dieLineCost || 0) : (r.dieLineCost || 0);
           const prepress = isMultiPart ? (agg.prepressLineCost || 0) : (r.prepressLineCost || 0);
+          const misc = isMultiPart ? (agg.miscLineCost || 0) : (r.miscLineCost || 0);
           // Job-level item sell = sum of all components' sell at this qty.
           const itemsSell = isMultiPart
-            ? (agg.itemsSell != null ? agg.itemsSell : (agg.jobSell || 0) - freight - die - prepress)
+            ? (agg.itemsSell != null ? agg.itemsSell : (agg.jobSell || 0) - freight - die - prepress - misc)
             : r.itemSell;
           const grandTotal = isMultiPart
-            ? (agg.sellTotal || itemsSell + freight + die + prepress)
+            ? (agg.sellTotal || itemsSell + freight + die + prepress + misc)
             : r.sellTotal;
-          const hasAnyLine = freight > 0 || die > 0 || prepress > 0;
+          const hasAnyLine = freight > 0 || die > 0 || prepress > 0 || misc > 0;
           if (!hasAnyLine) return null;
           const footerLabel = isMultiPart ? "Order Total" : "Quote Total";
           const itemsLabel = isMultiPart ? "Items (all components)" : "Items";
@@ -705,6 +708,8 @@ function CostBuildup({ result, isMultiPart, aggregate }) {
                 value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />}
               {prepress > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Prepress</span>}
                 value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />}
+              {misc > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Misc Charges</span>}
+                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(misc)}</span>} />}
               <RowTotal label={footerLabel} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
             </>
           );

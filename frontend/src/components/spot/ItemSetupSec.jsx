@@ -579,6 +579,34 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
         color: "var(--spot-accent)", padding: "3px 0",
       }}>+ Charge</button>
+
+      {/* AMORT method — only visible when ANY per-item cost is being amortized.
+          Mirrors legacy spot_r1_5.jsx L6077. The same toggle drives die / prepress / misc
+          amort math via prod.dieAmortMethod ("Markup" or "OrderMargin"). */}
+      {(() => {
+        const anyAmort = s.dieTreatment === "Amortize"
+          || (s.printReq === "Yes" && s.prepressTreatment === "Amortize")
+          || (s.miscCharges || []).some((c) => c.treatment === "Amortize")
+          || (s.freightTreatment === "Amortize");
+        if (!anyAmort) return null;
+        return (
+          <div style={{
+            paddingTop: 4, marginTop: 4, borderTop: "1px solid var(--spot-border)",
+            display: "flex", gap: 4, alignItems: "center",
+          }} data-testid="amort-method-row">
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+              textTransform: "uppercase", letterSpacing: ".06em" }}>AMORT</span>
+            <Tile label="Markup"
+              active={(s.dieAmortMethod || "Markup") === "Markup"}
+              onClick={() => setField("dieAmortMethod", "Markup")}
+              small data-testid="tile-amort-markup" />
+            <Tile label="Order GM%"
+              active={s.dieAmortMethod === "OrderMargin"}
+              onClick={() => setField("dieAmortMethod", "OrderMargin")}
+              small data-testid="tile-amort-ordermargin" />
+          </div>
+        );
+      })()}
     </div>
   );
 }
