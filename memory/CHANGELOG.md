@@ -90,3 +90,13 @@ multi-part component appeared to "ignore" the chosen sheet.
 - Curl: 2-item MP with override on item B only → A auto-picks, B respects
   override, each component independent
 
+### Follow-up fix (same day)
+Right Dashboard panels (Board, Cost Buildup, Economics) showed "no sheet
+selected" / "no breakdown" in Multi-Part mode even when the engine clearly
+picked a sheet for the active component. `RightDashboard` was calling
+`useEngine` and using `results[selSlot]` directly — which in MP mode is the
+aggregated job row (no `sheetW`/`boardTotal`/`matTotal`). `SpotApp.jsx`
+already branched to `perComponent[selSlot].items[activeItemIdx]` for the
+main column; RightDashboard now mirrors that exact branching.
+
+

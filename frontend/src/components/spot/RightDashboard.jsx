@@ -10,8 +10,18 @@ import ProgressModal from "./ProgressModal";
 export default function RightDashboard() {
   const { active } = useQuote();
   const s = active?.state || {};
-  const { results } = useEngine(s);
-  const primary = results[s.selSlot || 0] || results[0];
+  const { results, perComponent, isMultiPart } = useEngine(s);
+  const selSlot = s.selSlot || 0;
+  const activeItemIdx = s.activeItemIdx ?? 0;
+  const aggregate = results[selSlot] || results[0];
+  // In Multi-Part mode the right rail must show the ACTIVE component's row
+  // (sheet, board, cost buildup, economics) — not the aggregated job row,
+  // which only carries job-level totals (no sheetW/boardTotal/matTotal).
+  // Matches the same branching SpotApp does for the main column.
+  const itemResult = isMultiPart
+    ? ((perComponent.find((p) => p.slot === selSlot) || perComponent[0])?.items?.[activeItemIdx] || null)
+    : null;
+  const primary = isMultiPart ? (itemResult || aggregate) : aggregate;
 
   return (
     <div data-testid="right-dashboard" style={{
