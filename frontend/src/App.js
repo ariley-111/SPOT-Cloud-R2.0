@@ -5,9 +5,11 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { QuoteProvider } from "./context/QuoteContext";
 import LoginPage from "./pages/LoginPage";
 import SpotApp from "./pages/SpotApp";
+import AdminPage from "./pages/AdminPage";
 
 function Shell() {
   const { user, ready } = useAuth();
+  const [view, setView] = React.useState("spot");  // "spot" | "admin"
   React.useEffect(() => { document.body.classList.add("spot-app-body"); }, []);
   if (!ready) {
     return (
@@ -20,7 +22,8 @@ function Shell() {
   if (!user) return <LoginPage />;
   return (
     <QuoteProvider>
-      <SpotApp />
+      <SpotApp onOpenAdmin={() => setView("admin")} />
+      {view === "admin" && <AdminPage onClose={() => setView("spot")} />}
     </QuoteProvider>
   );
 }

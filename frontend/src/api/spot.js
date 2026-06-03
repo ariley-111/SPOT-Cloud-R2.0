@@ -31,6 +31,19 @@ export const calculateAll = (payload) =>
 export const calculateMultiPart = (payload) =>
   api.post("/engine/calculate-multi-part", payload).then((r) => r.data);
 
+// ─── Pricing Admin Console (admin only) ────────────────────────────────
+export const adminGetRates       = () => api.get("/admin/rates").then((r) => r.data);
+export const adminGetCategories  = () => api.get("/admin/rates/categories").then((r) => r.data);
+export const adminGetCalibration = () => api.get("/admin/rates/calibration").then((r) => r.data);
+export const adminSetRate        = (cat, key, value) =>
+  api.put(`/admin/rates/${cat}/${encodeURIComponent(key)}`, { value }).then((r) => r.data);
+export const adminResetRate      = (cat, key) =>
+  api.delete(`/admin/rates/${cat}/${encodeURIComponent(key)}`).then((r) => r.data);
+export const adminResetAll       = (category) =>
+  api.post(`/admin/rates/reset-all${category ? `?category=${category}` : ""}`).then((r) => r.data);
+export const adminGetAudit       = (params = {}) =>
+  api.get("/admin/rates/audit", { params }).then((r) => r.data);
+
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 

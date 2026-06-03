@@ -7,7 +7,7 @@ import ApiStatusPill from "./ApiStatusPill";
 
 /** Matches legacy SPOT top bar: cube logo + SPOT + version + Est#/Initials/Customer
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
-export default function Toolbar({ openModal }) {
+export default function Toolbar({ openModal, onOpenAdmin }) {
   const { user, logout } = useAuth();
   const { active, pushToast, convertToMultiPart, convertToSimple } = useQuote();
   const s = active?.state || {};
@@ -143,6 +143,11 @@ export default function Toolbar({ openModal }) {
           border: "1px solid var(--spot-purple)" }}>Cost Report</button>
         <span style={{ width: 1, height: 16, background: "var(--spot-border)" }} />
         <span style={{ fontSize: 10, color: "var(--spot-text3)" }} data-testid="toolbar-user-email">{user?.email}</span>
+        {user?.role === "admin" && onOpenAdmin && (
+          <button onClick={onOpenAdmin} data-testid="toolbar-admin" title="Pricing Admin Console"
+            style={{ ...btn, background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
+              border: "1px solid var(--spot-purple)" }}>Admin</button>
+        )}
         <button onClick={logout} title="Sign out" data-testid="toolbar-logout" style={btn}>⎋</button>
       </div>
     </div>

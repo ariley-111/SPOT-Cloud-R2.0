@@ -18,7 +18,7 @@ import QuoteHeaderModal from "../components/spot/QuoteHeaderModal";
 import { useQuote } from "../context/QuoteContext";
 import { useEngine } from "../hooks/useEngine";
 
-export default function SpotApp() {
+export default function SpotApp({ onOpenAdmin }) {
   const { active, toasts } = useQuote();
   const [modal, setModal] = useState(null);
   const { results, perComponent, meta, isMultiPart } = useEngine(active?.state);
@@ -56,7 +56,7 @@ export default function SpotApp() {
       height: "100vh", display: "flex", flexDirection: "column",
       background: "var(--spot-bg)", overflow: "hidden",
     }}>
-      <Toolbar openModal={setModal} />
+      <Toolbar openModal={setModal} onOpenAdmin={onOpenAdmin} />
       <TabBar />
 
       {/* Main + Right rail */}

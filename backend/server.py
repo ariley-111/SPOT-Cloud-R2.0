@@ -18,7 +18,9 @@ from routes import quotes as quotes_routes
 from routes import freight as freight_routes
 from routes import parser as parser_routes
 from routes import pdf as pdf_routes
+from routes import admin_rates as admin_rates_routes
 from routes.customers import ensure_customers_loaded
+from services.rate_overrides import load_overrides_from_db
 
 app = FastAPI(
     title="SPOT Cloud",
@@ -44,6 +46,7 @@ app.include_router(quotes_routes.quotes_router)
 app.include_router(freight_routes.router)
 app.include_router(parser_routes.router)
 app.include_router(pdf_routes.router)
+app.include_router(admin_rates_routes.router)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -55,6 +58,8 @@ async def on_startup():
     logger.info("SPOT Cloud starting — Phase 2 (Backend APIs)")
     await ensure_customers_loaded()
     logger.info("Customer list loaded")
+    n = await load_overrides_from_db()
+    logger.info(f"Rate overrides applied: {n}")
 
 
 @app.on_event("shutdown")

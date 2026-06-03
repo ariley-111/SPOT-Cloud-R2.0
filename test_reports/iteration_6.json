@@ -1,0 +1,26 @@
+{
+  "summary": "P1-A (DB split → spot_preview) and P1-B (Pricing Admin Console) both verified end-to-end. 20/20 backend pytest pass; full Playwright UI walkthrough passes (login gate, all 6 tabs, edit/save/reset/reset-all, audit, calibration, persistence across reload, back-to-SPOT).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_admin_rates.py",
+    "/app/test_reports/pytest/admin_rates.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GOOD: services/rate_overrides.py correctly mirrors RATE mutations into engine/runner.py ASMP_DEFAULTS via _RATE_TO_ASMP — without this, engine math would silently ignore admin overrides. Verified live: setting incaRate=1000 changed /api/engine/calculate-all output vs baseline.",
+    "GOOD: _BASELINE and _ASMP_BASELINE captured at module import via dict()/deepcopy give a true source-of-truth for reset, even after live dicts are mutated.",
+    "GOOD: Audit log filters work (category=rate scopes correctly, including 'ALL' reset-all docs; key=incaRate narrows further). Pagination prev/next testids present.",
+    "MINOR: review-request prompt referenced GET /api/quotes/drafts but the router is mounted at /api/drafts (quotes router uses /api/quotes/{id} as a catch-all and returned 404 'Quote not found' for the /drafts path — easy to confuse during debugging). Not a bug, just a documentation note.",
+    "MINOR (non-blocking): /api/admin/rates/reset-all currently logs ONE reset_all audit doc PLUS one rate_override_reset doc per key. That is the correct trail, but consider whether you want the per-key resets tagged with a 'batch_id' to make 'all resets from this reset-all' filterable as a unit."
+  ],
+  "updated_files": ["/app/backend/tests/test_admin_rates.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% (every test ID verified, all 6 tabs working, persistence + role gate + back nav all working)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (admin); rwalter@standardprinting.com / spot-rich-2026 (estimator) — both working from /app/memory/test_credentials.md",
+  "seed_data_creation": "Tests autouse a fixture that calls POST /api/admin/rates/reset-all after each test to keep MongoDB clean. No persistent seed data created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full P1 pass complete. Backend test file at /app/backend/tests/test_admin_rates.py covers DB split (drafts/customers/auth.me), role gate (estimator 403, admin 200), CRUD across all 4 categories, invalid-input rejection (gm_tier='abc' → 400), audit log (set/reset/filter-by-cat/filter-by-key/pagination), reset-all, and override→engine integration (calculate-all output changes when incaRate is overridden). Frontend covered via Playwright: 6 tabs (admin-tab-{rate,gm_tier,sell_tier,grade_adder,audit,calibration}), input/save/reset testids, toast text, override count in header, reset-all confirm dialog (Playwright dialog handler auto-accepts), persistence across page reload (incaRate=888 stayed after F5), back-to-SPOT returns to SpotApp.",
+  "verified_engine_integration": "POST /api/engine/calculate-all returns different result before vs after PUT /api/admin/rates/rate/incaRate with value=1000, confirming _RATE_TO_ASMP key mirror is active. Engine fix described in agent-to-agent note is working as designed.",
+  "rca of the issue": "N/A — no issues found. The originally-feared 'rate mutations don't propagate to engine' bug is correctly prevented by _RATE_TO_ASMP mirror in services/rate_overrides.py."
+}
