@@ -21,10 +21,13 @@ const COLS = [
 ];
 
 export default function QuoteTableSec({ results }) {
-  const { active, sec, toggleSec, pushToast } = useQuote();
+  const { active, sec, toggleSec, setField, pushToast } = useQuote();
   const s = active?.state || {};
   const rows = (results || []).filter((r) => Number(r.qty) > 0);
-  const activeCount = rows.filter((r) => !r.error).length;
+  const selSlot = Math.min(s.selSlot ?? 0, Math.max(0, rows.length - 1));
+  const excludeArr = Array.isArray(s.exportExclude) ? s.exportExclude : [];
+  const isExcluded = (slot) => excludeArr.includes(slot);
+  const activeCount = rows.filter((r, i) => !r.error && !isExcluded(i)).length;
   const total = rows.length;
   const isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
   const pricingMode = s.pricingMode || "Matched Set";
@@ -33,6 +36,22 @@ export default function QuoteTableSec({ results }) {
   const onPreview = () => window.dispatchEvent(new CustomEvent("spot:open-preview"));
   const onExport  = () => window.dispatchEvent(new CustomEvent("spot:export-csv"));
   const onPrint   = () => window.print();
+
+  // Toggle a single qty slot's exclusion from PDF/Preview/Export (legacy "Act" checkbox)
+  const toggleExclude = (slot) => {
+    const next = isExcluded(slot)
+      ? excludeArr.filter((x) => x !== slot)
+      : [...excludeArr, slot];
+    setField("exportExclude", next);
+  };
+  // Reset all exclusions (legacy "All Active" button)
+  const allActive = () => {
+    setField("exportExclude", []);
+    pushToast("All quantity rows marked active", "ok");
+  };
+  // Click row to make it the selected slot (drives Per-Component, Order Total,
+  // Economics, Cost Buildup, Board, Route Comparison — same as legacy).
+  const selectRow = (i) => setField("selSlot", i);
 
   // Copy a single row as tab-separated values for Excel paste. Mirrors legacy
   // (spot_r1_5.jsx — per-row "Copy" button). Columns match the table headers.
@@ -86,7 +105,7 @@ export default function QuoteTableSec({ results }) {
 
       {/* Toolbar row */}
       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-        <button data-testid="qt-all-active" style={tbtn}>All Active</button>
+        <button data-testid="qt-all-active" onClick={allActive} style={tbtn}>All Active</button>
         <span style={{ fontSize: 12, color: "var(--spot-text2)" }}>{activeCount} of {total} active</span>
         <span style={{ fontSize: 12, color: "var(--spot-text2)", display: "flex", gap: 8, alignItems: "center" }}>
           <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: "#22c55e", marginRight: 4 }} />Stock</span>
@@ -134,16 +153,40 @@ export default function QuoteTableSec({ results }) {
               const dot = r._pipeline?.stockMode ? "#22c55e" :
                           r._pipeline?.customOrder ? "#3b82f6" :
                           r._pipeline?.belowMin ? "#f59e0b" : "var(--spot-text3)";
+              const isSel = i === selSlot;
+              const excl = isExcluded(i);
+              const rowTint = r._pipeline?.stockMode ? "#22c55e10" :
+                              r._pipeline?.customOrder ? "#3b82f610" :
+                              r._pipeline?.belowMin ? "#f59e0b14" : "transparent";
               return (
-                <tr key={i} data-testid={`qt-row-${i}`} style={{ borderBottom: "1px solid var(--spot-line)" }}>
-                  <td style={{ padding: "4px 3px", textAlign: "center" }}>
-                    <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: 3,
-                      border: "2px solid var(--spot-accent)", background: "var(--spot-accent)",
-                      color: "#fff", fontSize: 11, lineHeight: "14px", textAlign: "center" }}>✓</span>
+                <tr key={i} data-testid={`qt-row-${i}`}
+                  onClick={() => selectRow(i)}
+                  style={{
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--spot-line)",
+                    background: isSel ? "var(--spot-accent-soft)" : rowTint,
+                    opacity: excl ? 0.45 : 1,
+                  }}>
+                  <td style={{ padding: "4px 3px", textAlign: "center" }}
+                    onClick={(e) => { e.stopPropagation(); toggleExclude(i); }}>
+                    <span data-testid={`qt-act-${i}`}
+                      style={{
+                        display: "inline-block", width: 14, height: 14, borderRadius: 3,
+                        border: `2px solid ${excl ? "var(--spot-text3)" : "var(--spot-accent)"}`,
+                        background: excl ? "transparent" : "var(--spot-accent)",
+                        color: "#fff", fontSize: 11, lineHeight: "10px", textAlign: "center",
+                        cursor: "pointer", userSelect: "none",
+                      }}>{excl ? "" : "✓"}</span>
                   </td>
-                  <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 600 }}>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: isSel ? 700 : 600 }}>
                     <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, background: dot, marginRight: 4 }} />
                     {fmtInt(r.qty)}
+                    {isSel && (
+                      <span style={{
+                        marginLeft: 4, fontSize: 9, fontWeight: 700, padding: "1px 4px",
+                        borderRadius: 2, background: "var(--spot-accent)", color: "#fff",
+                      }}>SEL</span>
+                    )}
                   </td>
                   <td style={{ padding: "4px 6px", textAlign: "right", color: r.forcedPrice ? "#a855f7" : "var(--spot-text)" }}>
                     {fmtMoney(r.qty > 0 ? r.itemSell / r.qty : 0, 2)}
@@ -165,7 +208,8 @@ export default function QuoteTableSec({ results }) {
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: routeColor(r.route), fontWeight: 600 }}>
                     {r.route || "—"}
                   </td>
-                  <td style={{ padding: "4px 4px", textAlign: "center" }}>
+                  <td style={{ padding: "4px 4px", textAlign: "center" }}
+                    onClick={(e) => e.stopPropagation()}>
                     <button data-testid={`qt-copy-row-${i}`} onClick={() => copyRow(r)}
                       title="Copy row to clipboard (Excel-friendly)"
                       style={{
@@ -183,14 +227,14 @@ export default function QuoteTableSec({ results }) {
 
       {/* Order Total Breakdown for selected qty — legacy parity: left cluster
           (QTY · Items · Freight · Die · Prepress) + right-justified Order Total. */}
-      {rows.length > 0 && rows[s.selSlot || 0] && !rows[s.selSlot || 0].error && (
+      {rows.length > 0 && rows[selSlot] && !rows[selSlot].error && (
         <div data-testid="quote-order-total" style={{
           borderTop: "1px solid var(--spot-line)", padding: "8px 4px", marginTop: 4,
           display: "flex", justifyContent: "space-between", alignItems: "center",
           fontSize: 13, gap: 24, flexWrap: "wrap",
         }}>
           {(() => {
-            const r = rows[s.selSlot || 0];
+            const r = rows[selSlot];
             return (
               <>
                 <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -216,14 +260,18 @@ export default function QuoteTableSec({ results }) {
         </div>
       )}
       {/* MP-4: Per-component breakdown for the selected qty slot */}
-      {isMP && rows.length > 0 && rows[s.selSlot || 0] && Array.isArray(rows[s.selSlot || 0].perComponent) && (
+      {isMP && rows.length > 0 && rows[selSlot] && Array.isArray(rows[selSlot].perComponent) && (
         <div data-testid="mp-per-component" style={{
           marginTop: 8, padding: "8px 10px", background: "var(--spot-bg3)",
           border: "1px solid var(--spot-border)", borderRadius: 4, fontSize: 12,
         }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
             textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>
-            Per-Component Breakdown @ {fmtInt(rows[s.selSlot || 0].qty)} sets
+            Per-Component Breakdown @ {fmtInt(rows[selSlot].qty)} sets
+            <span style={{ marginLeft: 8, fontSize: 9, color: "var(--spot-accent)",
+              textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
+              Click a Qty row above to switch
+            </span>
           </div>
           <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
             <thead><tr style={{ color: "var(--spot-text3)" }}>
@@ -239,7 +287,7 @@ export default function QuoteTableSec({ results }) {
               <th style={{ textAlign: "right", padding: "3px 6px" }}>Route</th>
             </tr></thead>
             <tbody>
-              {rows[s.selSlot || 0].perComponent.map((pc, i) => {
+              {rows[selSlot].perComponent.map((pc, i) => {
                 const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a","#9ca3af","#fbbf24"];
                 const tint = tints[i % tints.length];
                 return (

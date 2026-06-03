@@ -32,7 +32,7 @@ export default function RightDashboard() {
     }}>
       <FreightPanel s={s} />
       <RouteComparison s={s} primary={primary} />
-      <EconomicsPanel s={s} result={primary} />
+      <EconomicsPanel s={s} result={primary} aggregate={aggregate} isMultiPart={isMultiPart} activeItemIdx={activeItemIdx} />
       <CostBuildup result={primary} />
       <BoardPanel result={primary} s={s} />
     </div>
@@ -395,8 +395,27 @@ function CmpRow({ label, cols, get, bold, sep }) {
   );
 }
 
-function EconomicsPanel({ s, result }) {
+function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
   const r = result || {};
+  const agg = aggregate || {};
+  const bom = Array.isArray(s.bomItems) ? s.bomItems : [];
+  const activeItem = isMultiPart ? (bom[activeItemIdx] || null) : null;
+  const itemType = activeItem?.type || "Manufactured";
+  const isMatchedSet = isMultiPart && (s.pricingMode === "Matched Set");
+  const setMarginOverride = !!s.setMarginOverride;
+  // Aggregate row carries the Matched Set / job-level totals when present.
+  const hasMatchedSetTotals = isMatchedSet && agg && !agg.error
+    && (agg.setSell != null || agg.jobSell != null);
+  const isFulfillment = isMultiPart && itemType === "Fulfillment";
+  const typeBadge = itemType === "Fulfillment" ? "FUL"
+    : itemType === "Purchased" ? "PUR"
+    : isMultiPart ? "MFG" : null;
+  const typeColor = itemType === "Fulfillment" ? "#f59e0b"
+    : itemType === "Purchased" ? "#3b82f6" : "#22c55e";
+  const sectionLabel = isMatchedSet ? "Active Component" : isMultiPart ? "Item" : null;
+  const itemName = isMultiPart
+    ? (activeItem?.desc || `Item ${activeItemIdx + 1}`)
+    : (s.itemDesc || "Item");
   return (
     <div data-testid="economics-panel" style={panelStyle("#a855f7")}>
       <div style={panelHeader("#a855f7")}>
@@ -409,16 +428,127 @@ function EconomicsPanel({ s, result }) {
           </div>
         ) : (
           <>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6 }}>
-              {s.itemDesc || "Item"} <span style={{ color: "var(--spot-accent)", marginLeft: 6 }}>{fmtInt(r.qty)} pcs</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Metric label="Sell Total" value={fmtMoney(r.itemSell)} big className="green" testid="metric-sell-total" />
-              <Metric label="Sell / Pc"  value={fmtMoney(r.sellPc, 3)} big testid="metric-sell-pc" />
-              <div style={{ gridColumn: "span 2", fontSize: 11, color: "var(--spot-text3)" }}>
-                Freight: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(r.freightLine || 0)}</b>
-                {" · "}Order: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(r.sellTotal)}</b>
+            {/* ─── MATCHED SET TOP BLOCK ─────────────────────────────────── */}
+            {hasMatchedSetTotals && (() => {
+              const setQty = agg.setQty || agg.qty || 0;
+              const sell = agg.setSell ?? agg.jobSell ?? 0;
+              const cost = agg.setCost ?? agg.jobCost ?? agg.totalMfg ?? 0;
+              const gmDollar = sell - cost;
+              const gmPct = sell > 0 ? gmDollar / sell : 0;
+              const sellPerSet = setQty > 0 ? sell / setQty : 0;
+              const costPerSet = setQty > 0 ? cost / setQty : 0;
+              const lineCharges = Math.max(0, (agg.sellTotal || sell) - sell);
+              return (
+                <div data-testid="econ-matched-set" style={{
+                  padding: "4px 0 8px", marginBottom: 6,
+                  borderBottom: "1px solid var(--spot-line)",
+                }}>
+                  <div style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                    marginBottom: 4,
+                  }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                      textTransform: "uppercase", letterSpacing: ".06em",
+                    }}>
+                      Matched Set{setMarginOverride ? " (Override)" : ""}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>
+                      {fmtInt(setQty)} <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-text3)" }}>sets</span>
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
+                    <Metric label="Sell Total" value={fmtMoney(sell)} big className="green" testid="econ-set-sell" />
+                    <Metric label="Sell / Set" value={fmtMoney(sellPerSet)} big testid="econ-set-sell-per" />
+                    <Metric label="Margin %"  value={fmtPct(gmPct, 1)} className="green" testid="econ-set-gm-pct" />
+                    <Metric label="Margin $"  value={fmtMoney(gmDollar)} testid="econ-set-gm-dol" />
+                    <Metric label="Total Cost" value={fmtMoney(cost)} testid="econ-set-cost" />
+                    <Metric label="Cost / Set" value={fmtMoney(costPerSet)} testid="econ-set-cost-per" />
+                  </div>
+                  {lineCharges > 0 && (
+                    <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 3 }}>
+                      <span>Line Charges: {fmtMoney(lineCharges)}</span>
+                      <span style={{ fontWeight: 700, color: "var(--spot-accent)", fontStyle: "normal" }}>
+                        Quote Total: {fmtMoney(sell + lineCharges)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ─── ITEM / ACTIVE COMPONENT HEADER ─────────────────────────── */}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6, gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                {sectionLabel && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: isMatchedSet ? "#f59e0b" : "var(--spot-accent)",
+                    textTransform: "uppercase", letterSpacing: ".06em",
+                  }}>{sectionLabel}</span>
+                )}
+                {typeBadge && (
+                  <span data-testid="econ-type-badge" style={{
+                    fontSize: 10, fontWeight: 700, padding: "2px 5px", borderRadius: 3,
+                    background: `${typeColor}22`, color: typeColor, flexShrink: 0,
+                  }}>{typeBadge}</span>
+                )}
+                {isMultiPart && (s.estNum || s.custIdent) && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-text3)", flexShrink: 0 }}>
+                    -{activeItemIdx + 1}
+                  </span>
+                )}
+                <span style={{
+                  fontSize: 13, fontWeight: 700, color: "var(--spot-text)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>{itemName}</span>
               </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-accent)", whiteSpace: "nowrap" }}>
+                {fmtInt(r.qty)} <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-text3)" }}>pcs</span>
+              </span>
+            </div>
+            {isFulfillment && (
+              <div data-testid="econ-fulfillment-label" style={{
+                padding: "2px 0", fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                textTransform: "uppercase", letterSpacing: ".06em",
+              }}>Fulfillment — Cost Only</div>
+            )}
+
+            {/* ─── SELL ROW with optional line-item breakdown ──────────────── */}
+            <div style={{ opacity: isFulfillment ? 0.5 : 1, paddingBottom: 6, borderBottom: "1px solid var(--spot-line)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <Metric label="Sell Total" value={fmtMoney(r.itemSell)} big className="green" testid="metric-sell-total" />
+                <Metric label="Sell / Pc"  value={fmtMoney(r.sellPc, 3)} big testid="metric-sell-pc" />
+              </div>
+              {(() => {
+                const dieSep = !!r.dieSep && (r.dieLineCost || 0) > 0;
+                const freightSep = !!r.freightSep && (r.freightLine || 0) > 0;
+                const prepressSep = !!r.prepressSep && (r.prepressLineCost || 0) > 0;
+                const hasAnyLine = dieSep || freightSep || prepressSep;
+                if (!hasAnyLine) {
+                  return (
+                    <div style={{ marginTop: 4, fontSize: 11, color: "var(--spot-text3)" }}>
+                      Freight: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(r.freightLine || 0)}</b>
+                      {" · "}Order: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(r.sellTotal)}</b>
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 4, flexWrap: "wrap" }}>
+                    {freightSep && <span>Freight: {fmtMoney(r.freightLine)}</span>}
+                    {dieSep && <span>Die: {fmtMoney(r.dieLineCost)}</span>}
+                    {prepressSep && <span>Prepress: {fmtMoney(r.prepressLineCost)}</span>}
+                    <span style={{ fontWeight: 700, color: "var(--spot-accent)", fontStyle: "normal" }}>
+                      Order: {fmtMoney(r.sellTotal)}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* ─── MARGIN + COST GRID ──────────────────────────────────────── */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "6px 0",
+              borderBottom: "1px solid var(--spot-line)", opacity: isFulfillment ? 0.5 : 1 }}>
               <Metric label="Margin %"  value={fmtPct(r.gmPct, 1)} className="green" testid="metric-gm-pct" />
               <Metric label="Margin $"  value={fmtMoney(r.gmDollar)} className="green" testid="metric-gm-dollar" />
               <Metric label="Total Cost" value={fmtMoney(r.totalMfg)} testid="metric-total-cost" />
@@ -426,13 +556,16 @@ function EconomicsPanel({ s, result }) {
               <Metric label="Sell / MSF" value={fmtMoney(r.sellMSF)} testid="metric-sell-msf" />
               <Metric label="Cost / MSF" value={fmtMoney(r.costMSF)} testid="metric-cost-msf" />
             </div>
-            <div className="sp-divider" />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+
+            {/* ─── PRODUCTION ROW ──────────────────────────────────────────── */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, paddingTop: 6 }}>
               <Metric label="Sheets" value={fmtInt(r.sheetsReq)} small testid="metric-sheets" />
               <Metric label="Pcs/Sh" value={fmtInt(r.pcsPerSheet)} small testid="metric-pcs-sh" />
               <Metric label="MSF"    value={fmtNum(r.oMSF, 2)} small testid="metric-msf" />
               <Metric label="Tier"   value={r.msfTier || "—"} small testid="metric-tier" />
             </div>
+
+            {/* ─── ROUTING PILLS ───────────────────────────────────────────── */}
             <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
               {(s.printReq === "Yes" || s.printReq === "On") && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Print {labelize(s.printMode)}</span>}
               {r.route && <span className="sp-pill" style={{ color: "#22c55e", background: "#22c55e22", borderColor: "#22c55e55" }}>Cut {r.route} {labelize(s.cadDifficulty)}</span>}

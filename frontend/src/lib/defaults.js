@@ -38,6 +38,10 @@ export const DEFAULT_STATE = Object.freeze({
 
   qtys: ["", "", "", "", ""],
   selSlot: 0,
+  // Per-quantity exclusion list — qty slot indices that the user has unchecked
+  // from the Quote Table. Excluded rows drop out of PDF/Preview/Export.
+  // Stored as an array (Set isn't JSON serializable).
+  exportExclude: [],
 
   // ─── Board ─────────────────────────────────────────────────────
   flute: "C",

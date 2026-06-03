@@ -60,10 +60,13 @@ export default function PreviewPdfModal({ onClose }) {
     return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   }, [s.quoteExpDays]);
 
-  // Active priced rows (no zero-qty)
+  // Active priced rows (no zero-qty, no user-excluded rows)
+  const exclSet = useMemo(() => new Set(
+    Array.isArray(s.exportExclude) ? s.exportExclude : []
+  ), [s.exportExclude]);
   const previewRows = useMemo(() => (results || []).filter(
-    (r) => r && r.pricable && !r.error && Number(r.qty) > 0
-  ), [results]);
+    (r, i) => r && r.pricable && !r.error && Number(r.qty) > 0 && !exclSet.has(i)
+  ), [results, exclSet]);
 
   // Are there any line-item charges? (Die / Freight / Prepress / Misc on a separate line)
   const hasLineItems = useMemo(() => previewRows.some((r) =>
@@ -92,7 +95,8 @@ export default function PreviewPdfModal({ onClose }) {
         customer_name: s.custName,
         state: s,
       };
-      const blob = await previewPdfBlob(quote, results, { chargeMode });
+      // Only send active (non-excluded) priced rows to the backend PDF generator
+      const blob = await previewPdfBlob(quote, previewRows, { chargeMode });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = `quote-${s.estNum || "draft"}.pdf`;
