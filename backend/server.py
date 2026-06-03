@@ -21,6 +21,7 @@ from routes import pdf as pdf_routes
 from routes import admin_rates as admin_rates_routes
 from routes import admin_integrations as admin_integrations_routes
 from routes import admin_sheets as admin_sheets_routes
+from routes import bom_templates as bom_templates_routes
 from routes.customers import ensure_customers_loaded
 from services.rate_overrides import load_overrides_from_db
 from services.integrations import load_integrations_from_db
@@ -53,6 +54,7 @@ app.include_router(pdf_routes.router)
 app.include_router(admin_rates_routes.router)
 app.include_router(admin_integrations_routes.router)
 app.include_router(admin_sheets_routes.router)
+app.include_router(bom_templates_routes.router)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

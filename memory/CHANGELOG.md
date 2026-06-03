@@ -99,4 +99,84 @@ aggregated job row (no `sheetW`/`boardTotal`/`matTotal`). `SpotApp.jsx`
 already branched to `perComponent[selSlot].items[activeItemIdx]` for the
 main column; RightDashboard now mirrors that exact branching.
 
+## 2026-06-03 — Pass 1: Quote Table interactivity + Economics gaps ✅
+
+### Quote Table (`QuoteTableSec.jsx`, `defaults.js`)
+- Click a Qty row → `selSlot` updates, drives Per-Component, Order Total,
+  Economics, Cost Buildup, Board, Route panels (legacy parity)
+- Selected row gets accent-soft background + "SEL" badge + bold qty
+- Row tint by mode: Stock (green) / Custom (blue) / Below Min (orange)
+- ACT checkbox toggles per-row exclusion; excluded rows dim to 45%
+- When the user excludes the currently-selected row, selection auto-jumps
+  to the first remaining active row (no stale Order Total display)
+- "All Active" button resets all exclusions
+- "Excluded from PDF" badge appears in Order Total breakdown when user
+  manually clicks an already-excluded row
+- New state field: `state.exportExclude: number[]` (JSON-serializable)
+- Per-Component Breakdown header now reads `selSlot` + shows "Click a Qty
+  row above to switch" hint
+
+### Economics panel (`RightDashboard.jsx`)
+- Matched Set top block when MP + pricingMode=Matched Set: setQty sets,
+  Sell Total, Sell/Set, Margin %, Margin $, Total Cost, Cost/Set + optional
+  Line Charges / Quote Total summary line
+- Type badge MFG/PUR/FUL with color (green/blue/amber)
+- "Active Component" / "Item" section label + child number (-1, -2…)
+- Sell row line-item breakdown row: Freight + Die + Prepress + Order when
+  line-items active (was: only freight + order)
+- Fulfillment "Cost Only" mode — 50% dim + amber label
+
+### Cost Buildup → Order Total reconciliation
+- In MP mode the One-Time Line Items section now reads JOB-LEVEL totals
+  from the aggregate row (Items all components + Freight + Die + Prepress
+  + Order Total). The label changed from "Quote Total" to "Order Total"
+  in MP, matching the Quote Table footer. Eliminates the $1,414.16 vs
+  $2,170.93 mismatch users saw before.
+- Backend `engine_routes.calculate_multi_part` now exposes line items
+  separately on the aggregate (`freightLine`, `dieLineCost`,
+  `prepressLineCost`, `miscLineCost`, `itemsSell`). Math is identity-
+  equivalent to the previous lumped `line_charges`.
+
+### PDF/Preview (`PreviewPdfModal.jsx`)
+- Excluded rows are filtered out of `previewRows` before being passed to
+  the backend PDF generator
+
+### Engine math
+- Untouched. Zero changes to `engine/core.py`, `engine/pricing.py`,
+  `engine/runner.py`, `engine/routing.py` in this pass.
+
+## 2026-06-03 — Pass 2: BOM Builder feature parity ✅
+
+Keeps cloud's compact layout but adds legacy functionality.
+
+### New backend collection + routes
+- `db.COL_BOM_TEMPLATES = "bom_templates"`
+- `routes/bom_templates.py` — full CRUD + promote (personal → team)
+- Two scopes: `personal` (visible only to owner) and `team` (visible to
+  every authenticated user — org-shared). Persisted server-side, not
+  localStorage — different from legacy's single-user design.
+- Owner-or-admin permission on update / delete / promote
+
+### Frontend BOM Builder (`BomBuilderModal.jsx`)
+- **Project Name** field at the top — bound to `state.custRef` (matches
+  existing Estimate Info field, so they stay in sync)
+- Three template sections rendered side-by-side:
+  - **Display Styles** — built-in 10 (`displayTemplates.js`)
+  - **My Templates** — personal, fetched from backend
+  - **Team Templates** — org-shared, fetched from backend
+- Each personal/team template card has hover actions: edit (✎), promote
+  (↗, personal only), delete (×)
+- Per-row **Lock** icon (🔒/🔓) — disables editing for that row
+- "Lock All / Unlock All" toggle button at footer
+- **Save Template** inline panel — Save (Personal) / Save (Team) /
+  Update for existing, with name input
+- **Drag-and-drop** reorder via the ⠿ handle (existing ▲▼ buttons kept)
+- **Dim info** badge under each component when source BOM has dims set
+  (e.g., "● 47.25×38 · 2 pcs/set")
+
+### Verified
+- Curl: full CRUD smoke-tested (create → promote → update → list → delete)
+- Backend lint clean, frontend lint clean
+
+
 
