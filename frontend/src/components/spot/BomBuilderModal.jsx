@@ -384,10 +384,6 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
                       fontFamily: "'JetBrains Mono', monospace", cursor: isLocked ? "not-allowed" : "text" }} />
                   <span style={{ fontSize: 9, color: "var(--spot-text3)" }}>/set</span>
                 </span>
-                {row.opt && (
-                  <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 2,
-                    background: "var(--spot-bg3)", color: "var(--spot-text3)", letterSpacing: ".04em" }}>OPTIONAL</span>
-                )}
                 {/* Lock toggle */}
                 <button onClick={() => toggleLock(i)} data-testid={`bom-draft-lock-${i}`}
                   title={isLocked ? "Unlock row" : "Lock row"}
