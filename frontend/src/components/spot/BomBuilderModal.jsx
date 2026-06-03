@@ -361,14 +361,6 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
                     }}>● {row.dimInfo}</span>
                   )}
                 </div>
-                <input value={row.custIdent}
-                  disabled={isLocked}
-                  onChange={(e) => setRow(i, { custIdent: e.target.value })}
-                  data-testid={`bom-draft-custident-${i}`}
-                  placeholder="Cust ID"
-                  style={{ width: 90, background: isLocked ? "transparent" : "var(--spot-bg)", color: "var(--spot-text3)",
-                    border: "1px solid var(--spot-border)", borderRadius: 3, padding: "3px 6px",
-                    fontSize: 11, cursor: isLocked ? "not-allowed" : "text" }} />
                 <select value={row.type}
                   disabled={isLocked}
                   onChange={(e) => setRow(i, { type: e.target.value })}
