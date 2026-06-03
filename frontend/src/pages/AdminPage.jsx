@@ -205,13 +205,20 @@ function CategoryPanel({ category, rows, meta, onSave, onReset, onResetAll }) {
         <div key={g.label} style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, color: "var(--spot-text3)", fontWeight: 700,
             textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{g.label}</div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "32%" }} />     {/* Key */}
+              <col style={{ width: "20%" }} />     {/* Current value */}
+              <col style={{ width: "16%" }} />     {/* Baseline */}
+              <col style={{ width: "12%" }} />     {/* Status */}
+              <col style={{ width: "20%" }} />     {/* Actions */}
+            </colgroup>
             <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
               <th style={th}>Key</th>
               <th style={{ ...th, textAlign: "right" }}>Current value</th>
               <th style={{ ...th, textAlign: "right" }}>Baseline</th>
-              <th style={{ ...th, textAlign: "center", width: 100 }}>Status</th>
-              <th style={{ ...th, width: 110 }}></th>
+              <th style={{ ...th, textAlign: "center" }}>Status</th>
+              <th style={th}></th>
             </tr></thead>
             <tbody>
               {g.keys.map((k) => {
@@ -247,7 +254,8 @@ function RateRow({ r, onSave, onReset, category }) {
             background: editing ? "var(--spot-bg2)" : "transparent",
             border: `1px solid ${editing ? "var(--spot-accent)" : "var(--spot-border)"}`,
             padding: "3px 6px", borderRadius: 3, fontSize: 12, fontFamily: "'JetBrains Mono', monospace",
-            color: isOverride ? "var(--spot-warn)" : "var(--spot-text)", textAlign: "right", width: 100,
+            color: isOverride ? "var(--spot-warn)" : "var(--spot-text)", textAlign: "right",
+            width: 120, maxWidth: "100%", boxSizing: "border-box",
             fontWeight: isOverride ? 700 : 400, outline: "none",
           }} />
       </td>
