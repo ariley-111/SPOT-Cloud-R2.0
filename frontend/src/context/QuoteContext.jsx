@@ -427,7 +427,7 @@ export function QuoteProvider({ children }) {
     newState.pricingMode = "Individual";
     newState.bomItems = [];
     newState.activeItemIdx = 0;
-    newState.spinOffOrigin = { estNum: cur.state.estNum, itemDesc: target.desc };
+    newState.spinOffOrigin = `${cur.state.estNum || "—"} · ${target.desc || ""}`;
     const newTabRecord = {
       id: "local-" + Math.random().toString(36).slice(2, 10),
       persisted: false,

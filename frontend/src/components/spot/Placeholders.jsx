@@ -417,14 +417,14 @@ export function BomSec() {
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
     reorderBomItem, updateBomItem, spinOffBomItem,
   } = useQuote();
+  // ⚠️ ALL HOOKS BEFORE EARLY RETURN — rules of hooks
+  const [dragIdx, setDragIdx] = React.useState(null);
+
   const s = active?.state || {};
   if (s.quoteType !== "Multi-Part") return null;
   const items = s.bomItems || [];
   const activeIdx = s.activeItemIdx ?? 0;
   const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a","#9ca3af","#fbbf24"];
-
-  // Drag-reorder
-  const [dragIdx, setDragIdx] = React.useState(null);
 
   return (
     <Sec

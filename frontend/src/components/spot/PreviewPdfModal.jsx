@@ -1,8 +1,8 @@
 /* eslint-disable */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { previewPdfBlob, calculateAll } from "../../api/spot";
+import { previewPdfBlob, calculateAll, calculateMultiPart } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
-import { buildPayload } from "../../hooks/useEngine";
+import { buildPayload, buildMpPayload } from "../../hooks/useEngine";
 import { fmtInt, fmtMoney, fmtNum } from "../../lib/format";
 
 /**
@@ -27,9 +27,16 @@ export default function PreviewPdfModal({ onClose }) {
     (async () => {
       setBusy(true); setErr("");
       try {
-        const payload = buildPayload(s);
-        const { results: rs } = await calculateAll(payload);
-        if (!cancel) setResults(rs || []);
+        const isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
+        if (isMP) {
+          const payload = buildMpPayload(s);
+          const data = await calculateMultiPart(payload);
+          if (!cancel) setResults(data.slots || []);
+        } else {
+          const payload = buildPayload(s);
+          const { results: rs } = await calculateAll(payload);
+          if (!cancel) setResults(rs || []);
+        }
       } catch (e) {
         if (!cancel) setErr(e?.response?.data?.detail || e.message);
       } finally { if (!cancel) setBusy(false); }

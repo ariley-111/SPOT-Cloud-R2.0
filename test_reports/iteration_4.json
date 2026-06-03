@@ -1,0 +1,40 @@
+{
+  "summary": "Re-tested 3 frontend regressions from iteration_3. (1) Spin-off crash FIXED - clicking ↗ on Item 2 creates new tab 'Item 2 (spin-off)' showing 'FROM: SA-260603-132151 · ITEM 2' as string, no crash. (2) Hook-order warning GONE - ran 3 full MP↔Simple convert cycles, 0 hook warnings in console. (3) MP Quote Table pricing FIXED - with 5x7 dims + qtys 500/1000/2500 + default board 200·C·Kemi-Lite, mp-per-component shows non-zero rows ($264.54 cost / $479.08 sell / 44.8% GM at 500 sets — EXACT match to backend expected), Quote Table rows render real $$. (4) Preview PDF MP mode STILL BROKEN — useEffect correctly routes to calculateMultiPart (verified at PreviewPdfModal.jsx:31-33) but the rendered modal HTML/JSX has only ONE layout with Simple-mode header 'QTY/EACH/PER/M/TOTAL' (line 326). No MP-branch in the JSX render to emit 'Per Set / Per/M Sets' headers or the BOM listing table with Component/Type/Pcs/Set/Specs columns. The fix updated the API call but not the JSX render branch. (5) Simple-mode regression: Simple PDF preview unchanged, still works end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PreviewPdfModal MP branch",
+        "issue": "Preview Quote modal in Multi-Part mode renders Simple-style table (headers: QTY | EACH | PER/M | TOTAL | QUOTE TOTAL). Missing: (a) 'Per Set' / 'Per/M Sets' headers, (b) BOM listing table with Component / Type / Pcs/Set / Specs columns. The data is fetched correctly via calculateMultiPart (verified - 'mp-per-component' shows Item 1, M, ×1, 500, $0.5291 cost/pc, $0.9582 sell/pc, $264.54 cost, $479.08 sell, 44.8% GM, CAD), but the JSX inside PreviewPdfModal.jsx has only a single render path. Only line 326 shows 'Per/M' header — no MP branch JSX exists.",
+        "selector": "[data-testid='modal-preview-pdf']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multi_part.py",
+    "/app/test_reports/pytest/mp_results.xml"
+  ],
+  "action_items": [
+    "PreviewPdfModal.jsx: Add an MP-branch render path. The component already has `isMP` logic in the useEffect but the JSX only renders the Simple-style table. Need conditional JSX: when state.quoteType === 'Multi-Part' && bomItems.length > 0, render (a) a BOM listing table with columns Component / Type / Pcs/Set / Specs (from state.bomItems with each item's mfgFields/finishingFields/dimensions), and (b) replace the pricing table headers from 'QTY/EACH/PER/M/TOTAL' to 'Sets / Per Set / Per/M Sets / Total' (using the rows from calculateMultiPart response slots).",
+    "Alternatively, the modal could render the same HTML the backend's _customer_pdf_html(is_mp=True) branch in /app/backend/routes/pdf.py produces, ensuring preview and downloaded PDF match."
+  ],
+  "critical_code_review_comments": [
+    "PreviewPdfModal.jsx line 30-37 correctly branches on isMP and calls calculateMultiPart, but the resulting `mpResp` data does not appear to be plumbed into the JSX render. The JSX (around line 320+) uses the Simple-style headers/rows regardless. Either the MP rows are mapped into the same row shape (losing per-set context) or the response is discarded.",
+    "All 3 fixes from iteration_3 are in place verbatim: QuoteContext.jsx:430 stores spinOffOrigin as string template, Placeholders.jsx BomSec has useState(null) at line 421 BEFORE the early return at line 424, PreviewPdfModal.jsx imports calculateMultiPart and buildMpPayload — these landed correctly. The miss is JSX-side.",
+    "Recommend a single source of truth: have the backend /api/pdf/preview endpoint return the rendered HTML and have the modal display it via iframe/srcDoc to guarantee preview == final PDF."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (12/12 pytest from prior — not re-run; no backend changes)",
+    "frontend": "75% — 3 of 4 regressions resolved (spin-off ✓, hook-order ✓, MP pricing ✓); PDF MP layout still broken"
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (initials AD) — working",
+  "seed_data_creation": "Several draft estimates created during testing (SA-260603-132151, 132800, 133313, 141600, 141680). Safe to clean up.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iteration_3 found 3 issues; iteration_4 confirmed 2 of 3 fixes (spin-off + hooks) PLUS the MP-Quote-Table $0 pricing also now resolved (was implicitly fixed by the hook-order/Placeholders refactor — engine + display both produce non-zero $$). Only remaining: PreviewPdfModal.jsx needs an MP-branch JSX render path. To repro: login admin → AD → + new tab → toolbar-toggle-mp → fill input-one-up-w=5, input-one-up-l=7, input-qty-0=500, input-qty-1=1000, input-qty-2=2500 → wait 6s → click Preview Quote → modal shows Simple headers (QTY/EACH/PER/M/TOTAL) instead of MP (Sets/Per Set/Per/M Sets) and no BOM listing. Per-component breakdown table in main view (mp-per-component) is correct.",
+  "rca of the issue": "PreviewPdfModal.jsx has a complete fix for the DATA layer (useEffect at line 25-47 branches on quoteType==='Multi-Part' and calls calculateMultiPart(buildMpPayload(s)) producing the correct mp response with slot-level pricing), but the render/JSX layer was NOT updated. Around line 326 the table header is hard-coded `<th>Per/M</th>` and the row mapping iterates state.qtys with the per-piece EACH formula appropriate for Simple-mode pricing. There's no isMP conditional branch in the JSX, so MP data either gets dropped or coerced into the Simple-row shape. Fix: introduce `const isMP = state.quoteType === 'Multi-Part' && (state.bomItems||[]).length > 0;` in the render scope and wrap two render blocks — (1) Simple table when !isMP, (2) BOM listing + 'Sets/Per Set/Per/M Sets/Total' table when isMP, fed from the mpResp state captured in the useEffect."
+}
