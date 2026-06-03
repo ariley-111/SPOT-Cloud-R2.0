@@ -391,23 +391,27 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
                 {/* Lock toggle */}
                 <button onClick={() => toggleLock(i)} data-testid={`bom-draft-lock-${i}`}
                   title={isLocked ? "Unlock row" : "Lock row"}
+                  draggable={false} onMouseDown={(e) => e.stopPropagation()}
                   style={{ all: "unset", cursor: "pointer", fontSize: 13,
                     color: isLocked ? "var(--spot-accent)" : "var(--spot-text3)",
                     padding: "0 4px" }}>{isLocked ? "🔒" : "🔓"}</button>
                 <span style={{ display: "flex", gap: 1 }}>
                   <button onClick={() => moveRow(i, i - 1)} disabled={i === 0 || isLocked}
                     data-testid={`bom-draft-up-${i}`}
+                    draggable={false} onMouseDown={(e) => e.stopPropagation()}
                     style={{ all: "unset", cursor: i === 0 || isLocked ? "default" : "pointer",
                       fontSize: 12, color: "var(--spot-text3)",
                       opacity: i === 0 || isLocked ? 0.3 : 1, padding: "0 3px" }}>▲</button>
                   <button onClick={() => moveRow(i, i + 1)} disabled={i === draft.length - 1 || isLocked}
                     data-testid={`bom-draft-down-${i}`}
+                    draggable={false} onMouseDown={(e) => e.stopPropagation()}
                     style={{ all: "unset", cursor: i === draft.length - 1 || isLocked ? "default" : "pointer",
                       fontSize: 12, color: "var(--spot-text3)",
                       opacity: i === draft.length - 1 || isLocked ? 0.3 : 1, padding: "0 3px" }}>▼</button>
                 </span>
                 <button onClick={() => removeRow(i)} disabled={isLocked}
                   data-testid={`bom-draft-rm-${i}`}
+                  draggable={false} onMouseDown={(e) => e.stopPropagation()}
                   style={{ all: "unset", cursor: isLocked ? "not-allowed" : "pointer", fontSize: 14,
                     color: "var(--spot-err)", padding: "0 3px", opacity: isLocked ? 0.3 : 1 }}>×</button>
               </div>
