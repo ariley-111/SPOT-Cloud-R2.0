@@ -330,62 +330,11 @@ function FreightByQtyPanel({ s, setField }) {
   );
 }
 
-/** ─── Advanced Controls ──────────────────────────────────────────────
- *  Ported from legacy spot_r1_5.jsx lines 6416-6605.
- *  Contains: General defaults · Rate display (D-110 calibrated) · Parser config */
-export function AdvancedControlsSec() {
-  const { sec, toggleSec } = useQuote();
-  return (
-    <Sec label="Advanced Controls" hue="#6b7280" open={sec.rates} onToggle={() => toggleSec("rates")}
-      data-testid="sec-advanced-controls">
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-
-        {/* Rate sheet (read-only display of D-110 calibrated rates) */}
-        <RatePanel
-          title="Calibrated Rates (D-110 FINAL)" color="#94a3b8"
-          rows={[
-            ["Inca Press",  "$485/hr  ·  75 sh/hr (Gloss/Satin equalized)"],
-            ["CAD",         "$138/hr  ·  650 in/min  ·  Setup 8/20/25/22 min"],
-            ["Crest",       "$45/hr  ·  150 sh/hr  ·  Setup Std 45 / Adv 90 min  ·  $1,200 default die"],
-            ["Bobst",       "$350/hr (uncalibrated placeholder)  ·  3,000 sh/hr  ·  45 min flat  ·  $250 min  ·  $1,800 default die"],
-            ["GM Curve",    "0-1 MSF: 50%  ·  1-3: 37%  ·  3-5: 32%  ·  5-9: 27%  ·  10+: 25%"],
-            ["FSC/SFI",     "$25 amortized into board (D-086)"],
-            ["Paper Uplift","+10% baked into base_matrix (D-102)"],
-            ["Ink",         "$0.05/sqft LOCKED"],
-            ["Under-5 MSF Fee", "$0 always (Rule 3)"],
-          ]}
-          dataTestId="rate-sheet"
-        />
-
-        {/* Defaults */}
-        <RatePanel
-          title="General Defaults" color="#6b7280"
-          rows={[
-            ["Default print finish",   "Satin (Rule 8 / D-105)"],
-            ["Default FOB",            "Origin (ZIP 44704)"],
-            ["Default initials",       "SPC (locked, Rule 2)"],
-            ["Default freight markup", "15%"],
-            ["Default die markup",     "15%"],
-            ["Default Prepress",       "Auto ($50 if no charge)"],
-          ]}
-          dataTestId="defaults-panel"
-        />
-
-        <div style={{ background: "var(--spot-warn-bg)", border: "1px dashed var(--spot-warn)",
-          borderRadius: 4, padding: "8px 12px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)",
-            textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>
-            Rate Editing — admin only
-          </div>
-          <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-            These constants live in the Python engine (`/app/backend/engine/core.py`) and require an admin
-            commit. Phase 4 will expose them via a Pricing Console with audit log.
-          </div>
-        </div>
-      </div>
-    </Sec>
-  );
-}
+/** ─── Advanced Controls — REMOVED 2026-06-03 ────────────────────────
+ *  All editable rates / GM curve / sell curve / grade adders now live in
+ *  the Pricing Admin Console (admin-only pop-out, see /pages/AdminPage.jsx).
+ *  Integration credentials (Anthropic, UTS) live in Admin → Integrations tab.
+ *  Per-quote usage tracking lives in Admin → Usage tab. */
 
 function RatePanel({ title, color, rows, dataTestId }) {
   return (

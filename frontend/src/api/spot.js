@@ -44,6 +44,15 @@ export const adminResetAll       = (category) =>
 export const adminGetAudit       = (params = {}) =>
   api.get("/admin/rates/audit", { params }).then((r) => r.data);
 
+// ─── Integrations admin (Phase 4-A2) ───────────────────────────────────
+export const adminGetIntegrations   = () => api.get("/admin/integrations").then((r) => r.data);
+export const adminSetIntegration    = (key, value) =>
+  api.put(`/admin/integrations/${encodeURIComponent(key)}`, { value }).then((r) => r.data);
+export const adminResetIntegration  = (key) =>
+  api.delete(`/admin/integrations/${encodeURIComponent(key)}`).then((r) => r.data);
+export const adminGetUsage          = (params = {}) =>
+  api.get("/admin/usage", { params }).then((r) => r.data);
+
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 
@@ -89,11 +98,15 @@ export const freightZones = () =>
 // ─── Parser ─────────────────────────────────────────────
 export const parserBudget = () =>
   api.get("/parser/budget").then((r) => r.data);
-export const parseRfq = (files, emailBody, notes) => {
+export const parseRfq = (files, emailBody, notes, opts = {}) => {
   const fd = new FormData();
   for (const f of files || []) fd.append("files", f);
   if (emailBody) fd.append("email_body", emailBody);
   if (notes) fd.append("notes", notes);
+  // Usage-tracking context (admin Usage tab queries by these)
+  if (opts.customerCode) fd.append("customer_code", opts.customerCode);
+  if (opts.customerName) fd.append("customer_name", opts.customerName);
+  if (opts.estInitials)  fd.append("est_initials",  opts.estInitials);
   return api
     .post("/parser/parse-rfq", fd, {
       headers: { "Content-Type": "multipart/form-data" },

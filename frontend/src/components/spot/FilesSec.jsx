@@ -58,7 +58,11 @@ export default function FilesSec() {
     if (!rfqFiles || rfqFiles.length === 0 || busy) return;
     setBusy(true); setParserError(""); setParseResult(null);
     try {
-      const r = await parseRfq(rfqFiles, "", "");
+      const r = await parseRfq(rfqFiles, "", "", {
+        customerCode: s.custCode || "",
+        customerName: s.custName || "",
+        estInitials:  s.estInitials || "",
+      });
       setParseResult(r);
       setReviewOpen(true);
       parserBudget().then(setBudget).catch(() => {});

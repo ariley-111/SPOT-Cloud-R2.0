@@ -115,6 +115,32 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   `/api/admin/rates/audit`, `/api/admin/rates/categories`,
   `/api/admin/rates/calibration`
 
+### 2026-06-03 — Pricing Strategy parity + Advanced Controls cleanup ✅
+- **Pricing Strategy section** rewrite for full legacy parity:
+  - 9 tier rows (was 5) — 0-1, 1-3, 3-5, 5-9, 10-24, 25-49, 50-74, 75-99, 100+
+  - Both GM% AND Sell$/MSF columns side-by-side
+  - 3-column horizontal layout: Tier Targets | Force Sell/Pc | Freight $/Qty
+  - "Reset Margins to My Defaults" button restores D-110 baseline curves
+  - Freight $/Qty panel — per-qty override of base freight cost
+- **Advanced Controls section deleted** from main UI — everything moved to Admin Console.
+  Read-only documentation cards were redundant once the editor was available.
+- **Admin Console — Integrations tab** added (admin-only):
+  - Anthropic API Key (masked secret edit + audit log)
+  - Anthropic Model selector
+  - UTS Username / API Key / Bill-To ID (masked secrets)
+  - Origin ZIP (Standard Printing — 44704)
+  - Provider status pills: Anthropic configured ✓ / UTS configured ✓ / Shipping
+  - Falls back to `.env` if no DB override set
+- **Admin Console — Usage tab** added (admin-only):
+  - 4 KPI cards: Total parses · Anthropic cost · Tokens in · Tokens out
+  - By Month / By Customer / By Estimator breakdowns
+  - Recent calls log (newest 50): timestamp · estimator · customer · model · tokens · $cost · ✓/✗
+  - Window selector (1mo / 3mo / 6mo / 12mo / 24mo) + customer-code filter
+  - Sets up for future per-customer cost-allocation / billing
+- `parse_rfq` endpoint extended with `customer_code` / `customer_name` /
+  `est_initials` form fields; frontend passes them automatically from active quote
+- New collections: `integrations` (key storage) + `parser_usage` (per-parse log)
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅

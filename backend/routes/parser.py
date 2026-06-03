@@ -37,6 +37,18 @@ router = APIRouter(prefix="/api/parser", tags=["parser"])
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-7")
 ANTHROPIC_MONTHLY_CAP_USD = float(os.environ.get("ANTHROPIC_MONTHLY_CAP_USD", "500"))
+
+# ─── Effective key/model lookup ─── DB override > .env (loaded at startup)
+from services.integrations import get_effective as _integ_get
+from services import parser_usage as _usage
+
+
+def _effective_anthropic_key() -> str:
+    return _integ_get("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY
+
+
+def _effective_anthropic_model() -> str:
+    return _integ_get("ANTHROPIC_MODEL") or ANTHROPIC_MODEL
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
 # D-141 (R1.6.4) — per-call input-token pre-flight against the 450k/min TPM cap.
@@ -75,8 +87,10 @@ async def _get_budget_doc() -> Dict[str, Any]:
 
 
 async def _record_spend(input_tokens: int, output_tokens: int,
-                        cache_read_tokens: int = 0, cache_write_tokens: int = 0) -> Dict[str, Any]:
-    pricing = MODEL_PRICING.get(ANTHROPIC_MODEL, {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75})
+                        cache_read_tokens: int = 0, cache_write_tokens: int = 0,
+                        model: Optional[str] = None) -> Dict[str, Any]:
+    mdl = model or _effective_anthropic_model()
+    pricing = MODEL_PRICING.get(mdl, {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75})
     cost = (
         (input_tokens / 1_000_000) * pricing["input"]
         + (output_tokens / 1_000_000) * pricing["output"]
@@ -91,7 +105,7 @@ async def _record_spend(input_tokens: int, output_tokens: int,
         return_document=True,
         projection={"_id": 0},
     )
-    return result or {"month": month, "spend_usd": cost, "calls": 1}
+    return {**(result or {"month": month, "spend_usd": cost, "calls": 1}), "_call_cost_usd": cost}
 
 
 @router.get("/budget")
@@ -100,7 +114,7 @@ async def get_budget(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
     return {
         **doc,
         "remaining_usd": max(0, doc.get("cap_usd", ANTHROPIC_MONTHLY_CAP_USD) - doc.get("spend_usd", 0)),
-        "model": ANTHROPIC_MODEL,
+        "model": _effective_anthropic_model(),
     }
 
 
@@ -132,7 +146,9 @@ def _estimate_input_tokens(system_text: str, content_parts: List[Dict[str, Any]]
 
 
 async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]:
-    if not ANTHROPIC_API_KEY:
+    api_key = _effective_anthropic_key()
+    model = _effective_anthropic_model()
+    if not api_key:
         raise HTTPException(503, "ANTHROPIC_API_KEY not configured")
     # Budget gate
     budget = await _get_budget_doc()
@@ -157,12 +173,12 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
     full_content = list(content_parts) + [{"type": "text", "text": EXTRACTION_INSTRUCTIONS}]
 
     headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
+        "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     }
     body = {
-        "model": ANTHROPIC_MODEL,
+        "model": model,
         "max_tokens": 8192,
         # Prompt caching: the big knowledge prompt is cached (ephemeral 5m TTL); billed once
         # then re-used across parses at ~10x discount. Mirrors legacy line 838.
@@ -180,11 +196,12 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
         data = resp.json()
 
     usage = data.get("usage") or {}
-    await _record_spend(
+    spend = await _record_spend(
         usage.get("input_tokens", 0),
         usage.get("output_tokens", 0),
         usage.get("cache_read_input_tokens", 0),
         usage.get("cache_creation_input_tokens", 0),
+        model=model,
     )
 
     # Concatenate text blocks from response
@@ -243,6 +260,8 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
         "usage": usage,
         "stop_reason": data.get("stop_reason"),
         "estimated_input_tokens": estimated,
+        "_call_cost_usd": spend.get("_call_cost_usd", 0.0),
+        "_resolved_model": model,
     }
 
 
@@ -251,7 +270,10 @@ async def parse_rfq(
     files: List[UploadFile] = File(default=[]),
     email_body: Optional[str] = Form(default=None),
     notes: Optional[str] = Form(default=None),
-    _u: User = Depends(get_current_user),
+    customer_code: Optional[str] = Form(default=None),
+    customer_name: Optional[str] = Form(default=None),
+    est_initials: Optional[str] = Form(default=None),
+    u: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Parse one or more RFQ attachments + optional email body into a structured estimate.
 
@@ -339,8 +361,42 @@ async def parse_rfq(
             content_parts.append({"type": "text", "text": f"ATTACHMENT ({fname}):\n\n{text[:50000]}"})
             file_summary.append({"name": fname, "type": "text", "size": size})
 
-    result = await _call_anthropic(content_parts)
-    return {
-        **result,
-        "files": file_summary,
-    }
+    # ─── Call Anthropic (with usage logging) ────────────────────────
+    try:
+        result = await _call_anthropic(content_parts)
+        # Log usage row — success path
+        u_usage = result.get("usage") or {}
+        await _usage.log_parse(
+            user_email=u.email,
+            est_initials=est_initials,
+            customer_code=customer_code,
+            customer_name=customer_name,
+            model=result.get("_resolved_model") or _effective_anthropic_model(),
+            input_tokens=u_usage.get("input_tokens", 0),
+            output_tokens=u_usage.get("output_tokens", 0),
+            cache_read_tokens=u_usage.get("cache_read_input_tokens", 0),
+            cache_write_tokens=u_usage.get("cache_creation_input_tokens", 0),
+            cost_usd=float(result.get("_call_cost_usd") or 0),
+            file_count=len(file_summary),
+            success=True,
+        )
+    except HTTPException as e:
+        # Log usage row — failure path (no cost; record the error for visibility)
+        await _usage.log_parse(
+            user_email=u.email,
+            est_initials=est_initials,
+            customer_code=customer_code,
+            customer_name=customer_name,
+            model=_effective_anthropic_model(),
+            input_tokens=0, output_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=0.0,
+            file_count=len(file_summary),
+            success=False, error=f"{e.status_code}: {e.detail}",
+        )
+        raise
+
+    # Strip internal-only fields before returning to client
+    result.pop("_call_cost_usd", None)
+    result.pop("_resolved_model", None)
+    return {**result, "files": file_summary}

@@ -47,11 +47,27 @@ FALLBACK_ZONES = [
 ]
 
 # ─── UTS Config ──────────────────────────────────────────────────────
-ORIGIN_ZIP = os.environ.get("ORIGIN_ZIP", "44704")
+# Defaults from .env are used if no DB override is set in `integrations`
+# (admin can update either; service.get_effective returns DB-first).
+ORIGIN_ZIP_DEFAULT = os.environ.get("ORIGIN_ZIP", "44704")
 UTS_BASE = os.environ.get("UTS_BASE", "https://api.myuts.net/v1")
-UTS_USER = os.environ.get("UTS_USER", "")
-UTS_KEY = os.environ.get("UTS_KEY", "")
-UTS_BILL_TO_ID = int(os.environ.get("UTS_BILL_TO_ID", "496663") or "496663")
+UTS_USER_DEFAULT = os.environ.get("UTS_USER", "")
+UTS_KEY_DEFAULT = os.environ.get("UTS_KEY", "")
+UTS_BILL_TO_ID_DEFAULT = int(os.environ.get("UTS_BILL_TO_ID", "496663") or "496663")
+
+from services.integrations import get_effective as _integ_get
+
+
+def _uts_creds():
+    user = _integ_get("UTS_USER") or UTS_USER_DEFAULT
+    key  = _integ_get("UTS_KEY")  or UTS_KEY_DEFAULT
+    bid_raw = _integ_get("UTS_BILL_TO_ID") or str(UTS_BILL_TO_ID_DEFAULT)
+    try:
+        bid = int(bid_raw or "0")
+    except (TypeError, ValueError):
+        bid = UTS_BILL_TO_ID_DEFAULT
+    origin = _integ_get("ORIGIN_ZIP") or ORIGIN_ZIP_DEFAULT
+    return user, key, bid, origin
 
 
 def _zip_to_zone(zip_code: str) -> int:
@@ -124,13 +140,14 @@ def _fallback_rate(dest_zip: str, weight_lbs: float) -> Dict[str, Any]:
 
 async def _uts_rate_estimate(dest_zip: str, weight_lbs: float, freight_class: str = "70") -> Dict[str, Any]:
     """Verbatim port of legacy utsRateEstimate() — calls UTS /v1/rateestimate."""
-    if not (UTS_USER and UTS_KEY):
+    uts_user, uts_key, bill_to_id, origin_zip = _uts_creds()
+    if not (uts_user and uts_key):
         raise RuntimeError("UTS credentials not configured")
     body = {
         "paymentType": "PREPAID",
-        "billToID": UTS_BILL_TO_ID,
+        "billToID": bill_to_id,
         "includeGuaranteedRates": False,
-        "origin": {"locationID": UTS_BILL_TO_ID, "zip": ORIGIN_ZIP},
+        "origin": {"locationID": bill_to_id, "zip": origin_zip},
         "destination": {"locationID": 0, "zip": str(dest_zip)},
         "feetOfTrailer": 0,
         "lineItems": [{
@@ -139,7 +156,7 @@ async def _uts_rate_estimate(dest_zip: str, weight_lbs: float, freight_class: st
             "isStackable": True,
         }],
     }
-    auth_b64 = base64.b64encode(f"{UTS_USER}:{UTS_KEY}".encode()).decode()
+    auth_b64 = base64.b64encode(f"{uts_user}:{uts_key}".encode()).decode()
     headers = {
         "Authorization": f"Basic {auth_b64}",
         "Accept": "application/json",
@@ -179,8 +196,9 @@ async def _uts_rate_estimate(dest_zip: str, weight_lbs: float, freight_class: st
 # ═══════════════════════════════════════════════════════════════
 @router.get("/zones")
 async def list_zones(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
+    _, _, _, origin = _uts_creds()
     return {
-        "origin_zip": ORIGIN_ZIP,
+        "origin_zip": origin,
         "spcoc": {
             "rates": SPCOC_RATES,
             "labels": SPCOC_LABELS,

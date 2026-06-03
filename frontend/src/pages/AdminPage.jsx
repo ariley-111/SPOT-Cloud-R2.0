@@ -8,17 +8,20 @@ import { useAuth } from "../context/AuthContext";
 import {
   adminGetRates, adminGetCategories, adminGetCalibration,
   adminSetRate, adminResetRate, adminResetAll, adminGetAudit,
+  adminGetIntegrations, adminSetIntegration, adminResetIntegration, adminGetUsage,
 } from "../api/spot";
 
 const TAB_LABELS = {
-  rate:        "Rates",
-  gm_tier:     "GM Curve",
-  sell_tier:   "Sell Curve",
-  grade_adder: "Grade Adders",
-  audit:       "Audit Log",
-  calibration: "Calibration",
+  rate:         "Rates",
+  gm_tier:      "GM Curve",
+  sell_tier:    "Sell Curve",
+  grade_adder:  "Grade Adders",
+  integrations: "Integrations",
+  usage:        "Usage",
+  audit:        "Audit Log",
+  calibration:  "Calibration",
 };
-const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "audit", "calibration"];
+const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
   const { user } = useAuth();
@@ -144,6 +147,8 @@ export default function AdminPage({ onClose }) {
                 onResetAll={() => onResetAll(tab)}
               />
             )}
+            {tab === "integrations" && <IntegrationsPanel />}
+            {tab === "usage" && <UsagePanel />}
             {tab === "audit" && <AuditPanel />}
             {tab === "calibration" && <CalibrationPanel data={calib} />}
           </>
@@ -375,6 +380,337 @@ function actionLabel(t) {
   return t;
 }
 function fmtVal(v) { return v === null || v === undefined ? "—" : String(v); }
+
+// ─── Integrations panel (Anthropic, UTS) ────────────────────────────────
+function IntegrationsPanel() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [toast, setToast] = React.useState("");
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    try { setData(await adminGetIntegrations()); }
+    catch (e) { setToast(`✗ ${e?.response?.data?.detail || e.message}`); }
+    finally { setLoading(false); }
+  }, []);
+  React.useEffect(() => { reload(); }, [reload]);
+  const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+
+  const onSave = async (key, val) => {
+    try { await adminSetIntegration(key, val); await reload(); flash(`Saved ${key}`); }
+    catch (e) { flash(`✗ ${e?.response?.data?.detail || e.message}`); }
+  };
+  const onReset = async (key) => {
+    try { await adminResetIntegration(key); await reload(); flash(`Reset ${key} → .env fallback`); }
+    catch (e) { flash(`✗ ${e?.response?.data?.detail || e.message}`); }
+  };
+
+  if (loading) return <div style={{ color: "var(--spot-text3)" }}>Loading integrations…</div>;
+  if (!data) return null;
+
+  return (
+    <div data-testid="integrations-panel">
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)", marginBottom: 4 }}>
+        Third-Party Integrations
+      </div>
+      <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 16 }}>
+        Keys are stored encrypted in MongoDB and override the server <code>.env</code> values.
+        Secrets are masked when displayed. Reset clears the override → falls back to <code>.env</code>.
+      </div>
+
+      {/* Provider status pills */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }} data-testid="integrations-providers">
+        {data.providers.map((p) => (
+          <div key={p.provider} style={{
+            padding: "8px 14px", borderRadius: 6,
+            background: p.configured ? `${p.color}11` : "var(--spot-bg3)",
+            border: `1px solid ${p.configured ? `${p.color}55` : "var(--spot-border)"}`,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%",
+              background: p.configured ? p.color : "var(--spot-text3)" }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text)" }}>{p.label}</span>
+            <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+              {p.configured ? "configured" : "missing"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-key table */}
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
+        <colgroup>
+          <col style={{ width: "28%" }} />
+          <col style={{ width: "32%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "16%" }} />
+        </colgroup>
+        <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
+          <th style={th}>Label</th>
+          <th style={th}>Current value</th>
+          <th style={{ ...th, textAlign: "center" }}>.env set</th>
+          <th style={{ ...th, textAlign: "center" }}>Status</th>
+          <th style={th}></th>
+        </tr></thead>
+        <tbody>
+          {data.rows.map((r) => (
+            <IntegrationRow key={r.key} r={r} onSave={onSave} onReset={onReset} />
+          ))}
+        </tbody>
+      </table>
+
+      {toast && (
+        <div data-testid="integ-toast" style={{
+          position: "fixed", bottom: 20, right: 20,
+          background: toast.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)",
+          color: "#fff", padding: "8px 14px", borderRadius: 5, fontSize: 12, fontWeight: 600,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+        }}>{toast}</div>
+      )}
+    </div>
+  );
+}
+
+function IntegrationRow({ r, onSave, onReset }) {
+  // For secret types, the displayed value is masked. The input shows blank until
+  // user types — saving an empty string CLEARS the override (= reset). Saving a
+  // value applies it. We don't pre-fill the masked value so admins can't
+  // accidentally "Save" a masked string back as the real key.
+  const [val, setVal] = React.useState("");
+  const [editing, setEditing] = React.useState(false);
+  React.useEffect(() => { setVal(""); setEditing(false); }, [r.value]);
+
+  const isSecret = r.type === "secret";
+  const isOverride = r.is_override;
+
+  return (
+    <tr style={{ borderBottom: "1px solid var(--spot-line)" }} data-testid={`integ-row-${r.key}`}>
+      <td style={{ ...td }}>
+        <div style={{ fontWeight: 600, color: "var(--spot-text)" }}>{r.label}</div>
+        <div style={{ fontSize: 10, color: "var(--spot-text3)" }}>{r.hint}</div>
+      </td>
+      <td style={{ ...td }}>
+        {editing || !isSecret ? (
+          <input value={val} onChange={(e) => { setVal(e.target.value); setEditing(true); }}
+            type={isSecret ? "password" : "text"}
+            placeholder={isSecret ? r.value || "(empty)" : r.value || "(empty)"}
+            data-testid={`integ-input-${r.key}`}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave(r.key, val);
+              if (e.key === "Escape") { setVal(""); setEditing(false); }
+            }}
+            style={{
+              width: "100%", padding: "5px 8px", fontSize: 12,
+              background: "var(--spot-bg2)", color: "var(--spot-text)",
+              border: `1px solid ${editing ? "var(--spot-accent)" : "var(--spot-border)"}`,
+              borderRadius: 3, fontFamily: "'JetBrains Mono', monospace", outline: "none",
+            }} />
+        ) : (
+          <span onClick={() => setEditing(true)}
+            data-testid={`integ-masked-${r.key}`}
+            style={{ cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 12, color: r.value ? "var(--spot-text)" : "var(--spot-text3)",
+              padding: "4px 6px", display: "inline-block",
+              borderBottom: "1px dashed var(--spot-border)" }}
+            title="Click to replace">
+            {r.value || "(empty — click to set)"}
+          </span>
+        )}
+      </td>
+      <td style={{ ...td, textAlign: "center", fontSize: 10, color: "var(--spot-text3)" }}>
+        {r.env_set ? "yes" : "no"}
+      </td>
+      <td style={{ ...td, textAlign: "center" }}>
+        {r.status === "set" ? (
+          <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, fontWeight: 700,
+            background: "#22c55e22", color: "#22c55e", border: "1px solid #22c55e66" }}>SET</span>
+        ) : (
+          <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, fontWeight: 700,
+            background: "#ef444422", color: "#ef4444", border: "1px solid #ef444466" }}>MISSING</span>
+        )}
+      </td>
+      <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+        {(editing && val.length > 0) && (
+          <button onClick={() => onSave(r.key, val)} data-testid={`integ-save-${r.key}`}
+            style={{ ...btnSmall, background: "var(--spot-green)", color: "#fff", borderColor: "var(--spot-green)" }}>
+            Save
+          </button>
+        )}
+        {isOverride && !editing && (
+          <button onClick={() => onReset(r.key)} data-testid={`integ-reset-${r.key}`}
+            style={{ ...btnSmall, marginLeft: 4 }}>↶ Reset</button>
+        )}
+        {isOverride && (
+          <div style={{ fontSize: 9, color: "var(--spot-warn)", marginTop: 2 }}>OVERRIDE</div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+// ─── Usage panel ────────────────────────────────────────────────────────
+function UsagePanel() {
+  const [data, setData] = React.useState(null);
+  const [months, setMonths] = React.useState(6);
+  const [customer, setCustomer] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = { months };
+      if (customer.trim()) params.customer_code = customer.trim();
+      setData(await adminGetUsage(params));
+    } catch (e) { setData(null); }
+    finally { setLoading(false); }
+  }, [months, customer]);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const fmt$ = (n) => n == null ? "$0.00" : `$${Number(n).toLocaleString(undefined,
+    { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  const fmtN = (n) => (n == null ? 0 : Number(n)).toLocaleString();
+  const fmtTs = (t) => t ? t.replace("T", " ").slice(0, 19) : "—";
+
+  if (loading) return <div style={{ color: "var(--spot-text3)" }}>Loading usage…</div>;
+  if (!data) return <div style={{ color: "var(--spot-err)" }}>Usage data unavailable</div>;
+
+  const t = data.totals || {};
+  return (
+    <div data-testid="usage-panel">
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>Parser Usage</span>
+        <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+          Per-customer Anthropic spend · since {data.window?.since_yyyymm}
+        </span>
+        <span style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Window:</span>
+          {[1, 3, 6, 12, 24].map((n) => (
+            <button key={n} onClick={() => setMonths(n)} data-testid={`usage-window-${n}`}
+              style={{ ...btnSmall, background: months === n ? "var(--spot-accent)" : "var(--spot-bg3)",
+                color: months === n ? "#fff" : "var(--spot-text2)",
+                borderColor: months === n ? "var(--spot-accent)" : "var(--spot-border)" }}>
+              {n}mo
+            </button>
+          ))}
+          <input value={customer} onChange={(e) => setCustomer(e.target.value)}
+            placeholder="filter by cust code" data-testid="usage-customer-filter"
+            style={{ fontSize: 11, padding: "4px 8px", background: "var(--spot-bg2)",
+              color: "var(--spot-text2)", border: "1px solid var(--spot-border)",
+              borderRadius: 3, width: 130 }} />
+        </span>
+      </div>
+
+      {/* Grand totals */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}
+        data-testid="usage-totals">
+        {[
+          ["Total parses", fmtN(t.calls), "var(--spot-accent)"],
+          ["Anthropic cost", fmt$(t.cost_usd), "#a855f7"],
+          ["Tokens in",  fmtN(t.tokens_in),  "var(--spot-text3)"],
+          ["Tokens out", fmtN(t.tokens_out), "var(--spot-text3)"],
+        ].map(([label, value, color]) => (
+          <div key={label} style={{
+            background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
+            borderRadius: 6, padding: "10px 14px",
+          }}>
+            <div style={{ fontSize: 10, color: "var(--spot-text3)", textTransform: "uppercase",
+              letterSpacing: ".06em", fontWeight: 700 }}>{label}</div>
+            <div style={{ fontSize: 20, color, fontWeight: 700, marginTop: 2,
+              fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Side-by-side breakdowns */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <BreakdownCard title="By Month" rows={data.by_month}
+          cols={[["Month", "yyyymm"], ["Parses", "calls"], ["Cost", "cost_usd", fmt$]]}
+          dataTestId="usage-by-month" />
+        <BreakdownCard title="By Customer (top 20)" rows={data.by_customer}
+          cols={[["Code", "customer_code"], ["Name", "customer_name"],
+                 ["Parses", "calls"], ["Cost", "cost_usd", fmt$]]}
+          dataTestId="usage-by-customer" />
+        <BreakdownCard title="By Estimator" rows={data.by_estimator}
+          cols={[["Initials", "est_initials"], ["Parses", "calls"], ["Cost", "cost_usd", fmt$]]}
+          dataTestId="usage-by-estimator" />
+      </div>
+
+      {/* Recent calls */}
+      <div>
+        <div style={{ fontSize: 11, color: "var(--spot-text3)", fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
+          Recent Calls (newest 50)
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }} data-testid="usage-recent">
+          <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
+            <th style={th}>Timestamp</th>
+            <th style={th}>Est</th>
+            <th style={th}>Customer</th>
+            <th style={th}>Model</th>
+            <th style={{ ...th, textAlign: "right" }}>Tok in</th>
+            <th style={{ ...th, textAlign: "right" }}>Tok out</th>
+            <th style={{ ...th, textAlign: "right" }}>Cost</th>
+            <th style={{ ...th, textAlign: "center" }}>OK</th>
+          </tr></thead>
+          <tbody>
+            {data.recent.length === 0 ? (
+              <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>No parses logged yet</td></tr>
+            ) : data.recent.map((r, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid var(--spot-line)" }}>
+                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>{fmtTs(r.timestamp)}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{r.est_initials || "—"}</td>
+                <td style={{ ...td }}>{r.customer_code ? `${r.customer_code} · ${r.customer_name || ""}` : "—"}</td>
+                <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>{r.model}</td>
+                <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{fmtN(r.tokens_in)}</td>
+                <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{fmtN(r.tokens_out)}</td>
+                <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono', monospace", color: "#a855f7", fontWeight: 600 }}>{fmt$(r.cost_usd)}</td>
+                <td style={{ ...td, textAlign: "center" }}>{r.success
+                  ? <span style={{ color: "var(--spot-green)" }}>✓</span>
+                  : <span style={{ color: "var(--spot-err)" }} title={r.error || ""}>✗</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function BreakdownCard({ title, rows, cols, dataTestId }) {
+  return (
+    <div data-testid={dataTestId} style={{
+      background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
+      borderRadius: 6, padding: "8px 10px",
+    }}>
+      <div style={{ fontSize: 11, color: "var(--spot-text3)", fontWeight: 700,
+        textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{title}</div>
+      <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+        <thead><tr style={{ color: "var(--spot-text3)" }}>
+          {cols.map(([h], i) => (
+            <th key={i} style={{ ...th, fontSize: 9,
+              textAlign: typeof h === "string" && /Parses|Cost/.test(h) ? "right" : "left" }}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={cols.length} style={{ ...td, color: "var(--spot-text3)" }}>—</td></tr>
+          ) : rows.map((row, i) => (
+            <tr key={i} style={{ borderTop: "1px solid var(--spot-line)" }}>
+              {cols.map(([h, k, fmt], j) => (
+                <td key={j} style={{ ...td, padding: "3px 4px",
+                  textAlign: /Parses|Cost/.test(h) ? "right" : "left",
+                  fontFamily: /Parses|Cost|Tok/.test(h) ? "'JetBrains Mono', monospace" : "inherit" }}>
+                  {fmt ? fmt(row[k]) : (row[k] ?? "—")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 // ─── Calibration baseline (read-only) ───────────────────────────────────
 function CalibrationPanel({ data }) {
