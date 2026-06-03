@@ -1,0 +1,66 @@
+{
+  "summary": "Tested Multi-Part (MP-1..MP-6) parity end-to-end. Backend /api/engine/calculate-multi-part: 12/12 pytest pass (Matched Set default, GM override @ 40.00% exact, Individual mode per-item qtys, Purchased markup 0.40, Fulfillment markup 0.45, manufactured pipeline non-zero cost, set-sell decreases with volume, Per Job freight allocation present, Fulfillment excluded from freight, unauth blocked, no-bomItems edge). Frontend UI: MP toolbar toggle, badge counter, BOM strip + Component / Duplicate / Remove, Convert→Simple with 1 item, Convert refusal with >1 item, MP banner text + per-component breakdown table, Simple-mode regression (no MP banner / no BOM in Simple) ALL PASS. CRITICAL: Spin-Off (↗) crashes the entire React app due to spinOffOrigin being stored as an object {estNum,itemDesc} but rendered as raw {s.spinOffOrigin} in EstimateInfoSec.jsx. Preview PDF in MP mode shows 'No active quantities' and does not render the BOM listing header tokens (Sets / Per Set / Per/M Sets) when pricing is $0 — needs investigation with priced rows.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "BOM toolbar ↗ Spin-Off",
+        "issue": "Clicking spin-off (bom-spinoff-N) immediately crashes the entire app with React error: 'Objects are not valid as a React child (found: object with keys {estNum, itemDesc})'. The spun-off tab is created but never renders because EstimateInfoSec.jsx:19 renders `{s.spinOffOrigin}` directly while QuoteContext.jsx:430 stores it as `{estNum, itemDesc}`.",
+        "selector": "[data-testid='bom-spinoff-1']",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "PreviewPdfModal in MP mode",
+        "issue": "Preview Quote modal in Multi-Part mode shows 'No active quantities to display' and only one Item label — does not render the per-component BOM listing nor the 'Sets / Per Set / Per/M Sets' headers. Tested with valid dims (5x7) + qtys [500,1000,2500] + default board. Likely cascading from pricing being $0 (engine not pricing through UI for default board) — needs investigation. Backend MP calc DOES produce real pricing (verified in pytest), so the issue is in the UI/engine handoff or the PDF MP-branch condition.",
+        "selector": "[data-testid='modal-preview-pdf']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "Quote Table in MP mode",
+        "issue": "With valid dims (5x7) + qtys 500/1000/2500 and default board (200· C · Kemi/Kraft), Quote Table rows render but SELL/EA, GM%, GM$, TOTAL, COST/MSF, FREIGHT are all $0.00 / 0.0%. Per-component breakdown row also empty. Hook-order warning emitted: 'React has detected a change in the order of Hooks called'. Banner renders correctly, the issue is downstream pricing display.",
+        "selector": "[data-testid='mp-banner'] / [data-testid='mp-per-component']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Multi-Part calculate → Quote Table render",
+        "issue": "useEngine hook should be routing to /api/engine/calculate-multi-part in MP mode, but the UI displays $0 across all priced rows. Backend endpoint is verified working via pytest (Manufactured component runs full pipeline against board 200/B/42# Kemi-Lite producing non-zero cost/sell). Likely the default board the UI selects (200 C Kemi/Kraft) does not match any approved sheet OR print/finishing fields aren't being submitted. Component-level Console warning about hook-order suggests a conditional hook somewhere in the MP render path.",
+        "affected_selectors": ["[data-testid='mp-banner']", "[data-testid='mp-per-component']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multi_part.py",
+    "/app/test_reports/pytest/mp_results.xml"
+  ],
+  "action_items": [
+    "FIX SPIN-OFF CRASH (CRITICAL): In QuoteContext.jsx:430 change `newState.spinOffOrigin = { estNum: cur.state.estNum, itemDesc: target.desc };` to a string, e.g. `newState.spinOffOrigin = `${cur.state.estNum || '—'} / ${target.desc || ''}`;` — OR — update EstimateInfoSec.jsx:19 to render `{s.spinOffOrigin.estNum} / {s.spinOffOrigin.itemDesc}` defensively. Without this fix the entire app whitescreens on every ↗ click in MP mode.",
+    "Investigate Quote Table $0 pricing in MP mode end-to-end: confirm useEngine is calling /api/engine/calculate-multi-part (network panel) and the response.slots[N] values are being mapped into perComponent rows. Also resolve the React hook-order warning in the MP render path (likely a conditional `useMemo` or `useEffect` placed inside a conditional branch — Rules of Hooks violation).",
+    "Multi-Part PDF preview: verify the `is_mp` branch in /app/backend/routes/pdf.py:_customer_pdf_html is fed a payload that includes `bomItems` + `meta` so it can produce the BOM listing table and Sets/Per Set headers. Currently in preview modal it falls back to the simple-item layout."
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL: QuoteContext.jsx:430 stores spinOffOrigin as object {estNum,itemDesc} but EstimateInfoSec.jsx:19 renders it as raw React child. Either change the store shape to a string OR render explicit fields. This is a 100% repro crash.",
+    "engine_routes.py calculate-multi-part: clean, mirrors legacy semantics. Matched-Set override uses `job_sell = job_cost / (1 - margin)` formula — verified produces exact 40.00% GM%. Purchased & Fulfillment branches correctly compute cost_pc/sell_pc and respect the per-slot purCostByQty dict pattern. Fulfillment excluded from job-freight allocation as expected.",
+    "Hook-order warning suggests Rules-of-Hooks violation somewhere in MP-aware render path (likely QuoteTableSec or useEngine). Address before shipping — these eventually cause silent state corruption.",
+    "Convert→Simple correctly refuses with >1 items (stayed in MP·2) — toast not visually verified but state did not flip.",
+    "Backend pytest covers happy paths only. Recommend adding: (a) empty pricingMode (defaults to Matched Set), (b) `setMarginOverride=true` with one Purchased+one Fulfillment to verify override only affects job_sell math, not per-component pricing, (c) negative qtys edge case."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_multi_part.py (new — 12 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 pytest)",
+    "frontend": "~70% — MP toggle/badge/BOM ops (add/dup/remove)/state isolation/banner/convert refusal/Simple regression PASS; Spin-Off crash CRITICAL; Quote Table pricing $0; PDF preview MP branch broken"
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — works; initials gate 'AD'",
+  "seed_data_creation": "None. Used existing draft tabs. Several new draft estimates accumulated (~5 from this run).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Backend MP endpoint is solid (12/12 pytest at /app/backend/tests/test_multi_part.py — run via `REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2) pytest backend/tests/test_multi_part.py -v`). UI testids confirmed: toolbar-toggle-mp, sec-bom, bom-strip, bom-item-N (top-level only — child elements like bom-item-desc-N nest inside), bom-add-btn, bom-dup-btn, bom-rm-N, bom-spinoff-N, sec-pricing-strategy, job-level-alloc-panel, mp-banner, mp-per-component, modal-preview-pdf, preview-pdf-close-btn, login-email-input, login-password-input, login-submit-btn, initials-gate-input, initials-gate-submit, tab-add-btn. Dim inputs: input-oneUpW, input-oneUpL. Qty inputs: input-qty-0..4. The spin-off crash is reproduced by clicking [data-testid='bom-spinoff-1'] after adding ≥2 BOM items — page goes to React red-screen. After that fix re-test the spin-off → new tab flow + state isolation across the spun-off tab.",
+  "rca of the issue": "Spin-off crash root cause: In /app/frontend/src/context/QuoteContext.jsx line 430 the spinOffBomItem callback stores `newState.spinOffOrigin = { estNum: cur.state.estNum, itemDesc: target.desc }` — an OBJECT. Then in /app/frontend/src/components/spot/EstimateInfoSec.jsx line 19 the header label renders `🔗 From: {s.spinOffOrigin}` interpolating the object as a React child, which React rejects (objects aren't valid children). The defaults.js sets spinOffOrigin=null so existing tabs are fine, but the moment any tab gets a non-null object value, it crashes on first render. Reproduction: (1) login admin, (2) click '→ Multi-Part', (3) click + Component once (now 2 items), (4) click ↗ on Item 2 → red screen. Mitigation (smallest patch): change line 430 to `newState.spinOffOrigin = (cur.state.estNum ? cur.state.estNum + ' · ' : '') + (target.desc || 'Untitled');` OR update EstimateInfoSec.jsx to render `{s.spinOffOrigin?.itemDesc || s.spinOffOrigin}` defensively (handles both legacy string and new object shape)."
+}

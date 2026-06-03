@@ -26,6 +26,11 @@ export const calculateSlot = (payload, slotIndex = 0) =>
 export const calculateAll = (payload) =>
   api.post("/engine/calculate-all", payload).then((r) => r.data);
 
+// MP-2: Multi-Part — orchestrates per-component pricing + Matched Set / Individual aggregation.
+// Body shape: full active state including bomItems[], pricingMode, setMarginPct, etc.
+export const calculateMultiPart = (payload) =>
+  api.post("/engine/calculate-multi-part", payload).then((r) => r.data);
+
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 

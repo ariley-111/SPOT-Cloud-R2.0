@@ -4,6 +4,9 @@ import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
 import { listDrafts, createDraft, updateDraft, deleteDraft } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
+import {
+  gatherItemState, freshItemState, makeBomItem, applyItemStateTo,
+} from "../lib/mpSchema";
 
 const QuoteCtx = createContext(null);
 
@@ -205,6 +208,238 @@ export function QuoteProvider({ children }) {
     pushToast("Duplicated", "ok");
   }, [active, initials, pushToast]);
 
+  // ─── Multi-Part actions ─────────────────────────────────────
+  //   Active-item mirror: the top-level state always reflects the currently active
+  //   BOM item. When the user switches items we snapshot the current item-level
+  //   slice into bomItems[oldIdx].state and load target.state at top-level.
+  //   See /app/frontend/src/lib/mpSchema.js for field segregation.
+
+  /** Switch which BOM item is active (snapshots current, loads target). */
+  const switchBomItem = useCallback((newIdx) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      const oldIdx = t.state.activeItemIdx ?? 0;
+      if (newIdx === oldIdx || !items[newIdx]) return t;
+      // Snapshot current top-level item-level fields into the outgoing item
+      const snap = gatherItemState(t.state);
+      const target = items[newIdx];
+      const itemsSaved = items.map((it, i) => (i === oldIdx ? { ...it, state: snap } : it));
+      // Apply target.state at top-level (reset-first), also mirror desc/custIdent
+      const next = applyItemStateTo(t.state, target.state || freshItemState());
+      next.bomItems = itemsSaved;
+      next.activeItemIdx = newIdx;
+      next.itemDesc = target.desc || target.state?.itemDesc || "";
+      next.custIdent = target.custIdent || target.state?.custIdent || "";
+      return { ...t, state: next, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
+  /** Add a new blank BOM item. Snapshots current active first. */
+  const addBomItem = useCallback((opts = {}) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      const oldIdx = t.state.activeItemIdx ?? 0;
+      // Snapshot current item-level fields into the outgoing item (if any)
+      const itemsSaved = items.length > 0
+        ? items.map((it, i) => (i === oldIdx ? { ...it, state: gatherItemState(t.state) } : it))
+        : items;
+      const desc = opts.desc || `Item ${itemsSaved.length + 1}`;
+      const fresh = freshItemState({ itemDesc: desc });
+      const newItem = makeBomItem({ desc, type: opts.type || "Manufactured",
+        pcsPerSet: opts.pcsPerSet || 1, state: fresh });
+      const newItems = [...itemsSaved, newItem];
+      const next = applyItemStateTo(t.state, fresh);
+      next.bomItems = newItems;
+      next.activeItemIdx = newItems.length - 1;
+      next.itemDesc = desc;
+      next.custIdent = "";
+      return { ...t, state: next, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
+  /** Duplicate the currently active BOM item. */
+  const duplicateBomItem = useCallback(() => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      const oldIdx = t.state.activeItemIdx ?? 0;
+      if (!items[oldIdx]) return t;
+      // Snapshot current first
+      const itemsSaved = items.map((it, i) => (i === oldIdx ? { ...it, state: gatherItemState(t.state) } : it));
+      const src = itemsSaved[oldIdx];
+      const copy = makeBomItem({
+        desc: `${src.desc} (copy)`, type: src.type, pcsPerSet: src.pcsPerSet,
+        custIdent: src.custIdent, state: { ...src.state },
+      });
+      const newItems = [...itemsSaved.slice(0, oldIdx + 1), copy, ...itemsSaved.slice(oldIdx + 1)];
+      const newIdx = oldIdx + 1;
+      const next = applyItemStateTo(t.state, copy.state);
+      next.bomItems = newItems;
+      next.activeItemIdx = newIdx;
+      next.itemDesc = copy.desc;
+      next.custIdent = copy.custIdent || "";
+      return { ...t, state: next, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
+  /** Remove a BOM item. Refuses if it's the last one. */
+  const removeBomItem = useCallback((idx) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      if (items.length <= 1 || !items[idx]) return t;
+      const oldIdx = t.state.activeItemIdx ?? 0;
+      // If removing the active item, save current draft into the to-be-removed entry first
+      // (no-op) and pick a new active = clamp to remaining length.
+      const newItems = items.filter((_, i) => i !== idx);
+      const newIdx = idx === oldIdx
+        ? Math.min(idx, newItems.length - 1)
+        : (idx < oldIdx ? oldIdx - 1 : oldIdx);
+      const target = newItems[newIdx];
+      const next = applyItemStateTo(t.state, target.state || freshItemState());
+      next.bomItems = newItems;
+      next.activeItemIdx = newIdx;
+      next.itemDesc = target.desc || target.state?.itemDesc || "";
+      next.custIdent = target.custIdent || target.state?.custIdent || "";
+      return { ...t, state: next, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
+  /** Reorder a BOM item from `from` index to `to` index. Keeps activeItemIdx pointing
+   *  at the same logical item after the move. */
+  const reorderBomItem = useCallback((from, to) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = (t.state.bomItems || []).slice();
+      if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return t;
+      const oldIdx = t.state.activeItemIdx ?? 0;
+      // Snapshot current active first (so we don't lose unsaved edits)
+      const snap = gatherItemState(t.state);
+      items[oldIdx] = { ...items[oldIdx], state: snap };
+      const [moved] = items.splice(from, 1);
+      items.splice(to, 0, moved);
+      // Translate activeItemIdx
+      let newActive = oldIdx;
+      if (from === oldIdx) newActive = to;
+      else if (from < oldIdx && to >= oldIdx) newActive = oldIdx - 1;
+      else if (from > oldIdx && to <= oldIdx) newActive = oldIdx + 1;
+      return { ...t, state: { ...t.state, bomItems: items, activeItemIdx: newActive }, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
+  /** Update a property on the active item's BOM entry (desc, type, pcsPerSet, custIdent). */
+  const updateBomItem = useCallback((idx, patch) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      if (!items[idx]) return t;
+      const next = items.map((it, i) => i === idx ? { ...it, ...patch } : it);
+      const upd = { ...t.state, bomItems: next };
+      // If we're updating the active item's desc/custIdent, mirror to top-level
+      if (idx === (t.state.activeItemIdx ?? 0)) {
+        if ("desc" in patch) upd.itemDesc = patch.desc;
+        if ("custIdent" in patch) upd.custIdent = patch.custIdent;
+      }
+      return { ...t, state: upd, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
+  /** Convert the current Simple quote → Multi-Part by wrapping current state as Item 1. */
+  const convertToMultiPart = useCallback(() => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      if (t.state.quoteType === "Multi-Part") return t;
+      const snap = gatherItemState(t.state);
+      const firstItem = makeBomItem({
+        desc: t.state.itemDesc || "Item 1",
+        type: "Manufactured",
+        pcsPerSet: 1,
+        custIdent: t.state.custIdent || "",
+        state: snap,
+      });
+      return {
+        ...t,
+        state: {
+          ...t.state,
+          quoteType: "Multi-Part",
+          pricingMode: "Matched Set",
+          bomItems: [firstItem],
+          activeItemIdx: 0,
+        },
+        updatedAt: Date.now(),
+      };
+    }));
+    pushToast("Converted to Multi-Part", "ok");
+  }, [activeId, pushToast]);
+
+  /** Convert Multi-Part → Simple. Only allowed if there's exactly one item.
+   *  If multiple, the user must spin them off or delete first. */
+  const convertToSimple = useCallback(() => {
+    let blocked = false;
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      if (t.state.quoteType !== "Multi-Part") return t;
+      const items = t.state.bomItems || [];
+      if (items.length > 1) { blocked = true; return t; }
+      // Collapse Item 1 (or empty) into top-level
+      const first = items[0]?.state || gatherItemState(t.state);
+      const next = applyItemStateTo(t.state, first);
+      next.quoteType = "Simple";
+      next.pricingMode = "Individual";
+      next.bomItems = [];
+      next.activeItemIdx = 0;
+      next.itemDesc = items[0]?.desc || t.state.itemDesc || "";
+      next.custIdent = items[0]?.custIdent || t.state.custIdent || "";
+      return { ...t, state: next, updatedAt: Date.now() };
+    }));
+    if (blocked) {
+      pushToast("Cannot convert — remove extra components first", "warn");
+      return false;
+    }
+    pushToast("Converted to Simple", "ok");
+    return true;
+  }, [activeId, pushToast]);
+
+  /** MP-6: Spin off a single BOM component into a new Simple tab.
+   *  Useful when one component of a display should be priced & sent as a standalone
+   *  quote. Mirrors legacy spinOffSingleItem (spot_r1_5.jsx ~L3187+). */
+  const spinOffBomItem = useCallback((idx) => {
+    const cur = tabs.find((t) => t.id === activeId);
+    if (!cur) return;
+    const items = cur.state.bomItems || [];
+    const target = items[idx];
+    if (!target) return;
+    // Build the Simple-tab state from the item's saved state, carrying over
+    // estimator + customer identity from the parent quote.
+    const newState = applyItemStateTo({ ...DEFAULT_STATE }, target.state || freshItemState());
+    newState.estInitials = cur.state.estInitials || "";
+    newState.estNum = initials ? generateEstNum(initials) : "";
+    newState.estNumAuto = true;
+    newState.custName = cur.state.custName || "";
+    newState.custCode = cur.state.custCode || "";
+    newState.custRef = cur.state.custRef || "";
+    newState.customerRecord = cur.state.customerRecord || null;
+    newState.itemDesc = target.desc || newState.itemDesc || "";
+    newState.custIdent = target.custIdent || newState.custIdent || "";
+    newState.quoteType = "Simple";
+    newState.pricingMode = "Individual";
+    newState.bomItems = [];
+    newState.activeItemIdx = 0;
+    newState.spinOffOrigin = { estNum: cur.state.estNum, itemDesc: target.desc };
+    const newTabRecord = {
+      id: "local-" + Math.random().toString(36).slice(2, 10),
+      persisted: false,
+      label: `${target.desc || `Item ${idx+1}`} (spin-off)`,
+      state: newState,
+      updatedAt: Date.now(),
+    };
+    setTabs((c) => [...c, newTabRecord]);
+    setActiveId(newTabRecord.id);
+    pushToast(`Spun off "${target.desc || `Item ${idx+1}`}" as new tab`, "ok");
+  }, [tabs, activeId, initials, pushToast]);
+
   // ─── Initials commit ────────────────────────────────────────
   const commitInitials = useCallback((raw) => {
     const v = (raw || "").trim().toUpperCase().slice(0, 4);
@@ -231,6 +466,10 @@ export function QuoteProvider({ children }) {
     tabs, activeId, active,
     setActiveId, newTab, closeTab, duplicateTab,
     setField, setManyFields, replaceState,
+    // Multi-Part actions
+    switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
+    reorderBomItem, updateBomItem, convertToMultiPart, convertToSimple,
+    spinOffBomItem,
     initials, initialsGateOpen, setInitialsGateOpen, commitInitials,
     sec, toggleSec, expandAll, collapseAll,
     toasts, pushToast,

@@ -75,6 +75,22 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Customer auto-populate ship-to address (address_1 + address_2 + city + state)
 - Rich Walter estimator account created (rwalter@standardprinting.com / spot-rich-2026)
 
+### 2026-06-03 — Multi-Part parity sprint ✅ (MP-1 → MP-6)
+- **MP-1** Active-item mirror state model (`gatherItemState`/`applyItemStateTo`),
+  job-level vs item-level field segregation (`/app/frontend/src/lib/mpSchema.js`),
+  BOM toolbar (Add/Duplicate/Delete/Reorder/Convert to ↔ from Multi-Part)
+- **MP-2** Backend `/api/engine/calculate-multi-part` endpoint — per-component pricing
+  (MFG/Purchased/Fulfillment), Matched Set + Individual aggregation, GM override
+- **MP-3** Parser → MP auto-apply: detects `bomItems[]` in parsed output,
+  renders per-component tabs + low-confidence badge in Review modal, applies
+  full Multi-Part state via `replaceState`
+- **MP-4** Job-level freight/prepress allocation (UI + backend wire-through),
+  per-component Right Dashboard (Item Setup / Production / Cost Buildup show
+  the active item, not the aggregate)
+- **MP-5** Multi-Part PDF — BOM listing in item bar + "Per Set" pricing labels
+- **MP-6** Per-component confidence ⚠ badges in parse-review modal, Spin-off
+  action (↗ button → new Simple tab with carry-over identity)
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅
@@ -91,7 +107,9 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Investigate R² 0.98 claim discrepancy — drill into per-project residuals in fleet_regression.py output to identify whether Lynk/Tavens are statistical outliers or whether the engine has a systemic high bias
 
 ## 8. Backlog (P1-P3)
-- Multi-Part per-item state isolation (each bomItem snapshots its own state)
+- ~~Multi-Part per-item state isolation~~ ✅ shipped 2026-06-03 (MP-1)
+- Separate `bom_items` MongoDB collection (currently lives in `quote_drafts.state` JSON blob) — enables cross-quote analytics
+- Separate Preview/Production database (`DB_NAME` split — preview/prod currently share)
 - Phase 4: Pricing Admin Console (D-110 rates, GM curve, audit log)
 - Phase 5: Entra SSO + SharePoint customer sync + PDF archive (blocked on IT)
 - Side-by-side last-accepted quote comparison in Preview modal

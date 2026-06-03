@@ -21,8 +21,23 @@ import { useEngine } from "../hooks/useEngine";
 export default function SpotApp() {
   const { active, toasts } = useQuote();
   const [modal, setModal] = useState(null);
-  const { results } = useEngine(active?.state);
-  const primary = results[(active?.state?.selSlot) || 0] || results[0];
+  const { results, perComponent, meta, isMultiPart } = useEngine(active?.state);
+  const selSlot = (active?.state?.selSlot) || 0;
+  const activeItemIdx = active?.state?.activeItemIdx ?? 0;
+  // For MP: the active item's pipeline result at the selected slot (so the right
+  // dashboard / item setup show per-component buildup, not the aggregate row).
+  const itemResult = React.useMemo(() => {
+    if (!isMultiPart) return null;
+    const slot = perComponent.find((p) => p.slot === selSlot) || perComponent[0];
+    return slot?.items?.[activeItemIdx] || null;
+  }, [isMultiPart, perComponent, selSlot, activeItemIdx]);
+  // Aggregate row for the selected slot (used by Quote Table banner totals)
+  const aggregate = results[selSlot] || results[0];
+  // What the right dashboard + item setup show:
+  //   - Simple mode: aggregate (= the single-piece per-qty result)
+  //   - Multi-Part mode: the active item's per-component result so the cost
+  //     buildup / route / sheet info reflect THAT component, not the job total.
+  const primary = isMultiPart ? (itemResult || aggregate) : aggregate;
 
   // Allow Quote Table buttons to open modals
   useEffect(() => {

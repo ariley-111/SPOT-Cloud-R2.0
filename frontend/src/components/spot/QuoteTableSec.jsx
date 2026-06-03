@@ -26,6 +26,9 @@ export default function QuoteTableSec({ results }) {
   const rows = (results || []).filter((r) => Number(r.qty) > 0);
   const activeCount = rows.filter((r) => !r.error).length;
   const total = rows.length;
+  const isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
+  const pricingMode = s.pricingMode || "Matched Set";
+  const setOverride = !!s.setMarginOverride;
 
   const onPreview = () => window.dispatchEvent(new CustomEvent("spot:open-preview"));
   const onExport  = () => window.dispatchEvent(new CustomEvent("spot:export-csv"));
@@ -56,6 +59,30 @@ export default function QuoteTableSec({ results }) {
     <Sec label="Quote Table" hue="#a855f7" open={sec.quoteTable} onToggle={() => toggleSec("quoteTable")}
       badge={total > 0 ? `${activeCount}/${total}` : null}
       data-testid="sec-quote-table">
+
+      {/* Multi-Part indicator banner */}
+      {isMP && (
+        <div data-testid="mp-banner" style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          padding: "6px 10px", marginBottom: 8, borderRadius: 4,
+          background: "#f59e0b0c", border: "1px solid #f59e0b44",
+        }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
+            textTransform: "uppercase", letterSpacing: ".08em" }}>Multi-Part Totals</span>
+          <span style={{ fontSize: 11, color: "var(--spot-text2)" }}>
+            {pricingMode} · {(s.bomItems || []).length} component{(s.bomItems || []).length !== 1 ? "s" : ""}
+            {pricingMode === "Matched Set" && setOverride && (
+              <> · GM override {(parseFloat(s.setMarginPct || 0) * 100).toFixed(1)}%</>
+            )}
+            {pricingMode === "Matched Set" && !setOverride && (
+              <> · per-item GM tiers aggregated</>
+            )}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--spot-text3)", marginLeft: "auto" }}>
+            Rows show <b>per-set</b> totals at each set quantity
+          </span>
+        </div>
+      )}
 
       {/* Toolbar row */}
       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
@@ -188,6 +215,61 @@ export default function QuoteTableSec({ results }) {
           })()}
         </div>
       )}
+      {/* MP-4: Per-component breakdown for the selected qty slot */}
+      {isMP && rows.length > 0 && rows[s.selSlot || 0] && Array.isArray(rows[s.selSlot || 0].perComponent) && (
+        <div data-testid="mp-per-component" style={{
+          marginTop: 8, padding: "8px 10px", background: "var(--spot-bg3)",
+          border: "1px solid var(--spot-border)", borderRadius: 4, fontSize: 12,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+            textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>
+            Per-Component Breakdown @ {fmtInt(rows[s.selSlot || 0].qty)} sets
+          </div>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+            <thead><tr style={{ color: "var(--spot-text3)" }}>
+              <th style={{ textAlign: "left",  padding: "3px 6px" }}>Component</th>
+              <th style={{ textAlign: "center", padding: "3px 6px" }}>Type</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Pcs/Set</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Order Qty</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Cost/Pc</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Sell/Pc</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Cost</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Sell</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>GM%</th>
+              <th style={{ textAlign: "right", padding: "3px 6px" }}>Route</th>
+            </tr></thead>
+            <tbody>
+              {rows[s.selSlot || 0].perComponent.map((pc, i) => {
+                const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a","#9ca3af","#fbbf24"];
+                const tint = tints[i % tints.length];
+                return (
+                  <tr key={pc.itemId || i} style={{ borderTop: "1px solid var(--spot-line)" }}
+                    data-testid={`mp-pc-row-${i}`}>
+                    <td style={{ padding: "3px 6px", display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: tint }} />
+                      {pc.desc || `Item ${i+1}`}
+                      {pc.error && <span style={{ color: "var(--spot-err)", fontSize: 9, marginLeft: 4 }}>· {pc.error}</span>}
+                    </td>
+                    <td style={{ padding: "3px 6px", textAlign: "center", color: "var(--spot-text3)" }}>{pc.type?.[0] || "M"}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right" }}>×{pc.pcsPerSet || 1}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtInt(pc.qty || pc.totalQty || 0)}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.costPc || (pc.qty > 0 ? (pc.totalMfg || 0) / pc.qty : 0), 4)}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.sellPc || (pc.qty > 0 ? (pc.itemSell || 0) / pc.qty : 0), 4)}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right", color: "var(--spot-text2)" }}>{fmtMoney(pc.totalMfg || 0)}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right", fontWeight: 600 }}>{fmtMoney(pc.itemSell || 0)}</td>
+                    <td style={{ padding: "3px 6px", textAlign: "right",
+                      color: (pc.gmPct || 0) >= 0 ? "var(--spot-green)" : "var(--spot-err)" }}>
+                      {fmtPct(pc.gmPct || 0, 1)}
+                    </td>
+                    <td style={{ padding: "3px 6px", textAlign: "right", fontSize: 10,
+                      color: routeColor(pc.route), fontWeight: 600 }}>{pc.route || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Sec>
   );
 }
@@ -196,6 +278,9 @@ function routeColor(rt) {
   if (rt === "CAD") return "#3b82f6";
   if (rt === "Crest") return "#f59e0b";
   if (rt === "Bobst") return "#a855f7";
+  if (rt === "Purchased") return "#06b6d4";
+  if (rt === "Fulfillment") return "#22c55e";
+  if (rt === "Matched Set" || rt === "Individual") return "#f59e0b";
   return "var(--spot-text2)";
 }
 

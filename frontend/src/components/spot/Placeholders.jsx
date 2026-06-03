@@ -132,10 +132,89 @@ export function PricingStrategySec() {
           </div>
         )}
 
+        {/* MP-4: Job-Level Cost Allocation (Multi-Part only) */}
+        {isMP && (
+          <JobLevelAllocPanel s={s} setField={setField} />
+        )}
+
         {/* Force Sell — per-qty override */}
         <ForceSellPanel s={s} setField={setField} />
       </div>
     </Sec>
+  );
+}
+
+function JobLevelAllocPanel({ s, setField }) {
+  const items = s.bomItems || [];
+  const fScope = s.freightScope || "None";
+  const pScope = s.prepressScope || "None";
+  const allocMethod = s.freightAllocMethod || "By MSF";
+  return (
+    <div style={{
+      background: "#06b6d40c", border: "1px solid #06b6d422",
+      borderRadius: 5, padding: "6px 8px", flex: "1 0 100%",
+    }} data-testid="job-level-alloc-panel">
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#06b6d4",
+        textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
+        Job-Level Cost Allocation
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto 1fr",
+        gap: "4px 10px", alignItems: "center", fontSize: 11 }}>
+
+        <span style={{ color: "var(--spot-text3)" }}>Freight scope</span>
+        <div style={{ display: "flex", gap: 2 }}>
+          <Tile label="Per Item" active={fScope === "None"} onClick={() => setField("freightScope", "None")}
+            small tint="#94a3b8" data-testid="tile-freight-scope-item" />
+          <Tile label="Per Job"  active={fScope === "Per Job"} onClick={() => setField("freightScope", "Per Job")}
+            small tint="#06b6d4" data-testid="tile-freight-scope-job" />
+        </div>
+        <span style={{ color: "var(--spot-text3)" }}>Job freight $</span>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <Num value={s.jobFreightCost || 0}
+            onChange={(v) => setField("jobFreightCost", String(v))}
+            step="0.01" min="0" disabled={fScope !== "Per Job"}
+            style={{ width: 80, padding: "4px 6px", textAlign: "right",
+              opacity: fScope === "Per Job" ? 1 : 0.5 }}
+            data-testid="input-job-freight-cost" />
+          {fScope === "Per Job" && (
+            <select value={allocMethod} onChange={(e) => setField("freightAllocMethod", e.target.value)}
+              data-testid="select-freight-alloc-method"
+              style={{ background: "var(--spot-bg2)", color: "var(--spot-text2)",
+                border: "1px solid var(--spot-border)", borderRadius: 3,
+                fontSize: 10, padding: "2px 4px" }}>
+              <option>By MSF</option>
+              <option>Equal</option>
+            </select>
+          )}
+        </div>
+
+        <span style={{ color: "var(--spot-text3)" }}>Prepress scope</span>
+        <div style={{ display: "flex", gap: 2 }}>
+          <Tile label="Per Item" active={pScope === "None"} onClick={() => setField("prepressScope", "None")}
+            small tint="#94a3b8" data-testid="tile-prepress-scope-item" />
+          <Tile label="Per Job"  active={pScope === "Per Job"} onClick={() => setField("prepressScope", "Per Job")}
+            small tint="#06b6d4" data-testid="tile-prepress-scope-job" />
+        </div>
+        <span style={{ color: "var(--spot-text3)" }}>Job prepress $</span>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <Num value={s.jobPrepressCost || 0}
+            onChange={(v) => setField("jobPrepressCost", String(v))}
+            step="0.01" min="0" disabled={pScope !== "Per Job"}
+            style={{ width: 80, padding: "4px 6px", textAlign: "right",
+              opacity: pScope === "Per Job" ? 1 : 0.5 }}
+            data-testid="input-job-prepress-cost" />
+          {pScope === "Per Job" && (
+            <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>split Equal · MFG items only</span>
+          )}
+        </div>
+      </div>
+      {(fScope === "Per Job" || pScope === "Per Job") && items.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: 10, color: "var(--spot-text3)" }}>
+          {fScope === "Per Job" && <span>Freight ${parseFloat(s.jobFreightCost || 0).toFixed(2)} split <b>{allocMethod}</b> across {items.length} components · </span>}
+          {pScope === "Per Job" && <span>Prepress ${parseFloat(s.jobPrepressCost || 0).toFixed(2)} split <b>Equal</b> across MFG components (FUL items get $0)</span>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -327,66 +406,112 @@ export function BoardEngineSec() {
 }
 
 /** ─── Bill of Materials ─────────────────────────────────────────────
- *  Multi-Part only. Item strip + per-item type selector. */
+ *  Multi-Part only. Item strip with Add / Duplicate / Delete / Reorder + per-item
+ *  desc, type, pcsPerSet. Active item is highlighted; clicking a tab calls
+ *  `switchBomItem` which snapshots the current item-level state and loads the target.
+ *  Ported from legacy spot_r1_5.jsx L2775-2820 (switchBomItem, addBomItem,
+ *  removeBomItem) + R1.5.x BOM strip UI. */
 export function BomSec() {
-  const { active, sec, toggleSec, setField, setManyFields } = useQuote();
+  const {
+    active, sec, toggleSec,
+    switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
+    reorderBomItem, updateBomItem, spinOffBomItem,
+  } = useQuote();
   const s = active?.state || {};
   if (s.quoteType !== "Multi-Part") return null;
   const items = s.bomItems || [];
-  const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a"];
+  const activeIdx = s.activeItemIdx ?? 0;
+  const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a","#9ca3af","#fbbf24"];
 
-  const addItem = () => {
-    const next = [...items, { id: "it_"+Date.now(), desc: `Item ${items.length+1}`, type: "Manufactured", pcsPerSet: 1 }];
-    setManyFields({ bomItems: next, activeItemIdx: next.length - 1 });
-  };
-  const rm = (i) => {
-    const next = items.filter((_, idx) => idx !== i);
-    setManyFields({ bomItems: next, activeItemIdx: Math.max(0, Math.min(s.activeItemIdx, next.length - 1)) });
-  };
+  // Drag-reorder
+  const [dragIdx, setDragIdx] = React.useState(null);
 
   return (
-    <Sec label={<>Bill of Materials <span style={{ opacity: 0.7 }}>· {items.length} Component{items.length !== 1 ? "s" : ""}</span></>}
+    <Sec
+      label={<>Bill of Materials <span style={{ opacity: 0.7 }}>· {items.length} Component{items.length !== 1 ? "s" : ""}</span></>}
       hue="#f59e0b" open={sec.bom} onToggle={() => toggleSec("bom")} data-testid="sec-bom">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }} data-testid="bom-strip">
-        {items.map((it, i) => {
-          const tint = tints[i % tints.length];
-          const isActive = i === s.activeItemIdx;
-          return (
-            <div key={it.id} data-testid={`bom-item-${i}`}
-              onClick={() => setField("activeItemIdx", i)}
-              style={{
-                padding: "5px 10px", borderRadius: 4, fontSize: 11, cursor: "pointer",
-                background: isActive ? `${tint}22` : "var(--spot-bg3)",
-                border: `1px solid ${isActive ? tint : "var(--spot-border)"}`,
-                color: isActive ? tint : "var(--spot-text2)",
-                display: "flex", alignItems: "center", gap: 8,
-              }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: tint }} />
-              <input value={it.desc} onChange={(e) => {
-                const next = items.map((c, idx) => idx === i ? { ...c, desc: e.target.value } : c);
-                setField("bomItems", next);
-              }} onClick={(e) => e.stopPropagation()}
-                style={{ background: "transparent", border: "none", color: "inherit",
-                  fontSize: 11, outline: "none", width: 120, fontFamily: "inherit" }} />
-              <select value={it.type} onChange={(e) => {
-                const next = items.map((c, idx) => idx === i ? { ...c, type: e.target.value } : c);
-                setField("bomItems", next);
-              }} onClick={(e) => e.stopPropagation()}
-                style={{ background: "var(--spot-bg2)", color: "var(--spot-text3)",
-                  border: "1px solid var(--spot-border)", borderRadius: 3,
-                  fontSize: 10, padding: "1px 3px", outline: "none" }}>
-                <option>Manufactured</option><option>Fulfillment</option><option>Purchased</option>
-              </select>
-              <span onClick={(e) => { e.stopPropagation(); rm(i); }} data-testid={`bom-rm-${i}`}
-                style={{ color: "var(--spot-text3)", cursor: "pointer" }}>×</span>
-            </div>
-          );
-        })}
-        <button onClick={addItem} data-testid="bom-add-btn" style={{
-          all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
-          padding: "5px 10px", borderRadius: 3,
-          background: "var(--spot-accent)", color: "#fff",
-        }}>+ Component</button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }} data-testid="bom-strip">
+          {items.map((it, i) => {
+            const tint = tints[i % tints.length];
+            const isActive = i === activeIdx;
+            return (
+              <div key={it.id || i}
+                draggable
+                onDragStart={() => setDragIdx(i)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== i) reorderBomItem(dragIdx, i); setDragIdx(null); }}
+                onDragEnd={() => setDragIdx(null)}
+                data-testid={`bom-item-${i}`}
+                onClick={() => switchBomItem(i)}
+                style={{
+                  padding: "5px 8px", borderRadius: 4, fontSize: 11, cursor: "pointer",
+                  background: isActive ? `${tint}22` : "var(--spot-bg3)",
+                  border: `1px solid ${isActive ? tint : "var(--spot-border)"}`,
+                  color: isActive ? tint : "var(--spot-text2)",
+                  display: "flex", alignItems: "center", gap: 6,
+                  opacity: dragIdx === i ? 0.45 : 1,
+                }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: tint }} />
+                <input value={it.desc || ""}
+                  onChange={(e) => updateBomItem(i, { desc: e.target.value })}
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`bom-item-desc-${i}`}
+                  placeholder={`Item ${i + 1}`}
+                  style={{ background: "transparent", border: "none", color: "inherit",
+                    fontSize: 11, outline: "none", width: 110, fontFamily: "inherit" }} />
+                <select value={it.type || "Manufactured"}
+                  onChange={(e) => updateBomItem(i, { type: e.target.value })}
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`bom-item-type-${i}`}
+                  style={{ background: "var(--spot-bg2)", color: "var(--spot-text3)",
+                    border: "1px solid var(--spot-border)", borderRadius: 3,
+                    fontSize: 10, padding: "1px 3px", outline: "none" }}>
+                  <option>Manufactured</option><option>Purchased</option><option>Fulfillment</option>
+                </select>
+                <span title="Pieces per set" style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <span style={{ fontSize: 9, color: "var(--spot-text3)" }}>×</span>
+                  <input type="number" min="1" step="1" value={it.pcsPerSet ?? 1}
+                    onChange={(e) => updateBomItem(i, { pcsPerSet: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid={`bom-item-pcs-${i}`}
+                    style={{ width: 30, background: "transparent", border: "none",
+                      color: "inherit", fontSize: 11, outline: "none", textAlign: "center",
+                      fontFamily: "'JetBrains Mono', monospace" }} />
+                </span>
+                {items.length > 1 && (
+                  <span onClick={(e) => { e.stopPropagation(); spinOffBomItem(i); }}
+                    data-testid={`bom-spinoff-${i}`}
+                    title="Spin off as a separate Simple quote tab"
+                    style={{ color: "var(--spot-accent)", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "0 2px" }}>↗</span>
+                )}
+                {items.length > 1 && (
+                  <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Remove "${it.desc || `Item ${i+1}`}"?`)) removeBomItem(i); }}
+                    data-testid={`bom-rm-${i}`}
+                    title="Remove component"
+                    style={{ color: "var(--spot-text3)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px" }}>×</span>
+                )}
+              </div>
+            );
+          })}
+          <button onClick={() => addBomItem()} data-testid="bom-add-btn" style={{
+            all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+            padding: "5px 10px", borderRadius: 3,
+            background: "var(--spot-accent)", color: "#fff",
+          }}>+ Component</button>
+          {items.length > 0 && (
+            <button onClick={() => duplicateBomItem()} data-testid="bom-dup-btn" style={{
+              all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+              padding: "5px 10px", borderRadius: 3,
+              background: "var(--spot-bg3)", color: "var(--spot-text2)",
+              border: "1px solid var(--spot-border)",
+            }}>⎘ Duplicate</button>
+          )}
+        </div>
+        <div style={{ fontSize: 10, color: "var(--spot-text3)", paddingLeft: 4 }}>
+          Drag a component to reorder · Click a component tab to make it active · Edits to the
+          fields below (board, dims, qty, print, finishing) apply to the highlighted component.
+        </div>
       </div>
     </Sec>
   );

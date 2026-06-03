@@ -9,10 +9,24 @@ import ApiStatusPill from "./ApiStatusPill";
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
 export default function Toolbar({ openModal }) {
   const { user, logout } = useAuth();
-  const { active, pushToast } = useQuote();
+  const { active, pushToast, convertToMultiPart, convertToSimple } = useQuote();
   const s = active?.state || {};
+  const isMP = s.quoteType === "Multi-Part";
+  const itemCount = (s.bomItems || []).length;
   const [saving, setSaving] = React.useState(false);
   const fileCbRef = React.useRef(null);
+
+  const onToggleMP = () => {
+    if (isMP) {
+      if (itemCount > 1) {
+        pushToast("Cannot convert — remove extra components first", "warn");
+        return;
+      }
+      convertToSimple();
+    } else {
+      convertToMultiPart();
+    }
+  };
 
   // Theme: default LIGHT (Rich Walter preference 2026-06-02). Persist to
   // localStorage so it survives reload. <html data-theme="..."> is read by
@@ -100,6 +114,14 @@ export default function Toolbar({ openModal }) {
           {theme === "light" ? "🌙" : "☀"}
         </button>
         <button data-testid="toolbar-undo" title="Undo (Ctrl+Z)" style={btn}>↩</button>
+        <button data-testid="toolbar-toggle-mp" onClick={onToggleMP}
+          title={isMP ? "Convert this quote back to Simple (single piece)" : "Convert this quote to Multi-Part (display, kit, or set)"}
+          style={{ ...btn,
+            background: isMP ? "#f59e0b22" : "var(--spot-bg3)",
+            color: isMP ? "#f59e0b" : "var(--spot-text2)",
+            border: `1px solid ${isMP ? "#f59e0b88" : "var(--spot-border)"}`,
+            fontWeight: 700,
+          }}>{isMP ? `Multi-Part · ${itemCount}` : "→ Multi-Part"}</button>
         <button data-testid="toolbar-save" onClick={onSave} disabled={saving} style={{ ...btn,
           background: "var(--spot-green-soft)", color: "var(--spot-green)",
           border: "1px solid var(--spot-green)",

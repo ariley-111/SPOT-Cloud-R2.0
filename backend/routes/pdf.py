@@ -100,20 +100,82 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     notes      = _g(state, "quoteNotes")
     fsc        = bool(state.get("fscEnabled"))
 
-    # ─── Item spec line (legacy L4706-4716) ────────────────────────
-    spec_parts: List[str] = []
-    if cust_ident: spec_parts.append(str(cust_ident))
-    if grade and flute: spec_parts.append(f"{grade}# {flute}")
-    spec_parts.append(f"{_liner_short(ol)}/{_liner_short(il)}")
-    try:
-        if float(one_w) > 0 and float(one_l) > 0:
-            spec_parts.append(f"{_fn(one_w, 4)}\u00D7{_fn(one_l, 4)}")
-    except (ValueError, TypeError):
-        pass
-    if fsc: spec_parts.append("FSC/SFI Material")
-    spec_line = " \u00B7 ".join([p for p in spec_parts if p])
+    # ─── MP-5: Multi-Part rendering ─────────────────────────────────
+    is_mp = state.get("quoteType") == "Multi-Part" and isinstance(state.get("bomItems"), list) and len(state["bomItems"]) > 0
+    bom_items = state.get("bomItems") or []
+    pricing_mode = state.get("pricingMode") or "Matched Set"
 
-    title = item_desc or box_style or "Item"
+    if is_mp:
+        # BOM bar — list each component with its key specs
+        bom_rows = []
+        for i, it in enumerate(bom_items):
+            ist = it.get("state") or {}
+            pcs = it.get("pcsPerSet") or 1
+            desc = it.get("desc") or ist.get("itemDesc") or f"Item {i+1}"
+            typ = it.get("type") or "Manufactured"
+            ident = it.get("custIdent") or ist.get("custIdent") or ""
+            sp = []
+            if ident: sp.append(str(ident))
+            ig = ist.get("boardGrade"); ifl = ist.get("flute")
+            if ig and ifl: sp.append(f"{ig}# {ifl}")
+            iol = ist.get("outsideLiner"); iil = ist.get("insideLiner")
+            if iol or iil: sp.append(f"{_liner_short(iol)}/{_liner_short(iil)}")
+            iw = ist.get("oneUpW"); il_ = ist.get("oneUpL")
+            try:
+                if float(iw or 0) > 0 and float(il_ or 0) > 0:
+                    sp.append(f"{_fn(iw, 4)}\u00D7{_fn(il_, 4)}")
+            except (ValueError, TypeError): pass
+            line = " \u00B7 ".join([p for p in sp if p])
+            type_color = ("#3b82f6" if typ == "Manufactured" else
+                          "#06b6d4" if typ == "Purchased" else "#22c55e")
+            bom_rows.append(
+                f'<tr style="border-bottom:1px solid #e5e7eb">'
+                f'<td style="padding:6px 10px;font-weight:600">{desc}</td>'
+                f'<td style="padding:6px 10px;text-align:center;font-size:11px;color:{type_color};font-weight:700">{typ}</td>'
+                f'<td style="padding:6px 10px;text-align:center;font-size:11px;color:#6b7280">{pcs}/set</td>'
+                f'<td style="padding:6px 10px;font-size:11px;color:#6b7280">{line}</td>'
+                f'</tr>'
+            )
+        title = item_desc or box_style or cust_ref or f"Multi-Part Display ({len(bom_items)} components)"
+        _fsc_tag = " \u00B7 FSC/SFI" if fsc else ""
+        item_bar = (
+            f'<div style="background:#fef3c722;border:1px solid #f59e0b66;border-radius:6px;padding:10px 14px;margin-bottom:16px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'
+            f'<div style="font-size:14px;font-weight:700">{title}</div>'
+            f'<div style="font-size:11px;color:#f59e0b;font-weight:700;text-transform:uppercase;letter-spacing:.06em">'
+            f'Multi-Part \u00B7 {pricing_mode}{_fsc_tag}</div>'
+            f'</div>'
+            f'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+            f'<thead><tr style="border-bottom:1px solid #d1d5db;color:#6b7280">'
+            f'<th style="text-align:left;padding:4px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Component</th>'
+            f'<th style="text-align:center;padding:4px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Type</th>'
+            f'<th style="text-align:center;padding:4px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Pcs/Set</th>'
+            f'<th style="text-align:left;padding:4px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Specs</th>'
+            f'</tr></thead>'
+            f'<tbody>{"".join(bom_rows)}</tbody></table>'
+            f'</div>'
+        )
+    else:
+        # ─── Single-piece item spec line (legacy L4706-4716) ────────
+        spec_parts: List[str] = []
+        if cust_ident: spec_parts.append(str(cust_ident))
+        if grade and flute: spec_parts.append(f"{grade}# {flute}")
+        spec_parts.append(f"{_liner_short(ol)}/{_liner_short(il)}")
+        try:
+            if float(one_w) > 0 and float(one_l) > 0:
+                spec_parts.append(f"{_fn(one_w, 4)}\u00D7{_fn(one_l, 4)}")
+        except (ValueError, TypeError):
+            pass
+        if fsc: spec_parts.append("FSC/SFI Material")
+        spec_line = " \u00B7 ".join([p for p in spec_parts if p])
+        title = item_desc or box_style or "Item"
+        item_bar = (
+            f'<div style="background:#f3f4f6;border-radius:6px;padding:10px 14px;margin-bottom:16px">'
+            f'<div style="font-size:14px;font-weight:600">{title}</div>'
+            f'{f"""<div style="font-size:12px;color:#6b7280;margin-top:2px">{spec_line}</div>""" if spec_line else ""}'
+            f'</div>'
+        )
+
     fob_disp = "Will-Call" if str(quote_fob).startswith("Origin") else "Ship (Destination)"
     ship_addr = _ship_to_addr(ship_to, dest_zip)
 
@@ -133,11 +195,14 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     th_s = ('padding:8px 10px;text-align:right;font-size:11px;font-weight:700;'
             'text-transform:uppercase;letter-spacing:.06em;color:#6b7280')
 
-    # Build header row
+    # Build header row — for MP, "Each" becomes "Per Set" and "Per/M" becomes "Per/M Sets"
+    each_label = "Per Set" if is_mp else "Each"
+    perm_label = "Per/M Sets" if is_mp else "Per/M"
+    qty_label = "Sets" if is_mp else "Qty"
     header_cells = [
-        f'<th style="{th_s};text-align:left">Qty</th>',
-        f'<th style="{th_s}">Each</th>',
-        f'<th style="{th_s}">Per/M</th>',
+        f'<th style="{th_s};text-align:left">{qty_label}</th>',
+        f'<th style="{th_s}">{each_label}</th>',
+        f'<th style="{th_s}">{perm_label}</th>',
     ]
     if by_type:
         if s_die:  header_cells.append(f'<th style="{th_s}">Die</th>')
@@ -186,13 +251,8 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         f'</table>'
     )
 
-    # ─── Item description bar (legacy L4714-4716) ──────────────────
-    item_bar = (
-        f'<div style="background:#f3f4f6;border-radius:6px;padding:10px 14px;margin-bottom:16px">'
-        f'<div style="font-size:14px;font-weight:600">{title}</div>'
-        f'{f"""<div style="font-size:12px;color:#6b7280;margin-top:2px">{spec_line}</div>""" if spec_line else ""}'
-        f'</div>'
-    )
+    # ─── Item description bar — already built above (see MP-5 branch).
+    # No duplicate item_bar here; just use what we have.
 
     # ─── Meta grid (legacy L4857-4864) ─────────────────────────────
     meta_rows = [

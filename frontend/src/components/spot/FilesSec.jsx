@@ -5,9 +5,10 @@ import Sec from "./Sec";
 import { parserBudget, parseRfq } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
+import { makeBomItem, applyItemStateTo, freshItemState } from "../../lib/mpSchema";
 
 export default function FilesSec() {
-  const { active, sec, toggleSec, setManyFields, pushToast } = useQuote();
+  const { active, sec, toggleSec, setManyFields, replaceState, pushToast } = useQuote();
   const s = active?.state || {};
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState([]);              // {filename, size, mime, class, file}
@@ -168,8 +169,11 @@ export default function FilesSec() {
       {/* Review modal */}
       {reviewOpen && parseResult && (
         <ReviewParseModal result={parseResult}
+          activeState={s}
           onClose={() => setReviewOpen(false)}
-          onApply={(patch) => { setManyFields(patch); pushToast("Parser fields applied", "ok"); setReviewOpen(false); }} />
+          onApplySimple={(patch) => { setManyFields(patch); pushToast("Parser fields applied", "ok"); setReviewOpen(false); }}
+          onApplyMultiPart={(nextState) => { replaceState(nextState); pushToast(`Multi-Part applied — ${(nextState.bomItems || []).length} components`, "ok"); setReviewOpen(false); }}
+        />
       )}
 
       {/* In-flight parser progress modal */}
@@ -196,12 +200,17 @@ function fmtBytes(b) {
   return (b / 1024 / 1024).toFixed(1) + " MB";
 }
 
-function ReviewParseModal({ result, onClose, onApply }) {
+function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApplyMultiPart }) {
   const p = result.parsed || {};
   const sources = result.sources || {};
   const method = result.method || "M1";
   const overallConf = result.confidence;
   const asksList = result.asks || [];
+
+  // ─── MP-3: detect Multi-Part output ────────────────────────────────
+  const isMP = (p.quoteType === "Multi-Part") && Array.isArray(p.bomItems) && p.bomItems.length > 0;
+  const bomItems = isMP ? (p.bomItems || []) : [];
+  const [mpTab, setMpTab] = React.useState("job");  // "job" | "0" | "1" | ...
 
   // Only DEFAULT to checked when value is truthy (non-null, non-empty).
   const [picks, setPicks] = React.useState(() => {
@@ -253,6 +262,7 @@ function ReviewParseModal({ result, onClose, onApply }) {
   const NUMERIC_AS_STRING = new Set(["oneUpW", "oneUpL", "colorsFront", "colorsBack", "totalRuleInches", "setMarginPct"]);
 
   const apply = () => {
+    // Build a Simple-style patch from the top-level parsed fields
     const patch = {};
     const has = (k) => picks[k] && p[k] !== null && p[k] !== undefined && p[k] !== "";
 
@@ -260,6 +270,7 @@ function ReviewParseModal({ result, onClose, onApply }) {
       const target = FIELD_MAP[k];
       if (!target) return;
       if (!has(k)) return;
+      if (k === "bomItems") return;  // handled below for MP path
       let val = p[k];
       if (target === "qtys" && Array.isArray(val)) {
         const q = [...val.map(String)]; while (q.length < 5) q.push("");
@@ -276,7 +287,53 @@ function ReviewParseModal({ result, onClose, onApply }) {
       patch.printReq = "No";
     }
 
-    onApply(patch);
+    // ─── MP-3: Multi-Part apply path ─────────────────────────────────
+    if (isMP) {
+      // Build full bomItems[] from parser output, normalizing each entry.
+      const items = bomItems.map((raw, i) => {
+        const rawState = raw.state || {};
+        // Per-item state: coerce numeric strings, default qtys array, etc.
+        const itemQtys = Array.isArray(rawState.qtys) ? rawState.qtys.map(String) : [];
+        while (itemQtys.length < 5) itemQtys.push("");
+        const itemState = freshItemState({
+          ...rawState,
+          qtys: itemQtys.slice(0, 5),
+          itemDesc: raw.desc || rawState.itemDesc || `Item ${i + 1}`,
+          boxStyle: rawState.boxStyle || "",
+          custIdent: raw.custIdent || rawState.custIdent || "",
+          // Coerce numerics to strings (our schema stores numeric inputs as strings)
+          oneUpW: rawState.oneUpW != null ? String(rawState.oneUpW) : "",
+          oneUpL: rawState.oneUpL != null ? String(rawState.oneUpL) : "",
+          totalRuleInches: rawState.totalRuleInches != null ? String(rawState.totalRuleInches) : "0",
+        });
+        return makeBomItem({
+          desc: raw.desc || itemState.itemDesc || `Item ${i + 1}`,
+          type: raw.type || "Manufactured",
+          pcsPerSet: raw.pcsPerSet || 1,
+          custIdent: raw.custIdent || "",
+          state: itemState,
+        });
+      });
+
+      // Apply the active item's state into the top-level (mirror item 0)
+      let next = applyItemStateTo(activeState, items[0]?.state || freshItemState());
+      // Overlay job-level fields from the patch (custName, custRef, poNumber, etc.)
+      next = { ...next, ...patch };
+      // Always set MP markers (even if patch didn't include them)
+      next.quoteType = "Multi-Part";
+      next.pricingMode = p.pricingMode || "Matched Set";
+      if (p.setMarginPct != null) next.setMarginPct = String(p.setMarginPct);
+      next.bomItems = items;
+      next.activeItemIdx = 0;
+      // Mirror first item's desc/custIdent to top-level
+      next.itemDesc = items[0]?.desc || next.itemDesc || "";
+      next.custIdent = items[0]?.custIdent || next.custIdent || "";
+
+      onApplyMultiPart(next);
+      return;
+    }
+
+    onApplySimple(patch);
   };
 
   const isFieldNull = (v) =>
@@ -389,6 +446,52 @@ function ReviewParseModal({ result, onClose, onApply }) {
             </div>
           )}
 
+          {/* MP-3: Multi-Part banner + tab strip */}
+          {isMP && (
+            <div data-testid="parse-mp-banner" style={{
+              marginBottom: 10, padding: "8px 10px",
+              background: "#f59e0b0c", border: "1px solid #f59e0b44", borderRadius: 4,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
+                  textTransform: "uppercase", letterSpacing: ".08em" }}>Multi-Part</span>
+                <span style={{ fontSize: 11, color: "var(--spot-text2)" }}>
+                  {p.pricingMode || "Matched Set"} · {bomItems.length} component{bomItems.length !== 1 ? "s" : ""}
+                  {p.setMarginPct != null && (<> · default GM {(parseFloat(p.setMarginPct) * 100).toFixed(1)}%</>)}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }} data-testid="parse-mp-tabs">
+                <button onClick={() => setMpTab("job")}
+                  data-testid="parse-mp-tab-job"
+                  style={{
+                    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    padding: "3px 8px", borderRadius: 3,
+                    background: mpTab === "job" ? "var(--spot-accent)" : "var(--spot-bg3)",
+                    color: mpTab === "job" ? "#fff" : "var(--spot-text2)",
+                    border: `1px solid ${mpTab === "job" ? "var(--spot-accent)" : "var(--spot-border)"}`,
+                  }}>Job</button>
+                {bomItems.map((it, i) => {
+                  const conf = it.confidence;
+                  const lowConf = typeof conf === "number" && conf < 0.7;
+                  return (
+                    <button key={i} onClick={() => setMpTab(String(i))}
+                      data-testid={`parse-mp-tab-${i}`}
+                      style={{
+                        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600,
+                        padding: "3px 8px", borderRadius: 3, display: "flex", gap: 5, alignItems: "center",
+                        background: mpTab === String(i) ? "#f59e0b22" : "var(--spot-bg3)",
+                        color: mpTab === String(i) ? "#f59e0b" : "var(--spot-text2)",
+                        border: `1px solid ${mpTab === String(i) ? "#f59e0b88" : "var(--spot-border)"}`,
+                      }}>
+                      {lowConf && <span title={`Low confidence ${Math.round(conf*100)}%`} style={{ color: "var(--spot-warn)" }}>⚠</span>}
+                      {(it.desc || `Item ${i+1}`)} <span style={{ fontSize: 9, opacity: 0.6 }}>·{it.type?.[0] || "M"}·×{it.pcsPerSet || 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <table style={{ width: "100%", fontSize: 12 }}>
             <thead>
               <tr style={{ color: "var(--spot-text3)", textAlign: "left", borderBottom: "1px solid var(--spot-line)" }}>
@@ -399,21 +502,40 @@ function ReviewParseModal({ result, onClose, onApply }) {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(p)
-                .filter(([k]) => !["asks", "confidence", "_source", "sources", "method"].includes(k))
-                .map(([k, v]) => {
+              {(() => {
+                // Multi-Part: iterate job-level or selected item's state
+                const rowEntries = !isMP
+                  ? Object.entries(p).filter(([k]) => !["asks", "confidence", "_source", "sources", "method"].includes(k))
+                  : mpTab === "job"
+                    ? Object.entries(p).filter(([k]) => !["asks", "confidence", "_source", "sources", "method", "bomItems"].includes(k))
+                    : Object.entries(bomItems[Number(mpTab)]?.state || {})
+                        .concat([
+                          ["desc", bomItems[Number(mpTab)]?.desc],
+                          ["type", bomItems[Number(mpTab)]?.type],
+                          ["pcsPerSet", bomItems[Number(mpTab)]?.pcsPerSet],
+                          ["confidence", bomItems[Number(mpTab)]?.confidence],
+                        ]);
+                return rowEntries.map(([k, v]) => {
                   const isNull = isFieldNull(v);
-                  const tag = sources[k];
+                  // Source key: top-level "k" for job tab; "bomItems[N].state.k" for item tab
+                  const srcKey = !isMP || mpTab === "job"
+                    ? k : `bomItems[${mpTab}].state.${k}`;
+                  const tag = sources[srcKey] || sources[k];
                   const tagColor = {
                     RFQ: "var(--spot-green)", CAD: "var(--spot-accent)",
                     REGISTRY: "var(--spot-purple)", CALC: "var(--spot-cyan)",
                     DEFAULT: "var(--spot-text3)", ASK: "var(--spot-warn)",
                   }[tag] || "var(--spot-text3)";
+                  // Only the JOB tab's checkbox affects the apply patch. Item-tab rows
+                  // are read-only previews — apply uses the entire bomItems array on Apply.
+                  const interactive = !isMP || mpTab === "job";
                   return (
-                    <tr key={k} style={{ borderBottom: "1px solid var(--spot-line)" }}>
-                      <td><input type="checkbox" disabled={isNull}
-                        checked={!!picks[k] && !isNull} onChange={() => toggle(k)}
-                        data-testid={`parse-pick-${k}`} /></td>
+                    <tr key={`${mpTab}-${k}`} style={{ borderBottom: "1px solid var(--spot-line)" }}>
+                      <td>{interactive
+                        ? <input type="checkbox" disabled={isNull}
+                            checked={!!picks[k] && !isNull} onChange={() => toggle(k)}
+                            data-testid={`parse-pick-${k}`} />
+                        : null}</td>
                       <td style={{ padding: "4px 6px",
                         color: isNull ? "var(--spot-text3)" : "var(--spot-text2)",
                         fontWeight: isNull ? 400 : 600 }}>{k}</td>
@@ -437,13 +559,16 @@ function ReviewParseModal({ result, onClose, onApply }) {
                       </td>
                     </tr>
                   );
-                })}
+                });
+              })()}
             </tbody>
           </table>
         </div>
         <div className="sp-modal-foot">
           <button className="sp-btn" onClick={onClose} data-testid="parse-review-cancel">Cancel</button>
-          <button className="sp-btn sp-btn-green" onClick={apply} data-testid="parse-review-apply">Apply Selected</button>
+          <button className="sp-btn sp-btn-green" onClick={apply} data-testid="parse-review-apply">
+            {isMP ? `Apply Multi-Part (${bomItems.length} items)` : "Apply Selected"}
+          </button>
         </div>
       </div>
     </div>
