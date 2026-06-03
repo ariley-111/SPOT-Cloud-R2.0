@@ -234,11 +234,51 @@ export default function PreviewPdfModal({ onClose }) {
                 )}
               </div>
 
+              {/* MP-5: Bill of Materials listing (MP only) */}
+              {s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (
+                <div style={{ background: "#fef3c722", border: "1px solid #f59e0b66",
+                  borderRadius: 6, padding: "10px 14px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700,
+                    textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
+                    Multi-Part · {s.pricingMode || "Matched Set"} · {(s.bomItems || []).length} components
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead><tr style={{ borderBottom: "1px solid #d1d5db", color: "#6b7280" }}>
+                      <th style={{ ...thL, textAlign: "left" }}>Component</th>
+                      <th style={{ ...thS, textAlign: "center" }}>Type</th>
+                      <th style={{ ...thS, textAlign: "center" }}>Pcs/Set</th>
+                      <th style={{ ...thL, textAlign: "left" }}>Specs</th>
+                    </tr></thead>
+                    <tbody>
+                      {(s.bomItems || []).map((it, i) => {
+                        const ist = it.state || {};
+                        const sp = [];
+                        if (it.custIdent || ist.custIdent) sp.push(it.custIdent || ist.custIdent);
+                        if (ist.boardGrade && ist.flute) sp.push(`${ist.boardGrade}# ${ist.flute}`);
+                        if (ist.outsideLiner || ist.insideLiner) sp.push(`${fmLnr(ist.outsideLiner)}/${fmLnr(ist.insideLiner)}`);
+                        const iw = Number(ist.oneUpW || 0), il = Number(ist.oneUpL || 0);
+                        if (iw > 0 && il > 0) sp.push(`${fmtNum(iw, 4)}×${fmtNum(il, 4)}`);
+                        const tc = it.type === "Manufactured" ? "#3b82f6" : it.type === "Purchased" ? "#06b6d4" : "#22c55e";
+                        return (
+                          <tr key={it.id || i} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                            <td style={{ padding: "5px 10px", fontWeight: 600 }}>{it.desc || `Item ${i+1}`}</td>
+                            <td style={{ padding: "5px 10px", textAlign: "center", fontSize: 11, color: tc, fontWeight: 700 }}>{it.type || "Manufactured"}</td>
+                            <td style={{ padding: "5px 10px", textAlign: "center", fontSize: 11, color: "#6b7280" }}>{it.pcsPerSet || 1}/set</td>
+                            <td style={{ padding: "5px 10px", fontSize: 11, color: "#6b7280" }}>{sp.join(" · ")}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               {/* Pricing table — Simple quote shape */}
               <PricingTable
                 rows={previewRows}
                 hasLineItems={hasLineItems}
                 chargeMode={chargeMode}
+                isMP={s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0}
               />
 
               {/* Terms */}
@@ -303,7 +343,7 @@ const thS = {
 };
 const thL = { ...thS, textAlign: "left" };
 
-function PricingTable({ rows, hasLineItems, chargeMode }) {
+function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
   if (!rows || rows.length === 0) {
     return (
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
@@ -316,14 +356,17 @@ function PricingTable({ rows, hasLineItems, chargeMode }) {
     );
   }
   const showChargesCol = hasLineItems && chargeMode !== "Lump Sum";
+  const qtyLabel = isMP ? "Sets" : "Qty";
+  const eachLabel = isMP ? "Per Set" : "Each";
+  const perMLabel = isMP ? "Per/M Sets" : "Per/M";
   return (
     <>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
         <thead>
           <tr style={{ borderBottom: "2px solid #d1d5db" }}>
-            <th style={thL}>Qty</th>
-            <th style={thS}>Each</th>
-            <th style={thS}>Per/M</th>
+            <th style={thL}>{qtyLabel}</th>
+            <th style={thS}>{eachLabel}</th>
+            <th style={thS}>{perMLabel}</th>
             <th style={thS}>Total</th>
             {showChargesCol && <th style={thS}>Charges</th>}
             <th style={{ ...thS, color: "#1e40af" }}>Quote Total</th>

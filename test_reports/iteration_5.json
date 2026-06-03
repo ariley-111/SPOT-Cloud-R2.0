@@ -1,0 +1,26 @@
+{
+  "summary": "MP-5 final piece (Preview PDF modal MP layout) is FIXED and verified. Loaded existing MP draft SA-260603-133313 (1 Manufactured component, 5x7, qtys 500/1000/2500). Opened Preview Quote modal; the in-modal HTML now renders BOTH (a) the 'MULTI-PART · MATCHED SET · 1 COMPONENTS' BOM listing block with columns Component / Type / Pcs/Set / Specs above the pricing table AND (b) the pricing table headers now read 'SETS / PER SET / PER/M SETS / TOTAL / QUOTE TOTAL' (not Qty/Each/Per/M). Pricing rows show correct MP values: 500 sets → $0.9582 per set / $958.16 per/M / $479.08 total. Simple regression: toggled MP off, re-opened Preview; the MP BOM block is correctly absent. (PricingTable JSX at lines 359-361 hard-codes Qty/Each/Per/M when isMP=false — verified by code review.)",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/mp_preview_modal.png",
+    "/app/test_reports/simple_preview_modal.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PreviewPdfModal.jsx now renders MP layout correctly: lines 238-274 emit the BOM listing block conditionally on (state.quoteType==='Multi-Part' && bomItems.length>0); lines 277-282 pass isMP into PricingTable which then swaps Qty→Sets, Each→Per Set, Per/M→Per/M Sets at lines 359-361.",
+    "Suggestion (non-blocking, future): when MP is toggled OFF via toolbar-toggle-mp, the quantities are cleared, leading to an empty pricing table in the Simple preview. Consider preserving quantities across MP↔Simple conversion so the regression UX is smoother."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not requested)", "frontend": "100% — MP modal layout fully verified, Simple regression verified (no MP BOM block)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — working",
+  "seed_data_creation": "Reused existing draft SA-260603-133313 (MP, 1 Manufactured component, 5x7, qtys 500/1000/2500).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "MP-5 phase complete. PreviewPdfModal.jsx now has full MP-branch JSX: BOM listing block (lines 237-274) + isMP prop to PricingTable for header swap (lines 277-282 → 346-372). Both behaviors verified end-to-end in the running app via Playwright. Captured screenshots in /app/test_reports/ show the modal with correct MP-mode headers.",
+  "rca of the issue": "RESOLVED. Iteration_4 identified that the data-fetch layer of PreviewPdfModal.jsx was correctly routing to calculateMultiPart but the JSX render did not branch on isMP. E1 added (a) an MP-only BOM listing block above the pricing table, and (b) an `isMP` prop on PricingTable that swaps the three left header labels (Qty→Sets, Each→Per Set, Per/M→Per/M Sets) while keeping Total / Quote Total intact. Verified in DOM via innerText extraction — headers exactly match the spec."
+}
