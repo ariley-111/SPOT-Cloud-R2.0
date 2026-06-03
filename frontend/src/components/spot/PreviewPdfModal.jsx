@@ -387,7 +387,15 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
             if (die > 0) lineCharges.push(`Die: ${fmtMoney(die)}`);
             if (freight > 0) lineCharges.push(`Freight: ${fmtMoney(freight)}`);
             if (prep > 0) lineCharges.push(`Prepress: ${fmtMoney(prep)}`);
-            if (misc > 0) lineCharges.push(`Misc: ${fmtMoney(misc)}`);
+            // Named misc items — show what the user typed, not generic "Misc"
+            const miscItems = (r.miscLineItems || []).filter((li) => (li.amt || 0) > 0);
+            if (miscItems.length > 0) {
+              miscItems.forEach((li) => {
+                lineCharges.push(`${li.name || "Misc"}: ${fmtMoney(li.amt)}`);
+              });
+            } else if (misc > 0) {
+              lineCharges.push(`Misc: ${fmtMoney(misc)}`);
+            }
             const chargesTotal = die + freight + prep + misc;
             const quoteTotal = Number(r.itemSell || 0) + chargesTotal;
             return (

@@ -380,6 +380,21 @@ async def calculate_multi_part(
                             if _safe_float(pc.get("prepressLineCost")) > 0)
         line_misc = sum(_safe_float(pc.get("miscLineCost")) for pc in per_comp
                         if _safe_float(pc.get("miscLineCost")) > 0)
+        # Aggregate named misc line items across all components so the UI can
+        # show the user's actual labels (legacy parity) instead of generic "Misc".
+        agg_misc_items: List[Dict[str, Any]] = []
+        for pc in per_comp:
+            for li in (pc.get("miscLineItems") or []):
+                name = li.get("name") or "Misc"
+                amt = _safe_float(li.get("amt"))
+                if amt <= 0:
+                    continue
+                # Coalesce duplicates (same name across components) by summing.
+                existing = next((x for x in agg_misc_items if x["name"] == name), None)
+                if existing:
+                    existing["amt"] += amt
+                else:
+                    agg_misc_items.append({"name": name, "amt": amt})
         line_charges = line_freight + line_die + line_prepress + line_misc
         omsf_total = sum(_safe_float(pc.get("oMSF")) for pc in per_comp)
 
@@ -413,6 +428,7 @@ async def calculate_multi_part(
             "dieLineCost": line_die,
             "prepressLineCost": line_prepress,
             "miscLineCost": line_misc,
+            "miscLineItems": agg_misc_items,
             "itemsSell": job_sell_components,
             "route": pricing_mode,
             "pricable": all(pc.get("pricable", True) for pc in per_comp) and job_sell > 0,

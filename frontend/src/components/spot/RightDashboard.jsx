@@ -539,7 +539,9 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                     {freightSep && <span>Freight: {fmtMoney(r.freightLine)}</span>}
                     {dieSep && <span>Die: {fmtMoney(r.dieLineCost)}</span>}
                     {prepressSep && <span>Prepress: {fmtMoney(r.prepressLineCost)}</span>}
-                    {miscSep && <span>Misc: {fmtMoney(r.miscLineCost)}</span>}
+                    {(r.miscLineItems || []).filter((li) => (li.amt || 0) > 0).map((li, mi) => (
+                      <span key={`econ-mli-${mi}`}>{li.name || "Misc"}: {fmtMoney(li.amt)}</span>
+                    ))}
                     <span style={{ fontWeight: 700, color: "var(--spot-accent)", fontStyle: "normal" }}>
                       Order: {fmtMoney(r.sellTotal)}
                     </span>
@@ -708,8 +710,16 @@ function CostBuildup({ result, isMultiPart, aggregate }) {
                 value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />}
               {prepress > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Prepress</span>}
                 value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />}
-              {misc > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Misc Charges</span>}
-                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(misc)}</span>} />}
+              {/* Named misc items — show one line per user-typed name */}
+              {(() => {
+                const miscItems = isMultiPart
+                  ? (agg.miscLineItems || [])
+                  : (r.miscLineItems || []);
+                return miscItems.filter((li) => (li.amt || 0) > 0).map((li, mi) => (
+                  <Row key={`mli-${mi}`} label={<span style={{ fontStyle: "italic" }}>{li.name || "Misc"}</span>}
+                    value={<span style={{ fontStyle: "italic" }}>{fmtMoney(li.amt)}</span>} />
+                ));
+              })()}
               <RowTotal label={footerLabel} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
             </>
           );

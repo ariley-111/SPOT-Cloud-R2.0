@@ -264,7 +264,13 @@ export default function QuoteTableSec({ results }) {
                   {r.freightLine > 0    && <span><span style={{ color: "var(--spot-text2)" }}>Freight: </span><b>{fmtMoney(r.freightLine)}</b></span>}
                   {r.dieLineCost > 0    && <span><span style={{ color: "var(--spot-text2)" }}>Die: </span><b>{fmtMoney(r.dieLineCost)}</b></span>}
                   {r.prepressLineCost > 0 && <span><span style={{ color: "var(--spot-text2)" }}>Prepress: </span><b>{fmtMoney(r.prepressLineCost)}</b></span>}
-                  {(r.miscLineCost || 0) > 0 && <span><span style={{ color: "var(--spot-text2)" }}>Misc: </span><b>{fmtMoney(r.miscLineCost)}</b></span>}
+                  {/* Named misc line items (legacy parity — uses the names the user typed) */}
+                  {(r.miscLineItems || []).filter((li) => (li.amt || 0) > 0).map((li, mi) => (
+                    <span key={`mli-${mi}`} data-testid={`order-total-misc-${mi}`}>
+                      <span style={{ color: "var(--spot-text2)" }}>{li.name || "Misc"}: </span>
+                      <b>{fmtMoney(li.amt)}</b>
+                    </span>
+                  ))}
                 </div>
                 <div style={{
                   fontSize: 13, fontWeight: 700, color: "var(--spot-accent)",
