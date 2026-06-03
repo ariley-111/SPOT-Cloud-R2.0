@@ -12,7 +12,7 @@ from .core import (
     RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, SPOT_SCHEMA_VERSION,
     GRADE_ADDER_DEFAULTS, calc_board, compute_layout, pn,
 )
-from .routing import auto_select_sheet, auto_route
+from .routing import auto_select_sheet, auto_route, select_override_sheet
 from .pricing import calc_wf, calc_shipment
 
 
@@ -133,12 +133,27 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     board_spec = build_board_spec(json)
     asmp = build_asmp(json.get("rateOverrides"))
 
-    # STEP 1: Auto-select sheet
-    best = auto_select_sheet(uw, ul, board_spec, qty, asmp)
+    # STEP 1: Auto-select sheet — or use user override (legacy L3544-3570).
+    # overrideSheetId format: "OVR-{w}x{l}" (e.g. "OVR-48x96"). When present,
+    # build the sheet directly from those dims and skip auto-route (pin to CAD).
+    override_id = json.get("overrideSheetId")
+    override_active = False
+    best = None
+    if override_id and isinstance(override_id, str) and override_id.startswith("OVR-"):
+        try:
+            w_str, l_str = override_id[4:].split("x", 1)
+            ov_w, ov_l = float(w_str), float(l_str)
+            best = select_override_sheet(uw, ul, board_spec, qty, ov_w, ov_l, asmp)
+            if best:
+                override_active = True
+        except (ValueError, AttributeError):
+            best = None
+    if not best:
+        best = auto_select_sheet(uw, ul, board_spec, qty, asmp)
 
-    # STEP 2: Auto-flip corrugation
+    # STEP 2: Auto-flip corrugation — skip if user explicitly overrode the sheet
     corr_flipped = False
-    if best and (best.get("exceedsSheetLibrary") or
+    if not override_active and best and (best.get("exceedsSheetLibrary") or
                  (best.get("bc") and not best["bc"]["pricable"] and best["bc"]["hasPrice"] and not best["bc"]["meetMin"])):
         flipped_sel = auto_select_sheet(ul, uw, board_spec, qty, asmp)
         if flipped_sel and flipped_sel.get("bc") and (flipped_sel["bc"]["pricable"] or (flipped_sel["bc"]["hasPrice"] and flipped_sel.get("stockMode"))):
@@ -154,10 +169,13 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             return {"error": "No sheet found", "uw": uw, "ul": ul, "qty": qty,
                     "boardGrade": board_spec["boardGrade"], "flute": board_spec["flute"]}
 
-    # STEP 3: Auto-route
+    # STEP 3: Auto-route — skip route comparison if user overrode the sheet (legacy L3578)
     eff_w_for_route = ul if corr_flipped else uw
     eff_l_for_route = uw if corr_flipped else ul
-    auto_r = auto_route(best.get("cadHrs", 0), best, eff_w_for_route, eff_l_for_route, board_spec, qty, asmp)
+    if override_active:
+        auto_r = {"route": "CAD", "sheet": best, "warning": None}
+    else:
+        auto_r = auto_route(best.get("cadHrs", 0), best, eff_w_for_route, eff_l_for_route, board_spec, qty, asmp)
 
     route_override = json.get("routeOverride") or None
     if route_override and route_override != "Auto":
@@ -283,6 +301,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             "exceedsSheetLibrary": bool(best.get("exceedsSheetLibrary")),
             "routeAuto": auto_r["route"],
             "routeForced": routing.get("forced", False),
+            "overrideActive": bool(override_active),
         },
         "oneUpW": eff_w, "oneUpL": eff_l, "qty": qty,
         "flute": board_spec["flute"], "boardGrade": board_spec["boardGrade"],
@@ -303,6 +322,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "customOrder": bool(best.get("customOrder")),
         "exceedsSheetLibrary": bool(best.get("exceedsSheetLibrary")),
         "exceedsMachineCapacity": bool(best.get("exceedsMachineCapacity")),
+        "overrideActive": bool(override_active),
         "boardHasPrice": bool(bc.get("hasPrice")),
         "boardMeetMin": bool(bc.get("meetMin")),
         "boardBase": bc["base"], "boardEffRate": bc["effRate"], "boardTotal": bc["total"],

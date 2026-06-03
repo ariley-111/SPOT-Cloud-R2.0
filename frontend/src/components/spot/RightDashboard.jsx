@@ -545,12 +545,15 @@ function CostBuildup({ result }) {
 }
 
 function BoardPanel({ result, s }) {
+  const { setField } = useQuote();
   const [open, setOpen] = useState(false);  // default COLLAPSED (legacy default)
   if (!result || result.error) return null;
   const r = result;
   const sheetLbl = (r.sheetW && r.sheetL) ? `${fmtNum(r.sheetW, 0)}×${fmtNum(r.sheetL, 0)}` : "—";
   const isStock = !!r?._pipeline?.stockMode;
-  const mode = isStock ? "STOCK" : "ORDER";
+  const isOverride = !!r?._pipeline?.overrideActive || !!r?.overrideActive || !!s?.overrideSheetId;
+  const mode = isOverride ? "OVERRIDE" : (isStock ? "STOCK" : "ORDER");
+  const modeColor = isOverride ? "var(--spot-purple)" : "var(--spot-text3)";
   const sqFt = Math.round(r.boardOSqFt || (r.oMSF * 1000));
   const wastePct = r.wastePct || 0;
   const hasBoard = !!(r.sheetW && r.sheetL && r.boardTotal > 0);
@@ -573,10 +576,29 @@ function BoardPanel({ result, s }) {
     <div data-testid="board-panel" style={panelStyle("#a855f7")}>
       <div style={{ ...panelHeader("#a855f7"), cursor: "pointer", userSelect: "none" }}
         onClick={() => setOpen((v) => !v)} data-testid="board-panel-toggle">
-        <span>Board {sheetLbl} — {mode} {fmtMoney(r.boardTotal)}</span>
+        <span>
+          Board {sheetLbl} — <span style={{ color: modeColor }}>{mode}</span> {fmtMoney(r.boardTotal)}
+        </span>
         <span style={{ fontSize: 11, transform: open ? "rotate(90deg)" : "rotate(0deg)",
           transition: "transform .15s" }}>▸</span>
       </div>
+      {isOverride && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "5px 10px", background: "var(--spot-purple-bg)",
+          borderBottom: "1px solid var(--spot-purple)" }} data-testid="board-override-banner">
+          <span style={{ fontSize: 10, fontWeight: 800, color: "var(--spot-purple)",
+            textTransform: "uppercase", letterSpacing: ".06em" }}>
+            User Override · Route pinned to CAD
+          </span>
+          <button onClick={(e) => { e.stopPropagation(); setField("overrideSheetId", null); }}
+            data-testid="board-override-clear"
+            style={{ all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 700,
+              color: "var(--spot-err)", padding: "1px 6px",
+              border: "1px solid var(--spot-err)", borderRadius: 3 }}>
+            Clear
+          </button>
+        </div>
+      )}
       {open && (
         <div style={{ padding: "8px 10px", fontSize: 12 }}>
           <Row label="Sq Ft" value={fmtInt(sqFt)} />

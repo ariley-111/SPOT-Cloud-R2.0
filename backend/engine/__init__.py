@@ -25,7 +25,7 @@ from .core import (
     calc_board, compute_layout,
 )
 from .routing import (
-    select_bobst_sheet, auto_select_sheet, auto_route,
+    select_bobst_sheet, auto_select_sheet, auto_route, select_override_sheet,
 )
 from .pricing import (
     calc_wf, allocate_job_cost,

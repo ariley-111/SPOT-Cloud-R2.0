@@ -92,7 +92,7 @@ export default function SpotApp({ onOpenAdmin }) {
         <SheetLibraryModal
           onClose={() => setModal(null)}
           currentSheet={primary && primary.sheetW ? { w: Math.round(primary.sheetW), l: Math.round(primary.sheetL) } : null}
-          onPick={({ w, l }) => {/* future: setField("overrideSheetId", `${w}x${l}`) */}}
+          overrideId={active?.state?.overrideSheetId || null}
         />
       )}
       <BomBuilderModal open={modal === "bom-builder"} onClose={() => setModal(null)} />

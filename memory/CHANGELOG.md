@@ -57,3 +57,36 @@ are multi-part (displays, kits, sets) — this was the blocking gap for cloud ad
   spin-off render crash (object → string), `BomSec` hook-order violation
   (useState moved before early return), Preview modal MP routing + JSX labels
 - Simple-mode quotes verified unchanged
+
+## 2026-06-03 — Sheet Library override fix ✅
+
+Bug: picking a sheet in the Sheet Library modal did nothing — the `onPick`
+callback was a no-op stub and the backend never read `overrideSheetId`. Each
+multi-part component appeared to "ignore" the chosen sheet.
+
+### Backend
+- `engine/routing.py` — new `select_override_sheet()` mirrors legacy
+  `spot_r1_5.jsx` L3544-3570 (pricable as-is → use; below mill min → scale
+  via stock min-buy; not pricable → return for Buy-Min flag surfacing)
+- `engine/runner.py` — Step 1 parses `overrideSheetId` (`"OVR-{w}x{l}"`) and
+  short-circuits auto-select. Step 2 skips auto-flip when override active.
+  Step 3 pins route to CAD (legacy L3578-3580). `overrideActive` exposed at
+  result top-level + in `_pipeline`.
+
+### Frontend
+- `pages/SpotApp.jsx` — `onPick` now writes `setField("overrideSheetId", …)`
+  via the Sheet Library modal (was a `/* future */` stub)
+- `components/spot/SheetLibraryModal.jsx` — owns its own setField/clear flow,
+  highlights the active override in purple, exposes "Clear Override" button
+- `components/spot/RightDashboard.jsx` Board panel — adds "OVERRIDE" mode
+  label + purple banner ("User Override · Route pinned to CAD") with inline
+  Clear button when active
+- `hooks/useEngine.js` `buildPayload` — propagates `overrideSheetId` for
+  single-part mode (already mirrored into bomItems[active].state for MP)
+
+### Verified
+- Curl: single-part `OVR-48x96` → engine returns `48×96` sheet, `route=CAD`,
+  `overrideActive=true`
+- Curl: 2-item MP with override on item B only → A auto-picks, B respects
+  override, each component independent
+

@@ -124,6 +124,8 @@ export function buildPayload(state) {
     // D-070 Board Status Bar — substitution decision & Buy Min toggle
     buyMinBoard: state.buyMinBoard || "Auto",
     boardSubstitution: state.boardSubstitution || null,
+    // User sheet override (legacy parity — pins route to CAD)
+    overrideSheetId: state.overrideSheetId || null,
   };
 }
 

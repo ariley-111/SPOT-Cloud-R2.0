@@ -77,6 +77,59 @@ def select_bobst_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, A
     return {"viable": False, "reason": "no Bobst-eligible board pricing — even at mill minimum"}
 
 
+def select_override_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
+                          total_qty: int, override_w: float, override_l: float,
+                          assumptions: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """User-forced sheet override (legacy spot_r1_5.jsx L3544-3570).
+
+    Builds a sheet result for the user's chosen W×L using the current board spec.
+    Mirrors legacy: if pricable → use as-is; if below mill min → scale to mill-min-buy.
+    Marks `overrideActive` so runner pins route to CAD and skips auto-flip.
+    """
+    if override_w <= 0 or override_l <= 0:
+        return None
+    layout = compute_layout(one_up_w, one_up_l, override_w, override_l)
+    if not layout:
+        return None
+    sheets_req = math.ceil(total_qty / layout["pcsPerSheet"])
+    bi = {**board_spec, "widthIn": override_w, "lengthIn": override_l}
+    bc = calc_board(bi, sheets_req, is_stock=True)
+    cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
+    cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
+    sheet = {"id": f"OVR-{int(override_w)}x{int(override_l)}",
+             "g": board_spec["boardGrade"], "f": board_spec["flute"],
+             "ol": board_spec["outsideLiner"], "il": board_spec["insideLiner"],
+             "md": board_spec["medium"], "w": override_w, "l": override_l}
+    if bc["pricable"]:
+        return {"sheet": sheet, "layout": layout, "sheetsReq": sheets_req, "bc": bc,
+                "cadHrs": cad_hrs, "totalCost": bc["total"], "stockMode": False,
+                "overrideActive": True, "customOrder": True}
+    if bc["hasPrice"] and not bc["meetMin"]:
+        # Below mill min — scale to mill-min-buy (matches legacy override branch)
+        stock_sq_ft = (override_w * override_l) / 144
+        min_buy = max(1, math.ceil(bc["minSqFt"] / stock_sq_ft))
+        stock_calc = calc_board(bi, min_buy, is_stock=True)
+        if stock_calc["pricable"]:
+            scale = sheets_req / min_buy
+            scaled_total = stock_calc["total"] * scale
+            stock_bc = {**bc, "pricable": True, "meetMin": True, "total": scaled_total,
+                        "effWithFsc": scaled_total / bc["oMsf"] if bc["oMsf"] > 0 else 0,
+                        "costPc": scaled_total / total_qty if total_qty > 0 else 0,
+                        "varCost": stock_calc["varCost"] * scale,
+                        "fscAmt": stock_calc["fscAmt"] * scale,
+                        "setup": 0, "pp": stock_calc["pp"] * scale,
+                        "kemiChg": stock_calc["kemiChg"] * scale,
+                        "stockMode": True, "stockMinBuy": min_buy}
+            return {"sheet": sheet, "layout": layout, "sheetsReq": sheets_req, "bc": stock_bc,
+                    "cadHrs": cad_hrs, "totalCost": scaled_total, "stockMode": True,
+                    "overrideActive": True}
+    # Not pricable even at mill min — return the unpriced result so the runner can
+    # surface the Buy-Min status bar (mirrors legacy behavior).
+    return {"sheet": sheet, "layout": layout, "sheetsReq": sheets_req, "bc": bc,
+            "cadHrs": cad_hrs, "totalCost": bc.get("total") or 0, "stockMode": False,
+            "overrideActive": True}
+
+
 def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
                       total_qty: int, assumptions: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Sheet auto-select (RULE-014). Verbatim port of L336-556."""
