@@ -14,27 +14,33 @@ export function PricingStrategySec() {
   const isMP = s.quoteType === "Multi-Part";
   const isMatchedSet = isMP && s.pricingMode === "Matched Set";
 
-  // D-110 default GM tier curve. SPC standard.
+  // D-110 default GM tier curve + Sell tier curve — must match backend
+  //   engine/core.py:GM_DEFAULTS / SELL_DEFAULTS (9 tiers).
   const defaultGmByTier = {
-    "0-1 MSF":  0.50,
-    "1-3 MSF":  0.37,
-    "3-5 MSF":  0.32,
-    "5-9 MSF":  0.27,
-    "10+ MSF":  0.25,
+    "0-1":   0.50, "1-3":   0.37, "3-5":   0.32, "5-9":   0.27,
+    "10-24": 0.25, "25-49": 0.25, "50-74": 0.25, "75-99": 0.25, "100+": 0.25,
   };
-  const gmByTier = s.gmByTier || defaultGmByTier;
-  const setGm = (tier, pct) => setField("gmByTier", { ...gmByTier, [tier]: pct });
-  const resetGm = () => setField("gmByTier", { ...defaultGmByTier });
+  const defaultSellByTier = {
+    "0-1": 600, "1-3": 500, "3-5": 450, "5-9": 400,
+    "10-24": 375, "25-49": 325, "50-74": 300, "75-99": 285, "100+": 260,
+  };
+  const tierKeys = Object.keys(defaultGmByTier);
+  const gmByTier   = s.gmByTier   || defaultGmByTier;
+  const sellByTier = s.sellByTier || defaultSellByTier;
+  const setGm   = (t, p) => setField("gmByTier",   { ...gmByTier,   [t]: p });
+  const setSell = (t, v) => setField("sellByTier", { ...sellByTier, [t]: v });
+  const resetTiers = () =>
+    setManyFields({ gmByTier: { ...defaultGmByTier }, sellByTier: { ...defaultSellByTier } });
 
   return (
     <Sec label="Pricing Strategy" hue="#8b5cf6" open={sec.pricing} onToggle={() => toggleSec("pricing")}
       data-testid="sec-pricing-strategy">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
 
         {/* Pricing Mode (Multi-Part only) */}
         {isMP && (
           <div style={{ background: "#f59e0b0c", border: "1px solid #f59e0b22",
-            borderRadius: 5, padding: "6px 8px", flex: "0 0 auto" }}
+            borderRadius: 5, padding: "6px 8px", flex: "0 0 100%" }}
             data-testid="pricing-mode-panel">
             <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b",
               textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Pricing Mode</div>
@@ -71,9 +77,9 @@ export function PricingStrategySec() {
           </div>
         )}
 
-        {/* Tier Targets (GM% / Sell$/MSF) */}
+        {/* ─── TIER TARGETS — both GM% AND Sell$/MSF columns (legacy parity) ── */}
         <div style={{ background: "#3b82f60c", border: "1px solid #3b82f622",
-          borderRadius: 5, padding: "6px 8px", flex: 1, minWidth: 240 }}
+          borderRadius: 5, padding: "6px 8px", flex: 1, minWidth: 280 }}
           data-testid="tier-targets-panel">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -84,27 +90,48 @@ export function PricingStrategySec() {
                 <Tile label="$/MSF" active={s.pricingBasis === "Sell $/MSF"}     onClick={() => setField("pricingBasis", "Sell $/MSF")}     small tint="#a855f7" data-testid="tile-basis-msf" />
               </div>
             </div>
-            <button onClick={resetGm} data-testid="btn-reset-gm"
+            <button onClick={resetTiers} data-testid="btn-reset-tiers"
               style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "var(--spot-err)" }}>
-              Reset to Defaults
+              Reset Margins to My Defaults
             </button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 8px",
-            fontSize: 11, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: "3px 8px",
+            fontSize: 11, alignItems: "center" }} data-testid="tier-grid">
             <span style={{ fontWeight: 700, color: "var(--spot-text3)" }}>TIER</span>
-            <span style={{ fontWeight: 700, color: "var(--spot-text3)" }}>GM %</span>
-            {Object.entries(gmByTier).map(([tier, pct]) => (
-              <React.Fragment key={tier}>
-                <span style={{ color: "var(--spot-text2)" }}>{tier}</span>
-                <input className="sp-input" type="number" step="0.1" min="0" max="99.9"
-                  value={Math.round(pct * 1000) / 10}
-                  onChange={(e) => setGm(tier, (parseFloat(e.target.value) || 0) / 100)}
-                  data-testid={`input-tier-${tier.replace(/\s+/g, '-')}`}
-                  style={{ padding: "4px 6px", fontSize: 12, textAlign: "right" }} />
-              </React.Fragment>
-            ))}
+            <span style={{ fontWeight: 700, color: "var(--spot-text3)", textAlign: "right" }}>GM %</span>
+            <span style={{ fontWeight: 700, color: "var(--spot-text3)", textAlign: "right" }}>SELL $/MSF</span>
+            {tierKeys.map((tier) => {
+              const pct = gmByTier[tier] ?? defaultGmByTier[tier];
+              const sellMsf = sellByTier[tier] ?? defaultSellByTier[tier];
+              const isGmPrimary  = s.pricingBasis !== "Sell $/MSF";
+              return (
+                <React.Fragment key={tier}>
+                  <span style={{ color: "var(--spot-text2)" }}>{tier} MSF</span>
+                  <input className="sp-input" type="number" step="0.1" min="0" max="99.9"
+                    value={Math.round(pct * 1000) / 10}
+                    onChange={(e) => setGm(tier, (parseFloat(e.target.value) || 0) / 100)}
+                    data-testid={`input-tier-gm-${tier}`}
+                    style={{ padding: "4px 6px", fontSize: 12, textAlign: "right",
+                      opacity: isGmPrimary ? 1 : 0.6,
+                      fontWeight: isGmPrimary ? 600 : 400 }} />
+                  <input className="sp-input" type="number" step="1" min="0"
+                    value={sellMsf}
+                    onChange={(e) => setSell(tier, parseFloat(e.target.value) || 0)}
+                    data-testid={`input-tier-sell-${tier}`}
+                    style={{ padding: "4px 6px", fontSize: 12, textAlign: "right",
+                      opacity: !isGmPrimary ? 1 : 0.6,
+                      fontWeight: !isGmPrimary ? 600 : 400 }} />
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
+
+        {/* ─── FORCE SELL/PC ─────────────────────────────────────────── */}
+        <ForceSellPanel s={s} setField={setField} />
+
+        {/* ─── FREIGHT $/QTY (per-qty override) ─────────────────────── */}
+        <FreightByQtyPanel s={s} setField={setField} />
 
         {/* Fulfillment/Purchased GM (Multi-Part with those item types) */}
         {isMP && (s.bomItems || []).some((i) => i.type === "Fulfillment") && (
@@ -136,9 +163,6 @@ export function PricingStrategySec() {
         {isMP && (
           <JobLevelAllocPanel s={s} setField={setField} />
         )}
-
-        {/* Force Sell — per-qty override */}
-        <ForceSellPanel s={s} setField={setField} />
       </div>
     </Sec>
   );
@@ -250,6 +274,54 @@ function ForceSellPanel({ s, setField }) {
                 data-testid={`input-forced-sell-${i}`}
                 style={{ padding: "4px 6px", fontSize: 12, textAlign: "center",
                   borderColor: hasVal ? "#a855f7" : undefined }} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** ─── Freight $/Qty ─────────────────────────────────────────────────
+ *  Per-qty freight cost override. The engine reads `freightByQty[slot]` and
+ *  uses it as the freight $ for that quantity tier (replacing the engine-
+ *  computed base freight). Engine ref: /app/backend/engine/runner.py:68.
+ *  Legacy parity: side-by-side with Force Sell/Pc, with Clear All link. */
+function FreightByQtyPanel({ s, setField }) {
+  const validQtys = (s.qtys || []).filter((q) => Number(q) > 0);
+  if (validQtys.length === 0) return null;
+  const fbq = s.freightByQty || {};
+  const setFbq = (idx, v) => setField("freightByQty", { ...fbq, [idx]: v });
+  const clearAll = () => setField("freightByQty", {});
+
+  return (
+    <div style={{ background: "#ef44440c", border: "1px solid #ef444422",
+      borderRadius: 5, padding: "6px 8px", flex: 1, minWidth: 220 }}
+      data-testid="freight-by-qty-panel">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444",
+          textTransform: "uppercase", letterSpacing: ".06em" }}>Freight $/Qty</span>
+        {Object.values(fbq).some((v) => Number(v) > 0) && (
+          <button onClick={clearAll} data-testid="btn-clear-freight-by-qty"
+            style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "var(--spot-err)" }}>Clear All</button>
+        )}
+      </div>
+      <div style={{ fontSize: 10, color: "var(--spot-text3)", marginBottom: 4 }}>
+        Override base freight per qty. Leaves engine freight in place if blank.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 4 }}>
+        {validQtys.map((q, i) => {
+          const hasVal = Number(fbq[i]) > 0;
+          return (
+            <div key={i}>
+              <label style={{ fontSize: 11, fontWeight: 600,
+                color: hasVal ? "#ef4444" : "var(--spot-text3)" }}>{Number(q).toLocaleString()}</label>
+              <input className="sp-input" type="number" step="0.01" min="0" placeholder="—"
+                value={fbq[i] ?? ""}
+                onChange={(e) => setFbq(i, e.target.value)}
+                data-testid={`input-freight-by-qty-${i}`}
+                style={{ padding: "4px 6px", fontSize: 12, textAlign: "center",
+                  borderColor: hasVal ? "#ef4444" : undefined }} />
             </div>
           );
         })}

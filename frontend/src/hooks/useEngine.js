@@ -116,6 +116,11 @@ export function buildPayload(state) {
     prepressCost: state.prepressCost, prepressTreatment: state.prepressTreatment,
     miscCharges: state.miscCharges, miscChargeMarkup: state.miscChargeMarkup,
     pricingBasis: state.pricingBasis,
+    // Pricing Strategy — tier curves + per-qty overrides (legacy parity)
+    gmByTier: state.gmByTier || undefined,
+    sellByTier: state.sellByTier || undefined,
+    freightByQty: state.freightByQty || undefined,
+    forcedSellPc: state.forcedSellPc || undefined,
     // D-070 Board Status Bar — substitution decision & Buy Min toggle
     buyMinBoard: state.buyMinBoard || "Auto",
     boardSubstitution: state.boardSubstitution || null,
