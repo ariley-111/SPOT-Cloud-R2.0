@@ -178,6 +178,15 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Note: cloud has no auto-apply on parser (always manual confirm in diff modal)
   so the legacy 0.75/0.85 confidence threshold tuning is a no-op in cloud
 
+### 2026-06-03 — MP-7 Freight tile swap by quote type ✅
+- **RightDashboard Freight panel** TYPE tiles now swap based on quote type:
+  - **Simple**: `None | Line | Amort` (`freightTreatment` field, legacy parity)
+  - **Multi-Part**: `None | Per Item | Per Job` (`freightScope` field, legacy parity)
+- Per Job mode replaces per-item inputs with a pointer card to
+  Pricing Strategy → Job-Level Cost Allocation (where the $/method live)
+- None mode in MP shows a clean "No freight" indicator
+- Per Item mode (MP default) keeps the existing per-item Ship-To/ZIP/markup UI
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅

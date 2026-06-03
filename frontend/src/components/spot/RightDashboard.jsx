@@ -82,13 +82,47 @@ function FreightPanel({ s }) {
           <>
             <div style={rowSpaced}>
               <span style={lbl}>Type</span>
-              <div style={{ display: "flex", gap: 2 }}>
-                <Tile label="None"  active={s.freightTreatment === "None"}          onClick={() => setField("freightTreatment", "None")} small data-testid="tile-freight-none" />
-                <Tile label="Line"  active={s.freightTreatment === "Separate Line"} onClick={() => setField("freightTreatment", "Separate Line")} small tint="#22c55e" data-testid="tile-freight-line" />
-                <Tile label="Amort" active={s.freightTreatment === "Amortize"}      onClick={() => setField("freightTreatment", "Amortize")} small data-testid="tile-freight-amort" />
-              </div>
+              {s.quoteType === "Multi-Part" ? (
+                // Multi-Part: scope tiles match legacy (None / Per Item / Per Job)
+                <div style={{ display: "flex", gap: 2 }} data-testid="freight-scope-tiles">
+                  <Tile label="None"     active={s.freightScope === "None-Off"}                onClick={() => setField("freightScope", "None-Off")}                  small data-testid="tile-freight-scope-none" />
+                  <Tile label="Per Item" active={!s.freightScope || s.freightScope === "None"} onClick={() => setField("freightScope", "None")}                      small tint="#22c55e" data-testid="tile-freight-scope-per-item" />
+                  <Tile label="Per Job"  active={s.freightScope === "Per Job"}                 onClick={() => setField("freightScope", "Per Job")}                   small tint="#06b6d4" data-testid="tile-freight-scope-per-job" />
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 2 }}>
+                  <Tile label="None"  active={s.freightTreatment === "None"}          onClick={() => setField("freightTreatment", "None")} small data-testid="tile-freight-none" />
+                  <Tile label="Line"  active={s.freightTreatment === "Separate Line"} onClick={() => setField("freightTreatment", "Separate Line")} small tint="#22c55e" data-testid="tile-freight-line" />
+                  <Tile label="Amort" active={s.freightTreatment === "Amortize"}      onClick={() => setField("freightTreatment", "Amortize")} small data-testid="tile-freight-amort" />
+                </div>
+              )}
             </div>
 
+            {s.quoteType === "Multi-Part" && s.freightScope === "Per Job" ? (
+              // Per Job mode — freight $ is set in Pricing Strategy → Job-Level Cost Allocation
+              <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
+                border: "1px solid #06b6d444", borderRadius: 4 }} data-testid="freight-per-job-pointer">
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#06b6d4",
+                  textTransform: "uppercase", letterSpacing: ".06em" }}>Per-Job Freight</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text)", marginTop: 2 }}
+                  data-testid="freight-per-job-amount">
+                  {fmtMoney(Number(s.jobFreightCost) || 0)}
+                  <span style={{ fontSize: 10, color: "var(--spot-text3)", marginLeft: 6 }}>
+                    split {s.freightAllocMethod || "By MSF"} across {(s.bomItems || []).length} components
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 10, color: "var(--spot-text3)" }}>
+                  Set the amount + allocation method in <b>Pricing Strategy → Job-Level Cost Allocation</b>
+                </div>
+              </div>
+            ) : s.quoteType === "Multi-Part" && s.freightScope === "None-Off" ? (
+              <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--spot-bg3)",
+                border: "1px solid var(--spot-border)", borderRadius: 4, fontSize: 11,
+                color: "var(--spot-text3)" }} data-testid="freight-mp-off">
+                No freight on this multi-part quote.
+              </div>
+            ) : (
+              <>
             <div style={rowSpaced}>
               <span style={lbl}>Ship To</span>
               <input className="sp-input" value={s.destZip || ""}
@@ -145,6 +179,8 @@ function FreightPanel({ s }) {
           }}>Dashboard</button>
         </div>
         {err && <div style={{ marginTop: 6, fontSize: 11, color: "var(--spot-err)" }} data-testid="freight-err">{err}</div>}
+              </>
+            )}
           </>
         )}
       </div>
