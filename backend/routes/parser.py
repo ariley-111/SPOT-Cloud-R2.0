@@ -179,7 +179,10 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
     }
     body = {
         "model": model,
-        "max_tokens": 8192,
+        # 16K output tokens — high enough for 40+ component multi-part RFQs.
+        # Claude Opus 4.1 supports up to 64K but we cap at 16K to keep per-parse
+        # cost predictable. If we hit truncation, we log + raise a clear error.
+        "max_tokens": 16384,
         # Prompt caching: the big knowledge prompt is cached (ephemeral 5m TTL); billed once
         # then re-used across parses at ~10x discount. Mirrors legacy line 838.
         "system": [{
@@ -194,6 +197,18 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
         if resp.status_code >= 400:
             raise HTTPException(resp.status_code, f"Anthropic API: {resp.text[:500]}")
         data = resp.json()
+
+    # Detect truncation up front — happens when an RFQ has so many components
+    # that the JSON response exceeds max_tokens. JSON.parse will fail downstream
+    # with a confusing error; surfacing this cleanly is more useful.
+    stop_reason = data.get("stop_reason")
+    if stop_reason == "max_tokens":
+        raise HTTPException(
+            413,
+            "Parser response truncated — this RFQ has too many components for a single parse. "
+            "Try splitting the CAD PDF into smaller chunks (e.g. 20 components per file) and "
+            "running multiple parses, then merging into one BOM."
+        )
 
     usage = data.get("usage") or {}
     spend = await _record_spend(
