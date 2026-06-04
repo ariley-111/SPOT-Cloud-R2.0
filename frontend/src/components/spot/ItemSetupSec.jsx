@@ -6,7 +6,7 @@ import Tile, { Num } from "./Tile";
 import {
   BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS, allowed_liners,
 } from "../../lib/defaults";
-import { sheetAvailability } from "../../api/spot";
+import { sheetAvailability, gradeAvailability } from "../../api/spot";
 import { fmtMoney, fmtInt, fmtNum, fmtPct } from "../../lib/format";
 
 // ECT → Mullen equivalence (ported from legacy spot_r1_5.jsx line 270)
@@ -220,6 +220,8 @@ function BoardStatusBar({ s, r, setField }) {
   const allowed = React.useMemo(() => allowed_liners(s.boardGrade), [s.boardGrade]);
   // Approved-stock liners for the current grade/flute/medium combo (legacy L5983).
   const [avail, setAvail] = React.useState({ outside: new Set(), inside: new Set() });
+  // Approved-stock GRADES for the current flute/medium combo (legacy GRADE dots).
+  const [gradeAvail, setGradeAvail] = React.useState({ stocked: new Set(), viaFallback: new Set() });
   React.useEffect(() => {
     if (!s.boardGrade || !s.flute) return;
     let cancelled = false;
@@ -230,6 +232,16 @@ function BoardStatusBar({ s, r, setField }) {
       .catch(() => { if (!cancelled) setAvail({ outside: new Set(), inside: new Set() }); });
     return () => { cancelled = true; };
   }, [s.boardGrade, s.flute, s.medium]);
+  React.useEffect(() => {
+    if (!s.flute) return;
+    let cancelled = false;
+    gradeAvailability({ flute: s.flute, medium: s.medium || "None" })
+      .then((d) => { if (!cancelled) setGradeAvail({
+        stocked: new Set(d.stocked || []), viaFallback: new Set(d.viaFallback || []),
+      }); })
+      .catch(() => { if (!cancelled) setGradeAvail({ stocked: new Set(), viaFallback: new Set() }); });
+    return () => { cancelled = true; };
+  }, [s.flute, s.medium]);
   // Auto-correct: if the persisted liner is NOT in the allowed list for the current
   // grade (e.g., quote saved with 33# Kla-White then grade changed to 200), snap
   // it to a sensible default. Matches legacy "setOutsideLiner('42# Kla-White')" cleanup.
@@ -502,11 +514,26 @@ function BoardStatusBar({ s, r, setField }) {
           <F l="Grade" inline fw={60}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-                {GRADES.map((g) => (
-                  <Tile key={g} label={g.replace("#", "")} active={s.boardGrade === g}
-                    data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
-                    onClick={() => setField("boardGrade", g)} small />
-                ))}
+                {GRADES.map((g) => {
+                  const directStock = gradeAvail.stocked.has(g);
+                  const viaFallback = gradeAvail.viaFallback.has(g);
+                  const stockColor = directStock ? "var(--spot-green)"
+                    : viaFallback ? "#f59e0b" : null;
+                  const stockTitle = directStock ? `${g} (in stock for ${s.flute} flute)`
+                    : viaFallback ? `${g} (substitutes to Mullen equiv — in stock)`
+                    : `${g} (not stocked for ${s.flute} flute — custom order)`;
+                  return (
+                    <span key={g} title={stockTitle} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <Tile label={g.replace("#", "")} active={s.boardGrade === g}
+                        data-testid={`tile-grade-${g.replace(/\s+/g, '').replace('#', '')}`}
+                        onClick={() => setField("boardGrade", g)} small />
+                      {stockColor && (
+                        <span data-testid={`grade-dot-${g.replace(/\s+/g, '').replace('#', '')}`}
+                          style={{ width: 5, height: 5, borderRadius: 3, background: stockColor, marginLeft: -2 }} />
+                      )}
+                    </span>
+                  );
+                })}
               </div>
               {/* Mullen-equiv note — only when an ECT grade IS selected, to the RIGHT of the tiles */}
               {ECT_GRADE_FALLBACK[s.boardGrade] && (

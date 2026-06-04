@@ -90,6 +90,37 @@ async def sheet_availability(
     return {"outside": sorted(ol_set), "inside": sorted(il_set)}
 
 
+@router.get("/grade-availability")
+async def grade_availability(
+    flute: str, medium: str = "None",
+    _u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Which board grades have approved stock sheets for the given flute/medium combo?
+    Drives green-dot stock indicators on the GRADE row (legacy spot_r1_5.jsx L5983).
+
+    Also flags ECT grades whose Mullen-equivalent (ECT 32 → 200#) IS stocked.
+    Returns: {"stocked": [direct-stocked grades], "viaFallback": [ECT grades whose
+              Mullen-equiv is stocked]}.
+    """
+    direct, via_fb = set(), set()
+    stocked = set()
+    for sh in APPROVED_SHEETS:
+        if sh["f"] != flute or sh["md"] != medium:
+            continue
+        stocked.add(sh["g"])
+    for sh in APPROVED_SHEETS:
+        if sh["f"] != flute or sh["md"] != medium:
+            continue
+        direct.add(sh["g"])
+    # ECT → Mullen fallback: e.g. ECT 32 → 200#. If 200# is stocked, ECT 32 should
+    # also get a (lighter) green dot since it'll auto-substitute to a stocked sheet.
+    from engine.core import ECT_GRADE_FALLBACK
+    for ect_g, mullen_g in ECT_GRADE_FALLBACK.items():
+        if mullen_g in stocked:
+            via_fb.add(ect_g)
+    return {"stocked": sorted(direct), "viaFallback": sorted(via_fb)}
+
+
 @router.post("/compare-routes")
 async def compare_routes_ep(
     payload: Dict[str, Any] = Body(...),

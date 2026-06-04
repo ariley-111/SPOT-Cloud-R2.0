@@ -84,6 +84,13 @@ export const sheetAvailability = ({ boardGrade, flute, medium = "None" }) =>
     params: { boardGrade, flute, medium },
   }).then((r) => r.data);
 
+// Stock-availability per board grade for the given flute/medium. Returns
+// {stocked: [...], viaFallback: [...ECT grades whose Mullen-equiv IS stocked]}.
+export const gradeAvailability = ({ flute, medium = "None" }) =>
+  api.get("/engine/grade-availability", {
+    params: { flute, medium },
+  }).then((r) => r.data);
+
 // D-090: side-by-side CAD/Crest/Bobst comparison for one qty. Used by the
 // RouteComparison panel.
 export const compareRoutes = (payload) =>
