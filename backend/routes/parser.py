@@ -357,6 +357,31 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
             "confidence": flat.get("confidence", 0.5),
         }
 
+    # Server-side difficulty enforcement — Claude sometimes returns Standard even
+    # when the inches-of-rule exceeds 3× perimeter. Cloud overrides with the iQuote
+    # calc result so the result is deterministic. Estimator can still flip manually.
+    def _coerce_difficulty(state: Dict[str, Any]) -> None:
+        try:
+            from engine.core import compute_difficulty_from_rule
+            ri = float(state.get("totalRuleInches") or 0)
+            uw = float(state.get("oneUpW") or 0)
+            ul = float(state.get("oneUpL") or 0)
+            if ri > 0 and uw > 0 and ul > 0:
+                # Don't overwrite if estimator/parser explicitly chose Simple (edge case).
+                if state.get("cadDifficulty") == "Simple":
+                    return
+                state["cadDifficulty"] = compute_difficulty_from_rule(ri, uw, ul)
+        except Exception:
+            pass
+
+    parsed_root = normalized.get("parsed") or {}
+    _coerce_difficulty(parsed_root)
+    for bi in (parsed_root.get("bomItems") or []):
+        if isinstance(bi, dict):
+            st = bi.get("state")
+            if isinstance(st, dict):
+                _coerce_difficulty(st)
+
     return {
         **normalized,
         "model": data.get("model"),
