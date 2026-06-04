@@ -109,6 +109,8 @@ function FreightPanel({ s }) {
       });
       setManyFields({
         freightCost: String(r.totalAmount), quoteFOB: "Destination",
+        freightCarrier: r.carrier || "",
+        freightTransit: r.transitDays != null ? String(r.transitDays) : "",
         freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
       });
       pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
@@ -127,8 +129,8 @@ function FreightPanel({ s }) {
         <div style={rowSpaced}>
           <span style={lbl}>FOB</span>
           <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            <Tile label="Will-Call" active={s.quoteFOB === "Origin"}      onClick={() => setField("quoteFOB", "Origin")}      small data-testid="tile-fob-willcall" />
-            <Tile label="Ship"      active={s.quoteFOB === "Destination"} onClick={() => setField("quoteFOB", "Destination")} small tint="#3b82f6" data-testid="tile-fob-ship" />
+            <Tile label="Will-Call" active={s.quoteFOB === "Origin"}      onClick={() => setManyFields({ quoteFOB: "Origin", freightMarkup: s.freightMarkup === "0" ? "0.15" : (s.freightMarkup || "0.15") })} small data-testid="tile-fob-willcall" />
+            <Tile label="Ship"      active={s.quoteFOB === "Destination"} onClick={() => setManyFields({ quoteFOB: "Destination", freightMarkup: (!s.freightMarkup || s.freightMarkup === "0") ? "0.15" : s.freightMarkup })} small tint="#3b82f6" data-testid="tile-fob-ship" />
             <Tile label="Local"     active={s.quoteFOB === "LocalDelivery"} onClick={() => setField("quoteFOB", "LocalDelivery")} small tint="#22c55e" data-testid="tile-fob-local" />
           </div>
         </div>
@@ -291,6 +293,15 @@ function FreightPanel({ s }) {
                 {Number(s.freightCost) > 0 ? "● Freight verified — OK to quote" : "○ No freight yet"}
               </span>
             </div>
+            {s.freightCarrier && (
+              <div data-testid="freight-carrier" style={{
+                fontSize: 11, color: "var(--spot-green)", fontWeight: 700,
+                textAlign: "right", marginTop: 2,
+              }}>
+                via {s.freightCarrier}
+                {s.freightTransit && <span style={{ fontWeight: 500, color: "var(--spot-text3)" }}>{" · "}{s.freightTransit} day{s.freightTransit === "1" ? "" : "s"} transit</span>}
+              </div>
+            )}
 
             <div style={{ marginTop: 6, display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
               <button onClick={updateFreight} disabled={busy} data-testid="btn-freight-update"
@@ -834,14 +845,16 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
               {freight > 0 && (() => {
                 // Distinct label & breakdown for Local Delivery — make it
                 // unmistakable on the customer-facing cost buildup.
-                const isLocal = !isMultiPart && s?.quoteFOB === "LocalDelivery";
+                const isLocal = s?.quoteFOB === "LocalDelivery";
                 const zone = s?.localDeliveryZone || "";
                 const freightLabel = isLocal
                   ? `Freight — Local Delivery${zone ? ` · ${zone}` : ""}`
                   : "Freight";
-                const baseCost = isMultiPart ? null : Number(r.freightCost || 0);
-                const markupPct = isMultiPart ? null : Number(r.freightMarkup || 0);
-                const showBreakdown = !isMultiPart && baseCost > 0 && !isLocal;
+                // For MP we don't have a single base+markup (each component has its share),
+                // so use the user-entered job-level base cost + markup if set on top-level state.
+                const baseCost = Number(s?.freightCost || r.freightCost || 0);
+                const markupPct = Number(s?.freightMarkup || r.freightMarkup || 0);
+                const showBreakdown = baseCost > 0 && !isLocal;
                 return (
                   <Row label={
                     <span style={{ fontStyle: "italic" }}>
@@ -859,9 +872,9 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 );
               })()}
               {die > 0 && (() => {
-                const baseCost = isMultiPart ? null : Number(r.cuttingDieCost || 0);
-                const markupPct = isMultiPart ? null : Number(r.dieMarkup || 0);
-                const showBreakdown = !isMultiPart && baseCost > 0 && markupPct > 0;
+                const baseCost = Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
+                const markupPct = Number(s?.dieMarkup || r.dieMarkup || 0);
+                const showBreakdown = baseCost > 0 && markupPct > 0;
                 return (
                   <Row label={
                     <span style={{ fontStyle: "italic" }}>
@@ -876,9 +889,9 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 );
               })()}
               {prepress > 0 && (() => {
-                const baseCost = isMultiPart ? null : Number(r.prepressCost || 0);
-                const markupPct = isMultiPart ? null : Number(r.prepressMarkup || 0);
-                const showBreakdown = !isMultiPart && baseCost > 0 && markupPct > 0;
+                const baseCost = Number(s?.prepressCost || r.prepressCost || 0);
+                const markupPct = Number(s?.prepressMarkup || r.prepressMarkup || 0);
+                const showBreakdown = baseCost > 0 && markupPct > 0;
                 return (
                   <Row label={
                     <span style={{ fontStyle: "italic" }}>
@@ -892,18 +905,17 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                   } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />
                 );
               })()}
-              {/* Named misc items — show one line per user-typed name, with markup if applicable */}
+              {/* Named misc items — one row per user-typed name, with markup */}
               {(() => {
                 const miscItems = isMultiPart
                   ? (agg.miscLineItems || [])
                   : (r.miscLineItems || []);
-                const miscMarkup = !isMultiPart ? Number(r.miscMarkup || 0) : 0;
-                const miscCharges = !isMultiPart ? (s?.miscCharges || []) : [];
+                const miscMarkup = Number(s?.miscMarkup || r.miscMarkup || 0);
+                const miscCharges = s?.miscCharges || [];
                 return miscItems.filter((li) => (li.amt || 0) > 0).map((li, mi) => {
-                  // Find the user-entered base cost (pre-markup) for this named item
                   const baseEntry = miscCharges.find((mc) => (mc.name || "") === (li.name || ""));
                   const baseCost = baseEntry ? Number(baseEntry.cost || 0) : 0;
-                  const showBreakdown = !isMultiPart && baseCost > 0 && miscMarkup > 0;
+                  const showBreakdown = baseCost > 0 && miscMarkup > 0;
                   return (
                     <Row key={`mli-${mi}`} label={
                       <span style={{ fontStyle: "italic" }}>
