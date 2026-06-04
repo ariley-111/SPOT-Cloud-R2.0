@@ -45,15 +45,26 @@ export default function ItemSetupSec({ result }) {
   // ─── Die auto-handler (legacy spot_r1_5.jsx L3863-3883) ───────────────
   // CAD route needs no die. Crest/Bobst route needs a steel rule die — auto-add
   // a default cost ($1,200 Crest / $1,800 Bobst). On route → CAD, clear die.
-  const dieAutoRef = useRef({ savedTreatment: null, isAutoNone: false });
+  const dieAutoRef = useRef({ savedTreatment: null, isAutoNone: false, lastItemKey: null });
   const anyDieRoute = route === "Crest" || route === "Bobst";
   const anyBobst = route === "Bobst";
   // Don't run during MP-Fulfillment items — they have no die at all
   const isFulfillment = s.itemType === "Fulfillment";
+  // Track which BOM item we're operating on so we don't carry one component's
+  // auto-cleared state into another's evaluation.
+  const itemKey = `${active?.id || ""}-${s.activeItemIdx ?? 0}`;
 
   useEffect(() => {
     if (isFulfillment) return;
+    if (route === "—" || !route) return;  // wait until engine has priced this component
     const da = dieAutoRef.current;
+    // Reset memory when switching to a different BOM tab — each component has
+    // its own die state, don't carry over the previous tab's auto-clear flag.
+    if (da.lastItemKey !== itemKey) {
+      da.savedTreatment = null;
+      da.isAutoNone = false;
+      da.lastItemKey = itemKey;
+    }
     const dieLabel = anyBobst ? "Bobst" : "Crest";
     const dieDefault = anyBobst ? "1800" : "1200";
     const currentTreat = s.dieTreatment || "None";
@@ -85,7 +96,7 @@ export default function ItemSetupSec({ result }) {
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anyDieRoute, anyBobst, isFulfillment]);
+  }, [anyDieRoute, anyBobst, isFulfillment, route, itemKey]);
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
@@ -256,8 +267,25 @@ function BoardStatusBar({ s, r, setField }) {
   const machineCapacityFail = !!(r?.exceedsMachineCapacity);
   const exceedsSheetLib = !!(r?.exceedsSheetLibrary);
 
-  const acceptSub = () => { setField("boardSubstitution", "accepted"); setField("fallbackAccepted", true); setTilesOpen(false); };
-  const forceSub  = () => { setField("boardSubstitution", "forced"); setField("fallbackAccepted", true); setField("buyMinBoard", "Yes"); setTilesOpen(false); };
+  const acceptSub = () => {
+    // Write the substituted grade/medium back to the selectors so the UI
+    // tiles reflect what the engine is actually running. Without this the
+    // selectors stay on the spec values and the user sees a desync.
+    const patch = { boardSubstitution: "accepted", fallbackAccepted: true };
+    if (r?.gradeFallback) patch.boardGrade = r.gradeFallback;
+    if (r?.mediumFallback?.medium) patch.medium = r.mediumFallback.medium;
+    setManyFields(patch);
+    setTilesOpen(false);
+  };
+  const forceSub = () => {
+    // Same write-back; "forced" additionally requires Buy Min mode for the
+    // stock to be ordered at mill-min quantities.
+    const patch = { boardSubstitution: "forced", fallbackAccepted: true, buyMinBoard: "Yes" };
+    if (r?.gradeFallback) patch.boardGrade = r.gradeFallback;
+    if (r?.mediumFallback?.medium) patch.medium = r.mediumFallback.medium;
+    setManyFields(patch);
+    setTilesOpen(false);
+  };
   const revertToStock = () => { setField("boardSubstitution", "accepted"); setField("buyMinBoard", "Auto"); setTilesOpen(false); };
 
   const med = s.medium || "None";
