@@ -54,31 +54,49 @@ function FreightPanel({ s }) {
     return m[flute] || 0.078;
   })();
 
-  const estimatedWeight = (() => {
-    // Pull all priced results from the engine, sum their board sq-ft at the
-    // SELECTED qty (selSlot). This handles MP correctly (sum across components).
+  // Pallet-stack estimator (WFC Skid Calc parity). For each component:
+  // - Stack pieces on a Standard 40×48 skid (most common for boxes)
+  // - pieces_per_layer = floor((48-0.5)/piece_W) × floor((40-0.5)/piece_L), try both orientations
+  // - max stack height 44" (5" skid + product ≤ 50" total)
+  // - skids = ceil(qty × thickness / (pieces_per_layer × max_height))
+  // - skid_wt = 75 lbs per skid (Std), 100 lbs (Large), 200 lbs (WF)
+  const computeShipmentWeight = () => {
     const sel = s.selSlot ?? 0;
-    let totalSqFt = 0;
-    // Lazy access via active.lastResults if cached; else use per-item state qtys
-    // as a fallback approximation.
     const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
       ? s.bomItems : [{ state: s }];
+    let totalSqFt = 0;
+    let totalSkids = 0;
     items.forEach((it) => {
       const st = it.state || it;
       const qty = parseInt((st.qtys || [])[sel] || st.qtys?.[0] || 0, 10);
       const uw = parseFloat(st.oneUpW || 0);
       const ul = parseFloat(st.oneUpL || 0);
-      // Conservative: one-up area × qty × 1.25 (waste/spoilage factor)
-      if (qty > 0 && uw > 0 && ul > 0) {
-        totalSqFt += (uw * ul * qty * 1.25) / 144;
-      }
+      if (qty <= 0 || uw <= 0 || ul <= 0) return;
+      // Sq-ft × waste/spoilage factor 1.25
+      totalSqFt += (uw * ul * qty * 1.25) / 144;
+      // Skid math — Standard 40×48, allow 0.5" guard each side
+      const longSide = Math.max(uw, ul), shortSide = Math.min(uw, ul);
+      const piecesPerLayer = Math.max(
+        Math.floor((48 - 0.5) / longSide) * Math.floor((40 - 0.5) / shortSide),
+        Math.floor((48 - 0.5) / shortSide) * Math.floor((40 - 0.5) / longSide),
+        1
+      );
+      // Estimate caliper ≈ 0.16" for typical C-flute corrugate
+      const caliperIn = ({ B: 0.125, C: 0.1875, E: 0.0625, F: 0.05, "B/C": 0.236 })[st.flute || "C"] || 0.1875;
+      // Stacks of 44" max → stack_pieces = floor(44/caliper)
+      const stackPieces = Math.max(1, Math.floor(44 / caliperIn));
+      const skids = Math.max(1, Math.ceil(qty / (piecesPerLayer * stackPieces)));
+      totalSkids += skids;
     });
     const boardLbs = totalSqFt * lbsPerSqFt;
-    // 1 pallet per 40k sq.ft of board (rough), min 1 pallet
-    const pallets = Math.max(1, Math.ceil(totalSqFt / 40000));
-    const palletLbs = pallets * 30;
-    return Math.max(100, Math.round(boardLbs + palletLbs));
-  })();
+    const palletLbs = totalSkids * 75;     // Standard 40×48 skid weight
+    return {
+      lbs: Math.max(100, Math.round(boardLbs + palletLbs)),
+      skids: totalSkids, sqFt: Math.round(totalSqFt),
+    };
+  };
+  const shipmentEst = computeShipmentWeight();
+  const estimatedWeight = shipmentEst.lbs;
 
   const updateFreight = async () => {
     if (!s.destZip) { setErr("Need ship-to ZIP first"); return; }
@@ -93,7 +111,7 @@ function FreightPanel({ s }) {
         freightCost: String(r.totalAmount), quoteFOB: "Destination",
         freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
       });
-      pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${estimatedWeight} lbs est`, "ok");
+      pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
     } catch (e) { setErr(e?.response?.data?.detail || e.message); }
     finally { setBusy(false); }
   };
@@ -108,13 +126,74 @@ function FreightPanel({ s }) {
       <div style={{ padding: "8px 10px" }}>
         <div style={rowSpaced}>
           <span style={lbl}>FOB</span>
-          <div style={{ display: "flex", gap: 2 }}>
+          <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <Tile label="Will-Call" active={s.quoteFOB === "Origin"}      onClick={() => setField("quoteFOB", "Origin")}      small data-testid="tile-fob-willcall" />
             <Tile label="Ship"      active={s.quoteFOB === "Destination"} onClick={() => setField("quoteFOB", "Destination")} small tint="#3b82f6" data-testid="tile-fob-ship" />
+            <Tile label="Local"     active={s.quoteFOB === "LocalDelivery"} onClick={() => setField("quoteFOB", "LocalDelivery")} small tint="#22c55e" data-testid="tile-fob-local" />
           </div>
         </div>
 
-        {s.quoteFOB === "Origin" ? (
+        {s.quoteFOB === "LocalDelivery" ? (
+          // Local Delivery — flat-rate by distance from Canton, OH (44704).
+          // Zone 1 (closest) $35, Zone 2 $60, Zone 3 (farthest) $85. No markup.
+          // Treated as a line charge (one-time), not a per-MSF freight cost.
+          (() => {
+            const ZONES = [
+              { z: "Zone 1", price: 35, mi: "≤ 30 mi · Akron / Canton metro" },
+              { z: "Zone 2", price: 60, mi: "≤ 60 mi · Cleveland / Medina / Alliance" },
+              { z: "Zone 3", price: 85, mi: "≤ 120 mi · NW OH / Erie / Youngstown" },
+            ];
+            const sel = s.localDeliveryZone || null;
+            const selZone = ZONES.find((z) => z.z === sel);
+            const onPick = (z) => {
+              const zone = ZONES.find((x) => x.z === z);
+              if (!zone) return;
+              setManyFields({
+                localDeliveryZone: z,
+                freightCost: String(zone.price),
+                freightMarkup: "0",         // no markup on local delivery
+                freightTreatment: "Separate Line",
+                quoteFOB: "LocalDelivery",
+              });
+            };
+            return (
+              <div data-testid="freight-local-panel" style={{ marginTop: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4 }}>
+                  {ZONES.map(({ z, price, mi }) => (
+                    <button key={z} onClick={() => onPick(z)} data-testid={`tile-local-${z.replace(/\s/g, "")}`}
+                      style={{
+                        all: "unset", cursor: "pointer", padding: "8px 8px", textAlign: "center",
+                        borderRadius: 4,
+                        background: sel === z ? "var(--spot-green)" : "var(--spot-bg2)",
+                        color: sel === z ? "#fff" : "var(--spot-text)",
+                        border: `1px solid ${sel === z ? "var(--spot-green)" : "var(--spot-border)"}`,
+                      }}>
+                      <div style={{ fontSize: 11, fontWeight: 700 }}>{z}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>${price}</div>
+                      <div style={{ fontSize: 9, marginTop: 2,
+                        color: sel === z ? "rgba(255,255,255,0.85)" : "var(--spot-text3)" }}>{mi}</div>
+                    </button>
+                  ))}
+                </div>
+                {selZone && (
+                  <div data-testid="freight-local-summary" style={{
+                    marginTop: 8, padding: "6px 10px", background: "#22c55e0c",
+                    border: "1px solid #22c55e44", borderRadius: 4, fontSize: 11,
+                  }}>
+                    <span style={{ fontWeight: 700, color: "var(--spot-green)" }}>Local Delivery</span>
+                    <span style={{ color: "var(--spot-text2)" }}> · {selZone.z} · </span>
+                    <span style={{ fontWeight: 700, color: "var(--spot-text)" }}>{fmtMoney(selZone.price)}</span>
+                    <span style={{ color: "var(--spot-text3)" }}> — no markup, applied as line charge</span>
+                  </div>
+                )}
+                <div style={{ marginTop: 8, padding: "5px 8px", background: "#f59e0b14",
+                  border: "1px solid #f59e0b55", borderRadius: 4, fontSize: 10, color: "#f59e0b" }}>
+                  ⚠ Verify zone is correct before generating PDF — confirm with customer if distance is borderline.
+                </div>
+              </div>
+            );
+          })()
+        ) : s.quoteFOB === "Origin" ? (
           // Will-Call: legacy parity (spot_r1_5.jsx L3890, L4264-4265). Skip Type /
           // Ship-To / Markup / Update All — there's nothing to ship, customer picks up.
           // Engine + PDF already gate on quoteFOB===Destination so no freight is added.

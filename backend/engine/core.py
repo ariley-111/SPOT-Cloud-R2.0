@@ -238,6 +238,27 @@ STRIP_DEFAULTS = {"Simple": 0.5, "Straight": 1.0, "Standard": 3.0, "Complex": 5.
 GLUE_DEFAULTS = {"Simple": 1.0, "Standard": 1.5, "Complex": 2.0}
 CAD_DIFF_MIGRATION = {"Simple": "Simple", "Standard": "Straight", "Complex": "Standard", "Extreme": "Complex"}
 STRIP_DIFF_MIGRATION = {"Simple": "Simple", "Standard": "Straight", "Complex": "Standard", "Extreme": "Complex"}
+
+
+def compute_difficulty_from_rule(rule_inches: float, one_up_w: float, one_up_l: float,
+                                  has_skip_score: bool = False, has_perf: bool = False) -> str:
+    """iQuote calculator parity (3 tiers: Simple / Standard / Complex).
+
+    Complex if ANY:
+      - has_skip_score or has_perf (callouts on the CAD)
+      - rule_inches / (2*(L+W)) > 3   (more than 3x perimeter of cuts/scores)
+    Simple is manual-only — set by estimator for plain rectangles. The auto-classifier
+    never picks Simple; it returns Standard when neither Complex trigger fires.
+    """
+    if has_skip_score or has_perf:
+        return "Complex"
+    perim = 2 * (max(0.0, one_up_w) + max(0.0, one_up_l))
+    if perim <= 0 or rule_inches <= 0:
+        return "Standard"
+    ratio = rule_inches / perim
+    return "Complex" if ratio > 3.0 else "Standard"
+
+
 SPOT_SCHEMA_VERSION = 2
 
 GM_MSF_TIERS = [

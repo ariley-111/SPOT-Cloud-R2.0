@@ -105,6 +105,8 @@ export const DEFAULT_STATE = Object.freeze({
   quoteFOB: "Origin",                  // Origin | Destination | Will-Call | Ship
   freightType: "None",                 // None | Line | Amort
   freightTreatment: "None",            // None | Separate Line | Amortize
+  // Local Delivery (FOB = "LocalDelivery"): "Zone 1" | "Zone 2" | "Zone 3"
+  localDeliveryZone: null,
   freightCost: "0",
   freightMarkup: "0.15",
   freightScope: "None",                // None | Per Item | Per Job

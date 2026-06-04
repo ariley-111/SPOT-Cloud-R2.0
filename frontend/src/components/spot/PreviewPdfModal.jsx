@@ -15,6 +15,17 @@ import { fmtInt, fmtMoney, fmtNum } from "../../lib/format";
 export default function PreviewPdfModal({ onClose }) {
   const { active, pushToast } = useQuote();
   const s = active?.state || {};
+  // Freight sanity check: warn estimator if Will-Call or Local Delivery is selected
+  // (these are common sources of customer pricing complaints when wrong).
+  useEffect(() => {
+    if (s.quoteFOB === "Origin") {
+      pushToast("⚠ FOB Will-Call — customer picks up, no freight added. Confirm before sending.", "warn");
+    } else if (s.quoteFOB === "LocalDelivery") {
+      const z = s.localDeliveryZone || "(no zone selected)";
+      pushToast(`⚠ Local Delivery — ${z}. Verify zone matches customer distance from 44704.`, "warn");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [results, setResults] = useState([]);
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState("");
