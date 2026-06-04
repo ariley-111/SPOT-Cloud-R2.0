@@ -21,10 +21,18 @@ from typing import Any, Dict, List
 # MIME types we forward to the parser (matches parser.py's file-type whitelist)
 PARSER_KEEP_MIME = {
     "application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif",
-    "image/heic", "image/heif", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
+    "image/heic", "image/heif",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    "application/msword",  # .doc
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
+    "application/vnd.ms-excel",  # .xls
+    "text/csv", "text/tab-separated-values", "text/plain",
+    "application/rtf", "text/rtf",
 }
-PARSER_KEEP_EXT = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif", ".docx", ".txt"}
+PARSER_KEEP_EXT = {
+    ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif",
+    ".docx", ".doc", ".xlsx", ".xls", ".csv", ".tsv", ".txt", ".rtf",
+}
 
 
 def _is_parser_attachment(filename: str, mime: str) -> bool:
@@ -122,7 +130,11 @@ def extract_msg(raw: bytes) -> Dict[str, Any]:
             ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
             ".heic": "image/heic", ".heif": "image/heif",
             ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".txt": "text/plain",
+            ".doc": "application/msword",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls": "application/vnd.ms-excel",
+            ".csv": "text/csv", ".tsv": "text/tab-separated-values",
+            ".rtf": "application/rtf", ".txt": "text/plain",
         }
         mime = mime_map.get(ext, "application/octet-stream")
         if not _is_parser_attachment(fname, mime):
