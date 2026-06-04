@@ -24,7 +24,9 @@ export const fmtNum = (n, dec = 2) => {
 };
 
 export const generateEstNum = (initials) => {
-  if (!initials) return "";
+  // Allow empty initials — fall back to "SPC" so the est# is always generated.
+  // The backfill effect in QuoteContext re-stamps with real initials once they resolve.
+  const pre = (initials || "SPC").toUpperCase();
   const now = new Date();
   const yy = String(now.getFullYear()).slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -32,5 +34,5 @@ export const generateEstNum = (initials) => {
   const hh = String(now.getHours()).padStart(2, "0");
   const mn = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
-  return `${initials.toUpperCase()}-${yy}${mm}${dd}-${hh}${mn}${ss}`;
+  return `${pre}-${yy}${mm}${dd}-${hh}${mn}${ss}`;
 };

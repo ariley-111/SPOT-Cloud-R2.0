@@ -72,6 +72,14 @@ async def on_startup():
     logger.info(f"Integration overrides applied: {ni}")
     ns = await load_sheets_from_db()
     logger.info(f"Sheet library loaded: {ns}")
+    # One-time admin role grants. Idempotent — only updates when role differs.
+    from db import db as _db, COL_USERS
+    admin_grants = ["rwalter@standardprinting.com"]
+    for em in admin_grants:
+        u = await _db[COL_USERS].find_one({"email": em})
+        if u and u.get("role") != "admin":
+            await _db[COL_USERS].update_one({"email": em}, {"$set": {"role": "admin"}})
+            logger.info(f"Granted admin role to {em}")
 
 
 @app.on_event("shutdown")

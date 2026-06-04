@@ -40,20 +40,60 @@ export default function RightDashboard() {
 }
 
 function FreightPanel({ s }) {
-  const { setField, setManyFields, pushToast } = useQuote();
+  const { setField, setManyFields, pushToast, active } = useQuote();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Estimate shipment weight from the engine output of the selected qty row.
+  // Density tables from APICS BS-1505 standard corrugate weights (lbs / sq ft).
+  // Pallet ≈ 30 lbs each; assume 1 pallet per 40k sq ft (typical packout).
+  const lbsPerSqFt = (() => {
+    const flute = s.flute || "C";
+    // Mid-range medium weight per flute. C is the workhorse; B/E lighter.
+    const m = { B: 0.058, C: 0.078, E: 0.046, F: 0.040, "B/C": 0.110 };
+    return m[flute] || 0.078;
+  })();
+
+  const estimatedWeight = (() => {
+    // Pull all priced results from the engine, sum their board sq-ft at the
+    // SELECTED qty (selSlot). This handles MP correctly (sum across components).
+    const sel = s.selSlot ?? 0;
+    let totalSqFt = 0;
+    // Lazy access via active.lastResults if cached; else use per-item state qtys
+    // as a fallback approximation.
+    const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
+      ? s.bomItems : [{ state: s }];
+    items.forEach((it) => {
+      const st = it.state || it;
+      const qty = parseInt((st.qtys || [])[sel] || st.qtys?.[0] || 0, 10);
+      const uw = parseFloat(st.oneUpW || 0);
+      const ul = parseFloat(st.oneUpL || 0);
+      // Conservative: one-up area × qty × 1.25 (waste/spoilage factor)
+      if (qty > 0 && uw > 0 && ul > 0) {
+        totalSqFt += (uw * ul * qty * 1.25) / 144;
+      }
+    });
+    const boardLbs = totalSqFt * lbsPerSqFt;
+    // 1 pallet per 40k sq.ft of board (rough), min 1 pallet
+    const pallets = Math.max(1, Math.ceil(totalSqFt / 40000));
+    const palletLbs = pallets * 30;
+    return Math.max(100, Math.round(boardLbs + palletLbs));
+  })();
 
   const updateFreight = async () => {
     if (!s.destZip) { setErr("Need ship-to ZIP first"); return; }
     setBusy(true); setErr("");
     try {
-      const r = await freightQuote({ destZip: s.destZip, weightLbs: 1000, freightClass: "70" });
+      const r = await freightQuote({
+        destZip: s.destZip,
+        weightLbs: estimatedWeight,
+        freightClass: "70",
+      });
       setManyFields({
         freightCost: String(r.totalAmount), quoteFOB: "Destination",
         freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
       });
-      pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier}`, "ok");
+      pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${estimatedWeight} lbs est`, "ok");
     } catch (e) { setErr(e?.response?.data?.detail || e.message); }
     finally { setBusy(false); }
   };

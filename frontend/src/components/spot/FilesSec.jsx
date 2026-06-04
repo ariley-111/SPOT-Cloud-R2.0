@@ -22,6 +22,15 @@ export default function FilesSec() {
 
   useEffect(() => { parserBudget().then(setBudget).catch(() => {}); }, []);
 
+  // Reset per-tab UI state when the active tab changes — files dropped on
+  // tab A should not bleed into tab B (was a real bug, reported 2026-06-04).
+  useEffect(() => {
+    setFiles([]);
+    setParseResult(null);
+    setParserError("");
+    setReviewOpen(false);
+  }, [active?.id]);
+
   const isRfqLike = (name) => /\.(pdf|docx?|eml|msg|txt|jpg|jpeg|png|webp|heic)$/i.test(name || "");
   const isEmailFile = (name) => /\.(eml|msg)$/i.test(name || "");
   const ingestFiles = (list) => {
@@ -192,7 +201,7 @@ export default function FilesSec() {
           if (pdfs.length)   bits.push(`${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"}`);
           const others = rfqs.length - emails.length - pdfs.length;
           if (others > 0) bits.push(`${others} other`);
-          return `${bits.join(" + ") || rfqs.length + " file" + (rfqs.length === 1 ? "" : "s")} · Calling Anthropic Opus (typically 5-15 sec)`;
+          return `${bits.join(" + ") || rfqs.length + " file" + (rfqs.length === 1 ? "" : "s")} · Calling Anthropic Opus — typically 15-60 sec; larger or multi-CAD RFQs can take 1-3 min`;
         })()} />
     </Sec>
   );

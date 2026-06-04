@@ -194,6 +194,21 @@ export function QuoteProvider({ children }) {
     if (!activeId && tabs.length > 0) setActiveId(tabs[0].id);
   }, [tabs, activeId]);
 
+  // Defensive backfill: if any tab is missing an est#, stamp one. This catches
+  // the rare case (reported by Rich in prod, Edge browser) where a tab was
+  // created during the initials-resolve window and never got an est#.
+  useEffect(() => {
+    setTabs((cur) => {
+      let changed = false;
+      const next = cur.map((t) => {
+        if (t.state?.estNum) return t;
+        changed = true;
+        return { ...t, state: { ...t.state, estNum: generateEstNum(initials), estNumAuto: true } };
+      });
+      return changed ? next : cur;
+    });
+  }, [activeId, initials]);
+
   const duplicateTab = useCallback(() => {
     if (!active) return;
     const tab = {

@@ -1,5 +1,5 @@
 /* eslint-disable */
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec, { F } from "./Sec";
 import Tile, { Num } from "./Tile";
@@ -17,7 +17,7 @@ const ECT_GRADE_FALLBACK = {
 };
 
 export default function ItemSetupSec({ result }) {
-  const { active, sec, toggleSec, setField, setManyFields } = useQuote();
+  const { active, sec, toggleSec, setField, setManyFields, pushToast } = useQuote();
   const s = active?.state || {};
   const r = result || {};
   const route = r.route || "—";
@@ -41,6 +41,51 @@ export default function ItemSetupSec({ result }) {
     const w = s.oneUpW, l = s.oneUpL;
     setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: !corrFlipped });
   };
+
+  // ─── Die auto-handler (legacy spot_r1_5.jsx L3863-3883) ───────────────
+  // CAD route needs no die. Crest/Bobst route needs a steel rule die — auto-add
+  // a default cost ($1,200 Crest / $1,800 Bobst). On route → CAD, clear die.
+  const dieAutoRef = useRef({ savedTreatment: null, isAutoNone: false });
+  const anyDieRoute = route === "Crest" || route === "Bobst";
+  const anyBobst = route === "Bobst";
+  // Don't run during MP-Fulfillment items — they have no die at all
+  const isFulfillment = s.itemType === "Fulfillment";
+
+  useEffect(() => {
+    if (isFulfillment) return;
+    const da = dieAutoRef.current;
+    const dieLabel = anyBobst ? "Bobst" : "Crest";
+    const dieDefault = anyBobst ? "1800" : "1200";
+    const currentTreat = s.dieTreatment || "None";
+    const currentCost = Number(s.cuttingDieCost || 0);
+
+    // Route → CAD: clear die (save user's prior choice for restore)
+    if (!anyDieRoute && !da.isAutoNone && currentTreat !== "None") {
+      da.savedTreatment = currentTreat;
+      da.isAutoNone = true;
+      setField("dieTreatment", "None");
+      pushToast && pushToast("Die cleared — CAD routing, no steel die needed", "ok");
+      return;
+    }
+    // Route → Crest/Bobst AFTER we auto-cleared: restore user's prior treatment
+    if (anyDieRoute && da.isAutoNone) {
+      const restore = da.savedTreatment || "Separate Line";
+      da.isAutoNone = false;
+      da.savedTreatment = null;
+      if (currentTreat !== restore) setField("dieTreatment", restore);
+      pushToast && pushToast(`Die added — ${dieLabel} routing requires a steel die`, "ok");
+      return;
+    }
+    // Route → Crest/Bobst, user has no treatment AND no cost yet — auto-add default
+    if (anyDieRoute && !da.isAutoNone && currentTreat === "None" && currentCost <= 0) {
+      setManyFields({ dieTreatment: "Separate Line", cuttingDieCost: dieDefault });
+      pushToast && pushToast(
+        `Die added — ${dieLabel} routing requires a steel die ($${dieDefault} default)`,
+        "ok"
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyDieRoute, anyBobst, isFulfillment]);
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
