@@ -183,6 +183,11 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
         # Claude Opus 4.1 supports up to 64K but we cap at 16K to keep per-parse
         # cost predictable. If we hit truncation, we log + raise a clear error.
         "max_tokens": 16384,
+        # Stream the response. This keeps the K8s ingress connection warm during
+        # long parses (Anthropic emits ping events every ~15s). Without streaming,
+        # large RFQs hit the ingress idle-timeout and return 502 even though the
+        # upstream call eventually succeeds.
+        "stream": True,
         # Prompt caching: the big knowledge prompt is cached (ephemeral 5m TTL); billed once
         # then re-used across parses at ~10x discount. Mirrors legacy line 838.
         "system": [{
@@ -192,11 +197,51 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
         }],
         "messages": [{"role": "user", "content": full_content}],
     }
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        resp = await client.post(ANTHROPIC_URL, headers=headers, json=body)
-        if resp.status_code >= 400:
-            raise HTTPException(resp.status_code, f"Anthropic API: {resp.text[:500]}")
-        data = resp.json()
+    # Reassemble streamed Anthropic events into a single (text, stop_reason, usage)
+    # tuple. Server-Sent Events stream: each event is a line "event: ..." then
+    # "data: {json}". We only care about content_block_delta (text deltas) and
+    # message_delta / message_stop (terminal events with usage + stop_reason).
+    import json as _json
+    text_chunks: List[str] = []
+    stop_reason = None
+    usage: Dict[str, Any] = {}
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        async with client.stream("POST", ANTHROPIC_URL, headers=headers, json=body) as resp:
+            if resp.status_code >= 400:
+                body_text = (await resp.aread()).decode("utf-8", errors="ignore")
+                raise HTTPException(resp.status_code, f"Anthropic API: {body_text[:500]}")
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    ev = _json.loads(payload)
+                except _json.JSONDecodeError:
+                    continue
+                etype = ev.get("type")
+                if etype == "content_block_delta":
+                    d = ev.get("delta") or {}
+                    if d.get("type") == "text_delta":
+                        text_chunks.append(d.get("text", ""))
+                elif etype == "message_delta":
+                    d = ev.get("delta") or {}
+                    if "stop_reason" in d:
+                        stop_reason = d["stop_reason"]
+                    u = ev.get("usage") or {}
+                    if u:
+                        usage.update(u)
+                elif etype == "message_start":
+                    m = ev.get("message") or {}
+                    u = m.get("usage") or {}
+                    if u:
+                        usage.update(u)
+    data = {
+        "content": [{"type": "text", "text": "".join(text_chunks)}],
+        "stop_reason": stop_reason,
+        "usage": usage,
+    }
 
     # Detect truncation up front — happens when an RFQ has so many components
     # that the JSON response exceeds max_tokens. JSON.parse will fail downstream
