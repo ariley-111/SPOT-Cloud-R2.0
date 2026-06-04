@@ -210,6 +210,10 @@ function routeColor(rt) {
 }
 
 function BoardStatusBar({ s, r, setField }) {
+  // setManyFields is used for accept/force-substitution to atomically update
+  // multiple board-spec fields. Pull from context directly since the parent
+  // only forwards setField.
+  const { setManyFields } = useQuote();
   const [tilesOpen, setTilesOpen] = React.useState(false);
   // Liners allowed for the current board grade (legacy spot_r1_5.jsx L265).
   // 33# Kla-White → only 175/ECT 32. 56# Kla-White → only 250.
