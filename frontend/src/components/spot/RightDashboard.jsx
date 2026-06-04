@@ -33,7 +33,7 @@ export default function RightDashboard() {
       <FreightPanel s={s} />
       <RouteComparison s={s} primary={primary} />
       <EconomicsPanel s={s} result={primary} aggregate={aggregate} isMultiPart={isMultiPart} activeItemIdx={activeItemIdx} />
-      <CostBuildup result={primary} isMultiPart={isMultiPart} aggregate={aggregate} />
+      <CostBuildup result={primary} isMultiPart={isMultiPart} aggregate={aggregate} s={s} />
       <BoardPanel result={primary} s={s} />
     </div>
   );
@@ -292,7 +292,7 @@ function FreightPanel({ s }) {
               </span>
             </div>
 
-            <div style={{ marginTop: 6, display: "flex", gap: 4 }}>
+            <div style={{ marginTop: 6, display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
               <button onClick={updateFreight} disabled={busy} data-testid="btn-freight-update"
                 style={{
                   all: "unset", cursor: busy ? "wait" : "pointer", fontSize: 11, fontWeight: 700,
@@ -306,6 +306,18 @@ function FreightPanel({ s }) {
             background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
             border: "1px solid var(--spot-purple)",
           }}>Dashboard</button>
+              {/* Live shipment estimate from skid calc + density tables */}
+              {shipmentEst.lbs > 100 && (
+                <span data-testid="freight-shipment-est" style={{
+                  fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
+                  background: "var(--spot-bg3)", color: "var(--spot-text2)",
+                  border: "1px solid var(--spot-border)",
+                  fontFamily: "'JetBrains Mono', monospace", letterSpacing: ".02em",
+                }} title="Estimated shipment: pallets + weight. Used for UTS rate request.">
+                  📦 {shipmentEst.skids} skid{shipmentEst.skids !== 1 ? "s" : ""}
+                  {" · "}{shipmentEst.lbs.toLocaleString()} lbs est
+                </span>
+              )}
         </div>
         {err && <div style={{ marginTop: 6, fontSize: 11, color: "var(--spot-err)" }} data-testid="freight-err">{err}</div>}
               </>
@@ -703,7 +715,7 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
   );
 }
 
-function CostBuildup({ result, isMultiPart, aggregate }) {
+function CostBuildup({ result, isMultiPart, aggregate, s }) {
   const [view, setView] = useState("summary"); // summary | detail
   if (!result || result.error) return null;
   const r = result;
@@ -819,25 +831,92 @@ function CostBuildup({ result, isMultiPart, aggregate }) {
                 <Row label={<span style={{ color: "var(--spot-text3)" }}>{itemsLabel}</span>}
                   value={<span style={{ color: "var(--spot-text3)" }}>{fmtMoney(itemsSell)}</span>} />
               )}
-              {freight > 0 && (
-                <Row label={<span style={{ fontStyle: "italic" }}>Freight {!isMultiPart && (
-                  <span style={{ color: "var(--spot-text3)" }}>{fmtMoney(r.freightCost || 0)} + {(Number(r.freightMarkup || 0) * 100).toFixed(0)}% markup</span>
-                )}</span>}
-                  value={<span style={{ fontStyle: "italic" }}>{fmtMoney(freight)}</span>} />
-              )}
-              {die > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
-                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />}
-              {prepress > 0 && <Row label={<span style={{ fontStyle: "italic" }}>Prepress</span>}
-                value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />}
-              {/* Named misc items — show one line per user-typed name */}
+              {freight > 0 && (() => {
+                // Distinct label & breakdown for Local Delivery — make it
+                // unmistakable on the customer-facing cost buildup.
+                const isLocal = !isMultiPart && s?.quoteFOB === "LocalDelivery";
+                const zone = s?.localDeliveryZone || "";
+                const freightLabel = isLocal
+                  ? `Freight — Local Delivery${zone ? ` · ${zone}` : ""}`
+                  : "Freight";
+                const baseCost = isMultiPart ? null : Number(r.freightCost || 0);
+                const markupPct = isMultiPart ? null : Number(r.freightMarkup || 0);
+                const showBreakdown = !isMultiPart && baseCost > 0 && !isLocal;
+                return (
+                  <Row label={
+                    <span style={{ fontStyle: "italic" }}>
+                      {freightLabel}
+                      {showBreakdown && (
+                        <span style={{ color: "var(--spot-text3)" }}>
+                          {" "}{fmtMoney(baseCost)} + {(markupPct * 100).toFixed(0)}% markup
+                        </span>
+                      )}
+                      {isLocal && (
+                        <span style={{ color: "var(--spot-text3)" }}>{" "}flat rate, no markup</span>
+                      )}
+                    </span>
+                  } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(freight)}</span>} />
+                );
+              })()}
+              {die > 0 && (() => {
+                const baseCost = isMultiPart ? null : Number(r.cuttingDieCost || 0);
+                const markupPct = isMultiPart ? null : Number(r.dieMarkup || 0);
+                const showBreakdown = !isMultiPart && baseCost > 0 && markupPct > 0;
+                return (
+                  <Row label={
+                    <span style={{ fontStyle: "italic" }}>
+                      Die
+                      {showBreakdown && (
+                        <span style={{ color: "var(--spot-text3)" }}>
+                          {" "}{fmtMoney(baseCost)} + {(markupPct * 100).toFixed(0)}% markup
+                        </span>
+                      )}
+                    </span>
+                  } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />
+                );
+              })()}
+              {prepress > 0 && (() => {
+                const baseCost = isMultiPart ? null : Number(r.prepressCost || 0);
+                const markupPct = isMultiPart ? null : Number(r.prepressMarkup || 0);
+                const showBreakdown = !isMultiPart && baseCost > 0 && markupPct > 0;
+                return (
+                  <Row label={
+                    <span style={{ fontStyle: "italic" }}>
+                      Prepress
+                      {showBreakdown && (
+                        <span style={{ color: "var(--spot-text3)" }}>
+                          {" "}{fmtMoney(baseCost)} + {(markupPct * 100).toFixed(0)}% markup
+                        </span>
+                      )}
+                    </span>
+                  } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />
+                );
+              })()}
+              {/* Named misc items — show one line per user-typed name, with markup if applicable */}
               {(() => {
                 const miscItems = isMultiPart
                   ? (agg.miscLineItems || [])
                   : (r.miscLineItems || []);
-                return miscItems.filter((li) => (li.amt || 0) > 0).map((li, mi) => (
-                  <Row key={`mli-${mi}`} label={<span style={{ fontStyle: "italic" }}>{li.name || "Misc"}</span>}
-                    value={<span style={{ fontStyle: "italic" }}>{fmtMoney(li.amt)}</span>} />
-                ));
+                const miscMarkup = !isMultiPart ? Number(r.miscMarkup || 0) : 0;
+                const miscCharges = !isMultiPart ? (s?.miscCharges || []) : [];
+                return miscItems.filter((li) => (li.amt || 0) > 0).map((li, mi) => {
+                  // Find the user-entered base cost (pre-markup) for this named item
+                  const baseEntry = miscCharges.find((mc) => (mc.name || "") === (li.name || ""));
+                  const baseCost = baseEntry ? Number(baseEntry.cost || 0) : 0;
+                  const showBreakdown = !isMultiPart && baseCost > 0 && miscMarkup > 0;
+                  return (
+                    <Row key={`mli-${mi}`} label={
+                      <span style={{ fontStyle: "italic" }}>
+                        {li.name || "Misc"}
+                        {showBreakdown && (
+                          <span style={{ color: "var(--spot-text3)" }}>
+                            {" "}{fmtMoney(baseCost)} + {(miscMarkup * 100).toFixed(0)}% markup
+                          </span>
+                        )}
+                      </span>
+                    } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(li.amt)}</span>} />
+                  );
+                });
               })()}
               <RowTotal label={footerLabel} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
             </>

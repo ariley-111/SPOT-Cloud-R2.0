@@ -124,6 +124,49 @@ async def _load_customer_registry(limit: int = 5000) -> List[Dict[str, str]]:
     return await cursor.to_list(length=limit)
 
 
+def _extract_xlsx_text(content: bytes, fname: str) -> str:
+    """Dump every cell from every sheet as tab-separated rows so Claude can read RFQ
+    spreadsheets (qty tables, BOMs, customer-supplied specs).
+    """
+    try:
+        import io
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+        out: List[str] = []
+        for sname in wb.sheetnames:
+            ws = wb[sname]
+            out.append(f"---- SHEET: {sname} ----")
+            for row in ws.iter_rows(values_only=True):
+                vals = ["" if v is None else str(v) for v in row]
+                if any(v.strip() for v in vals):
+                    out.append("\t".join(vals))
+            out.append("")
+        return "\n".join(out)
+    except Exception as e:
+        return f"<unable to read .xlsx: {e}>"
+
+
+def _extract_docx_text(content: bytes, fname: str) -> str:
+    """Pull paragraphs + table cells from a .docx so Claude can read RFQ Word documents."""
+    try:
+        import io
+        from docx import Document
+        doc = Document(io.BytesIO(content))
+        out: List[str] = []
+        for p in doc.paragraphs:
+            if p.text.strip():
+                out.append(p.text)
+        for ti, t in enumerate(doc.tables):
+            out.append(f"---- TABLE {ti+1} ----")
+            for row in t.rows:
+                cells = [c.text.strip() for c in row.cells]
+                if any(cells):
+                    out.append(" | ".join(cells))
+        return "\n".join(out)
+    except Exception as e:
+        return f"<unable to read .docx: {e}>"
+
+
 def _estimate_input_tokens(system_text: str, content_parts: List[Dict[str, Any]]) -> int:
     """D-141 conservative pre-flight estimator. Per legacy:
        - PDF / image bytes count at bytes/250 (D-144 calibrated mid-point).
@@ -413,6 +456,32 @@ async def parse_rfq(
                 "source": {"type": "base64", "media_type": media_type, "data": b64},
             })
             file_summary.append({"name": fname, "type": "image", "size": size})
+        elif (fname or "").lower().endswith((".xlsx", ".xls")):
+            # Spreadsheets — extract per-sheet cell values as plain text. Excel is
+            # how some customers send RFQ qty/spec tables.
+            text = _extract_xlsx_text(content, fname)
+            content_parts.append({"type": "text", "text": f"SPREADSHEET ({fname}):\n\n{text[:80000]}"})
+            file_summary.append({"name": fname, "type": "xlsx", "size": size})
+        elif (fname or "").lower().endswith((".docx",)):
+            text = _extract_docx_text(content, fname)
+            content_parts.append({"type": "text", "text": f"WORD DOC ({fname}):\n\n{text[:80000]}"})
+            file_summary.append({"name": fname, "type": "docx", "size": size})
+        elif (fname or "").lower().endswith((".doc", ".rtf")):
+            # Legacy binary Word/RTF — pass as best-effort decode. Most modern
+            # customers send .docx; if .doc is critical, recommend conversion.
+            try:
+                text = content.decode("utf-8", errors="replace")
+            except Exception:
+                text = "<unable to decode .doc — recommend re-sending as .docx or PDF>"
+            content_parts.append({"type": "text", "text": f"DOC ({fname}):\n\n{text[:50000]}"})
+            file_summary.append({"name": fname, "type": "doc", "size": size})
+        elif (fname or "").lower().endswith((".csv", ".tsv", ".txt")):
+            try:
+                text = content.decode("utf-8", errors="replace")
+            except Exception:
+                text = "<unable to decode>"
+            content_parts.append({"type": "text", "text": f"DATA ({fname}):\n\n{text[:80000]}"})
+            file_summary.append({"name": fname, "type": "csv", "size": size})
         else:
             try:
                 text = content.decode("utf-8", errors="replace")

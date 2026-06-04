@@ -84,14 +84,41 @@ export default function ProductionSpecsSec({ result }) {
           </div>
         </F>
         <F l="Difficulty" inline>
-          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
             {DIFFICULTY.map((d) => {
               const lbl = d === "Standard" ? "Std" : d;
               return <Tile key={d} label={lbl} active={s.cadDifficulty === d}
                 data-testid={`tile-difficulty-${lbl}`}
                 onClick={() => setField("cadDifficulty", d)} small tint="#22c55e" />;
             })}
-            {/* Auto-classifier indicator — fires when totalRuleInches > 0 */}
+            <span style={{ width: 1, height: 18, background: "var(--spot-border)", margin: "0 4px" }} />
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--spot-text3)",
+              textTransform: "uppercase", letterSpacing: ".06em" }}>RULE IN</span>
+            <input type="number" step="0.1" min="0"
+              value={s.totalRuleInches || ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                setField("totalRuleInches", v);
+                const ri = parseFloat(v || 0);
+                const uw = parseFloat(s.oneUpW || 0);
+                const ul = parseFloat(s.oneUpL || 0);
+                const perim = 2 * (uw + ul);
+                if (ri > 0 && perim > 0) {
+                  const recommend = (ri / perim) > 3 ? "Complex" : "Standard";
+                  if (s.cadDifficulty !== recommend && s.cadDifficulty !== "Simple") {
+                    setField("cadDifficulty", recommend);
+                  }
+                }
+              }}
+              placeholder="0"
+              data-testid="input-rule-inches"
+              style={{
+                width: 56, padding: "2px 5px", fontSize: 11, textAlign: "center",
+                background: "var(--spot-bg2)", color: "var(--spot-text)",
+                border: "1px solid var(--spot-border)", borderRadius: 3,
+                fontFamily: "'JetBrains Mono', monospace",
+              }} />
+            {/* Auto-classifier indicator */}
             {(() => {
               const ri = parseFloat(s.totalRuleInches || 0);
               const uw = parseFloat(s.oneUpW || 0);
@@ -102,40 +129,18 @@ export default function ProductionSpecsSec({ result }) {
               const recommend = ratio > 3 ? "Complex" : "Standard";
               const matches = s.cadDifficulty === recommend;
               return (
-                <span data-testid="difficulty-rule-hint" title={`${ri.toFixed(1)}″ rule / ${perim.toFixed(1)}″ perim = ${ratio.toFixed(2)}× — iQuote rule suggests ${recommend}`}
-                  style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 2,
+                <span data-testid="difficulty-rule-hint"
+                  title={`${ri.toFixed(1)}″ rule ÷ ${perim.toFixed(1)}″ perim = ${ratio.toFixed(2)}× — iQuote rule suggests ${recommend}`}
+                  style={{
+                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 2,
                     color: matches ? "var(--spot-green)" : "#f59e0b",
                     background: matches ? "var(--spot-green-soft, #22c55e22)" : "#f59e0b22",
-                    border: `1px solid ${matches ? "var(--spot-green)" : "#f59e0b"}` }}>
-                  {ratio.toFixed(1)}× → {recommend}{matches ? "" : " ⚠"}
+                    border: `1px solid ${matches ? "var(--spot-green)" : "#f59e0b"}`,
+                  }}>
+                  {ratio.toFixed(1)}×
                 </span>
               );
             })()}
-          </div>
-        </F>
-        <F l="Rule In/Pc" inline>
-          {/* Always-visible rule-inches input. Parser auto-fills from CAD title block. */}
-          <Num value={s.totalRuleInches} onChange={(v) => {
-            setField("totalRuleInches", v);
-            // Auto-set difficulty from the iQuote rule (parity with estimator workflow):
-            // ratio = rule_in / (2*(W+L)). > 3 → Complex; else → Standard.
-            // Estimator can still override manually — last click wins.
-            const ri = parseFloat(v || 0);
-            const uw = parseFloat(s.oneUpW || 0);
-            const ul = parseFloat(s.oneUpL || 0);
-            const perim = 2 * (uw + ul);
-            if (ri > 0 && perim > 0) {
-              const recommend = (ri / perim) > 3 ? "Complex" : "Standard";
-              if (s.cadDifficulty !== recommend && s.cadDifficulty !== "Simple") {
-                setField("cadDifficulty", recommend);
-              }
-            }
-          }} step="0.1" min="0" style={{ width: 70, textAlign: "center" }} data-testid="input-rule-inches" />
-        </F>
-        <F l="CAD Price" inline>
-          <div style={{ display: "flex", gap: 2 }}>
-            <Tile label="Diff" active={s.cadPricingMethod === "By Difficulty"}    onClick={() => setField("cadPricingMethod", "By Difficulty")}    small tint="#22c55e" data-testid="tile-cadprice-diff" />
-            <Tile label="Rule" active={s.cadPricingMethod === "By Inches of Rule"} onClick={() => setField("cadPricingMethod", "By Inches of Rule")} small tint="#22c55e" data-testid="tile-cadprice-rule" />
           </div>
         </F>
         <F l="Perf %" inline>

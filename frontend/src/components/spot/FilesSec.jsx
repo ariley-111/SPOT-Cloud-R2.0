@@ -31,7 +31,7 @@ export default function FilesSec() {
     setReviewOpen(false);
   }, [active?.id]);
 
-  const isRfqLike = (name) => /\.(pdf|docx?|eml|msg|txt|jpg|jpeg|png|webp|heic)$/i.test(name || "");
+  const isRfqLike = (name) => /\.(pdf|docx?|xlsx?|csv|tsv|rtf|eml|msg|txt|jpg|jpeg|png|webp|heic)$/i.test(name || "");
   const isEmailFile = (name) => /\.(eml|msg)$/i.test(name || "");
   const ingestFiles = (list) => {
     const arr = Array.from(list || []).map((f) => ({
