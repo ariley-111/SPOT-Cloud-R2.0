@@ -98,17 +98,19 @@ function FreightPanel({ s }) {
   const shipmentEst = computeShipmentWeight();
   const estimatedWeight = shipmentEst.lbs;
 
-  // Per-component shipment weight calculator (for MP+Per Item freight allocation).
-  // Each component uses its OWN qty (the first non-zero entry across its slots),
-  // not the job-level selSlot — critical for MP-Individual where each component
-  // lives at a different slot. Returns array indexed by component idx with
-  // { lbs, skids, sqFt }. Legacy parity: line 4276 fetchFreightRate per item.
+  // Per-component shipment-weight breakdown for proportional Per-Item freight
+  // allocation. CRITICAL legacy parity: we consolidate ALL pieces into ONE
+  // pallet load (legacy treats the job as a single LTL shipment), compute skid
+  // count ONCE for the consolidated load, then attribute each component's
+  // board weight + a pro-rata share of the consolidated pallet weight. This
+  // matches legacy weight calc that gave 2 skids @ 864 lbs (vs our previous
+  // per-component summing that mistakenly produced 4 skids @ 691 lbs).
   const computePerItemShipmentWeight = () => {
     const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
       ? s.bomItems : [{ state: s }];
-    return items.map((it) => {
+    // Pass 1: per-component board weight and footprint
+    const perComp = items.map((it) => {
       const st = it.state || it;
-      // Find this component's own qty — first non-zero entry across its slots.
       let qty = 0;
       const qtys = st.qtys || [];
       for (let i = 0; i < qtys.length; i++) {
@@ -117,20 +119,43 @@ function FreightPanel({ s }) {
       }
       const uw = parseFloat(st.oneUpW || 0);
       const ul = parseFloat(st.oneUpL || 0);
-      if (qty <= 0 || uw <= 0 || ul <= 0) return { lbs: 0, skids: 0, sqFt: 0 };
+      if (qty <= 0 || uw <= 0 || ul <= 0) return { lbs: 0, skids: 0, sqFt: 0, boardLbs: 0 };
       const sqFt = (uw * ul * qty * 1.25) / 144;
-      const longSide = Math.max(uw, ul), shortSide = Math.min(uw, ul);
+      const boardLbs = sqFt * lbsPerSqFt;
+      return { boardLbs, sqFt: Math.round(sqFt), qty, uw, ul, flute: st.flute };
+    });
+    // Pass 2: ONE consolidated skid count using the dominant component's footprint
+    // (the one with the largest area × qty contribution). Approximates legacy's
+    // "biggest piece sets the pallet pattern" behavior.
+    let dominant = perComp[0];
+    let maxBoard = 0;
+    perComp.forEach((p) => { if ((p.boardLbs || 0) > maxBoard) { maxBoard = p.boardLbs; dominant = p; } });
+    const totalQty = perComp.reduce((a, p) => a + (p.qty || 0), 0);
+    let consolidatedSkids = 0;
+    if (dominant && dominant.uw && dominant.ul && totalQty > 0) {
+      const longSide = Math.max(dominant.uw, dominant.ul);
+      const shortSide = Math.min(dominant.uw, dominant.ul);
       const piecesPerLayer = Math.max(
         Math.floor((48 - 0.5) / longSide) * Math.floor((40 - 0.5) / shortSide),
         Math.floor((48 - 0.5) / shortSide) * Math.floor((40 - 0.5) / longSide),
         1,
       );
-      const caliperIn = ({ B: 0.125, C: 0.1875, E: 0.0625, F: 0.05, "B/C": 0.236 })[st.flute || "C"] || 0.1875;
+      const caliperIn = ({ B: 0.125, C: 0.1875, E: 0.0625, F: 0.05, "B/C": 0.236 })[dominant.flute || "C"] || 0.1875;
       const stackPieces = Math.max(1, Math.floor(44 / caliperIn));
-      const skids = Math.max(1, Math.ceil(qty / (piecesPerLayer * stackPieces)));
-      const boardLbs = sqFt * lbsPerSqFt;
-      const palletLbs = skids * 75;
-      return { lbs: Math.max(100, Math.round(boardLbs + palletLbs)), skids, sqFt: Math.round(sqFt) };
+      consolidatedSkids = Math.max(1, Math.ceil(totalQty / (piecesPerLayer * stackPieces)));
+    }
+    const totalBoardLbs = perComp.reduce((a, p) => a + (p.boardLbs || 0), 0);
+    const totalPalletLbs = consolidatedSkids * 75;
+    const totalShipLbs = Math.max(100, Math.round(totalBoardLbs + totalPalletLbs));
+    // Pass 3: per-component lbs = board lbs + pro-rata pallet share
+    return perComp.map((p) => {
+      if (!p.boardLbs) return { lbs: 0, skids: 0, sqFt: 0 };
+      const palletShare = totalBoardLbs > 0 ? totalPalletLbs * (p.boardLbs / totalBoardLbs) : 0;
+      return {
+        lbs: Math.max(0, Math.round(p.boardLbs + palletShare)),
+        skids: consolidatedSkids,  // shared across the job
+        sqFt: p.sqFt,
+      };
     });
   };
 

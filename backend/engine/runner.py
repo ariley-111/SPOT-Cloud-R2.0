@@ -169,13 +169,14 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             return {"error": "No sheet found", "uw": uw, "ul": ul, "qty": qty,
                     "boardGrade": board_spec["boardGrade"], "flute": board_spec["flute"]}
 
-    # STEP 3: Auto-route — skip route comparison if user overrode the sheet (legacy L3578)
+    # STEP 3: Auto-route. Legacy parity (spot_r1_5.jsx L3578): route comparison
+    # ALWAYS runs even when the user overrode the sheet — the override only pins
+    # the CAD-side sheet; Crest and Bobst still evaluate with their own sheet
+    # picks. The previous override→CAD short-circuit broke parity by forcing CAD
+    # whenever an override was active, even when Crest/Bobst were cheaper.
     eff_w_for_route = ul if corr_flipped else uw
     eff_l_for_route = uw if corr_flipped else ul
-    if override_active:
-        auto_r = {"route": "CAD", "sheet": best, "warning": None}
-    else:
-        auto_r = auto_route(best.get("cadHrs", 0), best, eff_w_for_route, eff_l_for_route, board_spec, qty, asmp)
+    auto_r = auto_route(best.get("cadHrs", 0), best, eff_w_for_route, eff_l_for_route, board_spec, qty, asmp)
 
     route_override = json.get("routeOverride") or None
     if route_override and route_override != "Auto":
