@@ -104,7 +104,8 @@ async def entra_login(request: Request, return_to: Optional[str] = None):
     # We persist the entire dict (signed) in a short-lived cookie so /callback
     # can verify the state and complete PKCE.
     flow = app.initiate_auth_code_flow(
-        scopes=["openid", "profile", "email"],
+        scopes=[],  # MSAL auto-adds openid+profile+offline_access; passing any of
+                    # those explicitly raises "reserved scope" ValueError.
         redirect_uri=_redirect_uri(s),
     )
     if "auth_uri" not in flow:
