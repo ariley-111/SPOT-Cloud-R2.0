@@ -129,8 +129,35 @@ function FreightPanel({ s }) {
         <div style={rowSpaced}>
           <span style={lbl}>FOB</span>
           <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            <Tile label="Will-Call" active={s.quoteFOB === "Origin"}      onClick={() => setManyFields({ quoteFOB: "Origin", freightMarkup: s.freightMarkup === "0" ? "0.15" : (s.freightMarkup || "0.15") })} small data-testid="tile-fob-willcall" />
-            <Tile label="Ship"      active={s.quoteFOB === "Destination"} onClick={() => setManyFields({ quoteFOB: "Destination", freightMarkup: (!s.freightMarkup || s.freightMarkup === "0") ? "0.15" : s.freightMarkup })} small tint="#3b82f6" data-testid="tile-fob-ship" />
+            <Tile label="Will-Call" active={s.quoteFOB === "Origin"}
+              onClick={() => {
+                // Clear any Local Delivery residue (zone, job-level flat freight)
+                const patch = { quoteFOB: "Origin" };
+                if (s.quoteFOB === "LocalDelivery") {
+                  patch.localDeliveryZone = null;
+                  patch.jobFreightCost = "";
+                  patch.freightScope = "None";
+                  patch.freightCost = "0";
+                  patch.freightTreatment = "None";
+                  patch.freightMarkup = "0.15";  // restore default
+                }
+                setManyFields(patch);
+              }}
+              small data-testid="tile-fob-willcall" />
+            <Tile label="Ship"      active={s.quoteFOB === "Destination"}
+              onClick={() => {
+                // Clear any Local Delivery residue + restore default markup
+                const patch = { quoteFOB: "Destination", freightMarkup: "0.15" };
+                if (s.quoteFOB === "LocalDelivery") {
+                  patch.localDeliveryZone = null;
+                  patch.jobFreightCost = "";
+                  patch.freightScope = "None";
+                  patch.freightCost = "0";
+                  patch.freightTreatment = "None";
+                }
+                setManyFields(patch);
+              }}
+              small tint="#3b82f6" data-testid="tile-fob-ship" />
             <Tile label="Local"     active={s.quoteFOB === "LocalDelivery"} onClick={() => setField("quoteFOB", "LocalDelivery")} small tint="#22c55e" data-testid="tile-fob-local" />
           </div>
         </div>
