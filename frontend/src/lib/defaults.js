@@ -97,6 +97,7 @@ export const DEFAULT_STATE = Object.freeze({
 
   dieTreatment: "None",                // None | Separate Line | Amortize
   cuttingDieCost: "0",
+  dieMarkup: "0.15",                   // Default 15% markup (legacy RATE_DEFAULTS)
   dieAmortMethod: "Markup",            // Markup | OrderMargin
 
   miscCharges: [],                     // [{id,name,cost,treatment}]

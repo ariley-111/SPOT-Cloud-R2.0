@@ -420,7 +420,10 @@ async def calculate_multi_part(
             st = (bi.get("state") or {})
             if st.get("dieTreatment") in ("Separate Line", "Amortize") and _safe_float(st.get("cuttingDieCost")) > 0:
                 die_base_total += _safe_float(st.get("cuttingDieCost"))
-                die_markup_amts.append(_safe_float(st.get("dieMarkup")))
+                # Fall back to engine default (0.15) when state.dieMarkup unset on
+                # legacy drafts created before defaults.dieMarkup was added.
+                mk = st.get("dieMarkup")
+                die_markup_amts.append(_safe_float(mk) if mk not in (None, "") else 0.15)
         die_markup_avg = (sum(die_markup_amts) / len(die_markup_amts)) if die_markup_amts else 0.0
         line_prepress = sum(_safe_float(pc.get("prepressLineCost")) for pc in per_comp
                             if _safe_float(pc.get("prepressLineCost")) > 0)
