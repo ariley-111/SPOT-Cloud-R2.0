@@ -1,6 +1,7 @@
 /* eslint-disable */
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import SpotCube from "../components/spot/SpotCube";
 
 export default function LoginPage() {
   const { login, loginWithEntra, authCfg } = useAuth();
@@ -40,11 +41,8 @@ export default function LoginPage() {
         width: 380, background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
         borderRadius: 8, padding: 28, boxShadow: "0 24px 48px rgba(0,0,0,0.4)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 6, background: "var(--spot-accent)",
-            display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 18,
-          }}>S</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
+          <SpotCube size={44} />
           <div>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>SPOT</h1>
             <div style={{ fontSize: 11, color: "var(--spot-text3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Cloud · R2.0</div>

@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
 import { createQuote } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
+import SpotCube from "./SpotCube";
 
 /** Matches legacy SPOT top bar: cube logo + SPOT + version + Est#/Initials/Customer
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
@@ -81,6 +82,7 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
       background: "var(--spot-bg2)", borderBottom: "1px solid var(--spot-line)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <SpotCube size={20} />
         <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-.03em",
           color: "var(--spot-text)" }} data-testid="logo-text">SPOT</span>
         <span className="sp-pill" style={{
