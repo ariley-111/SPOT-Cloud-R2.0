@@ -605,11 +605,15 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
         componentPricing.forEach((c) => {
           (c.rows || []).forEach((r) => {
             const si = r.slotIdx;
-            if (!perSlotAgg[si]) perSlotAgg[si] = { slotIdx: si, qty: r.qty, items: 0, freight: 0, die: 0, prep: 0 };
+            if (!perSlotAgg[si]) perSlotAgg[si] = { slotIdx: si, items: 0, freight: 0, die: 0, prep: 0, mix: [] };
             perSlotAgg[si].items   += Number(r.itemSell || 0);
             perSlotAgg[si].freight += Number(r.freightLine || 0);
             perSlotAgg[si].die     += Number(r.dieLineCost || 0);
             perSlotAgg[si].prep    += Number(r.prepressLineCost || 0);
+            // Track the qty + component for this slot so we can label the
+            // scenario honestly: each component may sit at a different qty
+            // within the same scenario index.
+            perSlotAgg[si].mix.push({ desc: c.desc, qty: r.qty, itemIndex: c.itemIndex });
           });
         });
         const perSlotList = Object.values(perSlotAgg).sort((a, b) => a.slotIdx - b.slotIdx);
@@ -637,7 +641,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
               <span>Job Totals</span>
               {anyMultiQty && (
                 <span style={{ fontSize: 9, color: "var(--spot-text3)", fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>
-                  Costs vary by qty — breakdown shown by quantity tier
+                  Each row below is one real shipment scenario — single-qty components repeat their qty, multi-qty components advance
                 </span>
               )}
             </div>
@@ -645,29 +649,47 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
             {anyMultiQty ? (
               <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }} data-testid="qt-job-totals-by-qty">
                 <thead><tr style={{ borderBottom: "1px solid var(--spot-line)" }}>
-                  <th style={{ ...thMini, textAlign: "left" }}>Qty Tier</th>
+                  <th style={{ ...thMini, textAlign: "left" }}>Scenario</th>
+                  <th style={{ ...thMini, textAlign: "right" }}>Total Pcs</th>
                   <th style={{ ...thMini, textAlign: "right" }}>Items</th>
                   {showPerItemFreight       && <th style={{ ...thMini, textAlign: "right" }}>Per-Item Freight</th>}
                   {baseDie > 0              && <th style={{ ...thMini, textAlign: "right" }}>Die</th>}
                   {basePrepress > 0         && <th style={{ ...thMini, textAlign: "right" }}>Prepress</th>}
                   {showPerJobFreightLine    && <th style={{ ...thMini, textAlign: "right" }}>{isLocalDelivery ? "Local Delivery" : "Per-Job Freight"}</th>}
-                  <th style={{ ...thMini, textAlign: "right", color: "var(--spot-accent)" }}>Total @ Tier</th>
+                  <th style={{ ...thMini, textAlign: "right", color: "var(--spot-accent)" }}>Job Total</th>
+                  <th style={{ ...thMini, textAlign: "right", color: "var(--spot-text3)" }}>Price/PC</th>
                 </tr></thead>
                 <tbody>
                   {perJobBySlot.map((p) => {
                     const tierTotal = p.items + (showPerItemFreight ? p.freight : 0) + p.die + p.prep
                       + (showPerJobFreightLine ? p.perJobFreightAtSlot : 0);
+                    const totalPcs = (p.mix || []).reduce((a, m) => a + (Number(m.qty) || 0), 0);
+                    const pricePerPc = totalPcs > 0 ? tierTotal / totalPcs : 0;
                     return (
-                      <tr key={p.slotIdx} style={{ borderBottom: "1px solid var(--spot-line)" }}
+                      <tr key={p.slotIdx} style={{ borderBottom: "1px solid var(--spot-line)", verticalAlign: "top" }}
                         data-testid={`qt-job-totals-tier-${p.slotIdx}`}>
-                        <td style={{ padding: "4px 6px", fontWeight: 600 }}>@ {fmtInt(p.qty)}</td>
-                        <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.items)}</td>
-                        {showPerItemFreight       && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.freight)}</td>}
-                        {baseDie > 0              && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.die)}</td>}
-                        {basePrepress > 0         && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.prep)}</td>}
-                        {showPerJobFreightLine    && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.perJobFreightAtSlot)}</td>}
-                        <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 700,
-                          color: "var(--spot-accent)" }}>{fmtMoney(tierTotal)}</td>
+                        <td style={{ padding: "6px 6px" }}>
+                          <div style={{ fontWeight: 700, fontSize: 12 }}>Scenario {p.slotIdx + 1}</div>
+                          <div style={{ fontSize: 10, color: "var(--spot-text3)", marginTop: 2, lineHeight: 1.4 }}>
+                            {(p.mix || []).map((m, i) => (
+                              <span key={i}>
+                                {(m.desc || `Item ${m.itemIndex + 1}`).slice(0, 18)} @ {fmtInt(m.qty)}
+                                {i < p.mix.length - 1 ? "  ·  " : ""}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ padding: "6px 6px", textAlign: "right", color: "var(--spot-text2)" }}>{fmtInt(totalPcs)}</td>
+                        <td style={{ padding: "6px 6px", textAlign: "right" }}>{fmtMoney(p.items)}</td>
+                        {showPerItemFreight       && <td style={{ padding: "6px 6px", textAlign: "right" }}>{fmtMoney(p.freight)}</td>}
+                        {baseDie > 0              && <td style={{ padding: "6px 6px", textAlign: "right" }}>{fmtMoney(p.die)}</td>}
+                        {basePrepress > 0         && <td style={{ padding: "6px 6px", textAlign: "right" }}>{fmtMoney(p.prep)}</td>}
+                        {showPerJobFreightLine    && <td style={{ padding: "6px 6px", textAlign: "right" }}>{fmtMoney(p.perJobFreightAtSlot)}</td>}
+                        <td style={{ padding: "6px 6px", textAlign: "right", fontWeight: 700,
+                          color: "var(--spot-accent)", fontSize: 13 }}>{fmtMoney(tierTotal)}</td>
+                        <td style={{ padding: "6px 6px", textAlign: "right", color: "var(--spot-text3)" }}>
+                          {totalPcs > 0 ? `$${pricePerPc.toFixed(4)}` : "—"}
+                        </td>
                       </tr>
                     );
                   })}
@@ -734,21 +756,29 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
               </table>
             )}
 
-            <div style={{
-              borderTop: "1px solid var(--spot-line)", marginTop: 6, paddingTop: 6,
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-accent)" }}>Quote Grand Total</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--spot-accent)" }}
-                data-testid="qt-grand-total">{fmtMoney(
-                  // Grand total respects FOB: exclude per-item freight in non-Ship modes
-                  baseSell
-                  + (showPerItemFreight ? baseFreight : 0)
-                  + baseDie + basePrepress
-                  + (showPerJobFreightLine ? perJobFreight : 0)
-                  + (perJobPrepress > 0 ? perJobPrepress : 0)
-                )}</span>
-            </div>
+            {!anyMultiQty && (
+              <div style={{
+                borderTop: "1px solid var(--spot-line)", marginTop: 6, paddingTop: 6,
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-accent)" }}>Quote Grand Total</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--spot-accent)" }}
+                  data-testid="qt-grand-total">{fmtMoney(
+                    // Grand total respects FOB: exclude per-item freight in non-Ship modes
+                    baseSell
+                    + (showPerItemFreight ? baseFreight : 0)
+                    + baseDie + basePrepress
+                    + (showPerJobFreightLine ? perJobFreight : 0)
+                    + (perJobPrepress > 0 ? perJobPrepress : 0)
+                  )}</span>
+              </div>
+            )}
+            {anyMultiQty && (
+              <div style={{ borderTop: "1px solid var(--spot-line)", marginTop: 6, paddingTop: 6,
+                            fontSize: 10, color: "var(--spot-text3)", fontStyle: "italic", textAlign: "center" }}>
+                Each scenario row above is its own real shipment — there's no single "grand total" when components ship at different qtys.
+              </div>
+            )}
           </div>
         );
       })()}
