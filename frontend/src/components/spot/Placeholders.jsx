@@ -186,11 +186,32 @@ function JobLevelAllocPanel({ s, setField }) {
         gap: "4px 10px", alignItems: "center", fontSize: 11 }}>
 
         <span style={{ color: "var(--spot-text3)" }}>Freight scope</span>
-        <div style={{ display: "flex", gap: 2 }}>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           <Tile label="Per Item" active={fScope === "None"} onClick={() => setField("freightScope", "None")}
             small tint="#94a3b8" data-testid="tile-freight-scope-item" />
           <Tile label="Per Job"  active={fScope === "Per Job"} onClick={() => setField("freightScope", "Per Job")}
             small tint="#06b6d4" data-testid="tile-freight-scope-job" />
+          {/* Treatment (Line / Amort) — legacy parity, target depends on scope */}
+          <span style={{ width: 6 }} />
+          {fScope === "Per Job" ? (
+            <>
+              <Tile label="Line" active={(s.jobFreightTreatment || "Separate Line") === "Separate Line"}
+                onClick={() => setField("jobFreightTreatment", "Separate Line")}
+                small tint="#22c55e" data-testid="tile-jobfreight-line" />
+              <Tile label="Amort" active={s.jobFreightTreatment === "Amortize"}
+                onClick={() => setField("jobFreightTreatment", "Amortize")}
+                small data-testid="tile-jobfreight-amort" />
+            </>
+          ) : (
+            <>
+              <Tile label="Line" active={(s.freightTreatment || "Separate Line") === "Separate Line"}
+                onClick={() => setField("freightTreatment", "Separate Line")}
+                small tint="#22c55e" data-testid="tile-itemfreight-line" />
+              <Tile label="Amort" active={s.freightTreatment === "Amortize"}
+                onClick={() => setField("freightTreatment", "Amortize")}
+                small data-testid="tile-itemfreight-amort" />
+            </>
+          )}
         </div>
         <span style={{ color: "var(--spot-text3)" }}>Job freight $</span>
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -213,11 +234,31 @@ function JobLevelAllocPanel({ s, setField }) {
         </div>
 
         <span style={{ color: "var(--spot-text3)" }}>Prepress scope</span>
-        <div style={{ display: "flex", gap: 2 }}>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           <Tile label="Per Item" active={pScope === "None"} onClick={() => setField("prepressScope", "None")}
             small tint="#94a3b8" data-testid="tile-prepress-scope-item" />
           <Tile label="Per Job"  active={pScope === "Per Job"} onClick={() => setField("prepressScope", "Per Job")}
             small tint="#06b6d4" data-testid="tile-prepress-scope-job" />
+          <span style={{ width: 6 }} />
+          {pScope === "Per Job" ? (
+            <>
+              <Tile label="Line" active={(s.jobPrepressTreatment || "Separate Line") === "Separate Line"}
+                onClick={() => setField("jobPrepressTreatment", "Separate Line")}
+                small tint="#22c55e" data-testid="tile-jobprepress-line" />
+              <Tile label="Amort" active={s.jobPrepressTreatment === "Amortize"}
+                onClick={() => setField("jobPrepressTreatment", "Amortize")}
+                small data-testid="tile-jobprepress-amort" />
+            </>
+          ) : (
+            <>
+              <Tile label="Line" active={(s.prepressTreatment || "Separate Line") === "Separate Line"}
+                onClick={() => setField("prepressTreatment", "Separate Line")}
+                small tint="#22c55e" data-testid="tile-itemprepress-line" />
+              <Tile label="Amort" active={s.prepressTreatment === "Amortize"}
+                onClick={() => setField("prepressTreatment", "Amortize")}
+                small data-testid="tile-itemprepress-amort" />
+            </>
+          )}
         </div>
         <span style={{ color: "var(--spot-text3)" }}>Job prepress $</span>
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>

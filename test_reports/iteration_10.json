@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration_10 retest of the JobLevelAllocPanel Treatment-tile fix in /app/frontend/src/components/spot/Placeholders.jsx (lines 188-261). VERIFIED: All 8 requested testids are now present in the JLAP — tile-itemfreight-line/amort + tile-jobfreight-line/amort (scope-gated by s.freightScope), and tile-itemprepress-line/amort + tile-jobprepress-line/amort (scope-gated by s.prepressScope). Counts and visibility transition correctly when toggling tile-freight-scope-item ↔ tile-freight-scope-job and tile-prepress-scope-item ↔ tile-prepress-scope-job. Treatment tiles correctly toggle freightTreatment / jobFreightTreatment / prepressTreatment / jobPrepressTreatment (verified via style-attribute change on active tile). All iteration_9 regressions still pass: nav-chip activeItemIdx, qty-row data-row-selected, btn-freight-update is now visible (count=1), and 'Per-Job Freight · via PITT OHIO EXPRESS' label intact. Live verification done on two MP quotes: SA-260604-165816 (MP-Matched Set, freight=Per Job initial) and SA-260604-155037 (MP-Individual). Per the prior test agent's note, backend regression need not be re-run as no backend code touched — flagging that the agent did not execute pytest this iteration.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_10.json"
+  ],
+  "action_items": [
+    "INFO/CLEANUP (non-blocking): The 8 Treatment-tile testids are now DUPLICATED in the live DOM — they exist BOTH in JobLevelAllocPanel (Placeholders.jsx) AND in RightDashboard.jsx (lines 365-385 from iteration_9). Functionally both write to the same store fields, so user clicks work either way. But this means a Playwright strict-mode locator (without .first / visible=true filter) will fail with 'resolved to multiple matches'. Recommend removing the duplicate set from RightDashboard.jsx now that JLAP is the canonical MP panel — or, alternatively, give the two panels distinct testid suffixes (e.g., right-tile-jobfreight-line vs jlap-tile-jobfreight-line). Iteration_9 hinted at the same consolidation.",
+    "INFO: Backend smoke test was NOT re-run this iteration since no backend files changed. Previous component_pricing 16/16 PASS from iteration_9 (test_report /app/backend/tests/test_component_pricing.py + /app/test_reports/pytest/component_pricing_it9.xml) stands as the regression baseline."
+  ],
+  "critical_code_review_comments": [
+    "GOOD: Placeholders.jsx::JobLevelAllocPanel lines 196-214 — freight scope-gated Treatment-tile ternary is correctly implemented. fScope === 'Per Job' branch writes jobFreightTreatment; else branch writes freightTreatment. Defaults handled via `|| 'Separate Line'`. Active-state highlighting via Tile's `active` prop is wired off the matching state field, so the UI accurately reflects current selection.",
+    "GOOD: Placeholders.jsx::JobLevelAllocPanel lines 243-261 — same pattern for prepress (jobPrepressTreatment / prepressTreatment). Symmetric with freight block. Verified styles change on toggle.",
+    "GOOD: testids match the user-requested names exactly — tile-itemfreight-line, tile-itemfreight-amort, tile-jobfreight-line, tile-jobfreight-amort, tile-itemprepress-line, tile-itemprepress-amort, tile-jobprepress-line, tile-jobprepress-amort.",
+    "HIGH (carry-over from iteration_9): Testid DUPLICATION between RightDashboard.jsx MP block and JobLevelAllocPanel — see action items. Not breaking functionality but bad for automated testing hygiene and could surprise the next testing agent.",
+    "MINOR: JobLevelAllocPanel does not auto-scroll into view when the section it lives inside is collapsed by Collapse-All. On SA-155037 in this run, the section header 'Job-Level Cost Allocation' was offscreen (visible=0) until I opened the section. Not a bug — section collapse is by design — but worth noting that any future Playwright assertions on the JLAP testids should call scrollIntoView and ensure the parent <Sec> is expanded."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not retested this iteration (no backend changes); previous baseline 100% (16/16)",
+    "frontend": "100% — all 4 newly-fixed Treatment-tile checks PASS + all 5 iteration_9 refinements remain green"
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working",
+  "seed_data_creation": "None — used auto-loaded sample quotes SA-260604-155037 (MP-Individual) and SA-260604-165816 (MP-Matched Set). Both have 3 BOM components and exercised JLAP rendering.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "JLAP Treatment-tile fix is verified. If the team chooses to consolidate the duplicate testids (between Placeholders.jsx::JobLevelAllocPanel and RightDashboard.jsx MP block), re-run this iteration's Playwright assertions and ensure they still pass on at least one MP-Individual quote and one MP-Matched Set quote. Otherwise no retest required for this feature. Backend test_component_pricing.py is the regression suite — keep green.",
+  "rca of the issue": "Iteration_9 RCA: the rendered FREIGHT/PREPRESS Type+Treatment row inside the BOM section was JobLevelAllocPanel (Placeholders.jsx), but the Treatment tiles only existed in RightDashboard.jsx. Iteration_10 fix: added the same scope-gated Treatment-tile ternary to JobLevelAllocPanel (lines 194-214 freight, lines 242-261 prepress). Repro-of-fix: log in as admin → open any MP quote → expand BOM section → JLAP shows 'Job-Level Cost Allocation' panel with 'Freight scope: Per Item | Per Job | <space> Line | Amort' and the same for prepress. Clicking Per Item/Per Job correctly swaps the Treatment-tile pair between item-* and job-* testids and the tiles correctly mutate the right state fields. No further action required for this feature beyond optional testid-deduplication cleanup against RightDashboard.jsx."
+}
