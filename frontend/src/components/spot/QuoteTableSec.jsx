@@ -141,6 +141,8 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           localDeliveryZone={s.localDeliveryZone || ""}
           freightCarrier={s.freightCarrier || ""}
           freightScope={s.freightScope || "None"}
+          freightMarkup={s.freightMarkup ?? "0.15"}
+          jobFreightCostRaw={s.jobFreightCost || ""}
           topQtys={s.qtys || []}
           jobFreightBySlot={s.jobFreightBySlot || {}}
           setField={setField}
@@ -335,7 +337,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────
 // Each component is its own collapsible section with its own qty rows.
 // Scales cleanly to 25+ components via expand/collapse controls.
-function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, freightScope, topQtys, jobFreightBySlot, setField }) {
+function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, freightScope, freightMarkup, jobFreightCostRaw, topQtys, jobFreightBySlot, setField }) {
   // Default: first 3 components expanded, plus the BOM-selected one
   const [expanded, setExpanded] = useState(() => {
     const init = {};
@@ -389,6 +391,16 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
     setExpanded(none);
   };
   const toggle = (k) => setExpanded((p) => ({ ...p, [k]: !p[k] }));
+  // Clicking a section header also makes that component the ACTIVE BOM item so
+  // the Freight section / RightDashboard updates to show its freight values
+  // (per user: "When I select a BOM item or select an item in the Quote table,
+  // the ITEM freight in the freight section SHOULD SHOW THE SELECTED ITEM'S").
+  const selectComp = (k, itemIndex) => {
+    setExpanded((p) => ({ ...p, [k]: true }));
+    if (typeof itemIndex === "number" && itemIndex !== activeItemIdx) {
+      setField("activeItemIdx", itemIndex);
+    }
+  };
 
   // Toggle a (component, slotIdx) row's exclusion from PDF
   const isRowExcluded = (itemId, slotIdx) => {
@@ -494,8 +506,9 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
               boxShadow: isBomSelected ? `0 0 0 2px ${tintFor(c.itemIndex)}33` : "none",
               transition: "box-shadow .15s, border-color .15s",
             }}>
-            {/* Section header — always visible */}
-            <div onClick={() => toggle(k)}
+            {/* Section header — always visible. Clicking expands AND syncs the
+                active BOM index so the Freight section shows this component. */}
+            <div onClick={() => selectComp(k, c.itemIndex)}
               style={{
                 cursor: "pointer", padding: "8px 12px",
                 display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
@@ -666,7 +679,15 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                   <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Items (base sell)</td>
                     <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseSell)}</td></tr>
                   {showPerItemFreight && (
-                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-peritem-freight-row">Per-Item Freight (sum)</td>
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-peritem-freight-row">
+                      Per-Item Freight (sum)
+                      {Number(freightMarkup) > 0 && (
+                        <span style={{ marginLeft: 6, fontSize: 10, color: "var(--spot-text3)" }}
+                          data-testid="qt-peritem-freight-mkhint">
+                          incl. {(Number(freightMarkup) * 100).toFixed(0)}% markup
+                        </span>
+                      )}
+                    </td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseFreight)}</td></tr>
                   )}
                   {baseDie > 0 && (
@@ -677,11 +698,28 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                     <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Prepress (sum)</td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(basePrepress)}</td></tr>
                   )}
-                  {showPerJobFreightLine && (
-                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-perjob-freight-label">
-                      {perJobFreightLabel}</td>
-                      <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td></tr>
-                  )}
+                  {showPerJobFreightLine && (() => {
+                    // For Ship+Per-Job: surface "{raw} + {mk}% markup" hint
+                    // alongside the allocated total (which already includes markup).
+                    // For Local Delivery: markup is 0, so just show the flat fee.
+                    const isLocalDel = quoteFOB === "LocalDelivery" || quoteFOB === "Local Delivery";
+                    const raw = Number(jobFreightCostRaw) || 0;
+                    const mk = isLocalDel ? 0 : (Number(freightMarkup) || 0);
+                    return (
+                      <tr>
+                        <td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-perjob-freight-label">
+                          {perJobFreightLabel}
+                          {mk > 0 && (
+                            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--spot-text3)" }}
+                              data-testid="qt-perjob-freight-mkhint">
+                              {fmtMoney(raw)} + {(mk * 100).toFixed(0)}% markup
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td>
+                      </tr>
+                    );
+                  })()}
                   {perJobPrepress > 0 && (
                     <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Job Prepress</td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobPrepress)}</td></tr>

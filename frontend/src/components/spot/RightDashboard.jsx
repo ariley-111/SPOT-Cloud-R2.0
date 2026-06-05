@@ -216,6 +216,31 @@ function FreightPanel({ s }) {
     <div data-testid="freight-panel" style={panelStyle("#f59e0b")}>
       <div style={panelHeader("#f59e0b")}>🚚 Freight</div>
       <div style={{ padding: "8px 10px" }}>
+        {/* BOM color sync — display the active component's tint as a visual cue
+            so the Freight section visibly matches the BOM section / Quote
+            Table row the user is operating on. Matches BOM_TINTS in
+            QuoteTableSec.jsx (kept in sync for design consistency). */}
+        {(() => {
+          const TINTS = ["#e8927c", "#b08cf5", "#7dd3c0", "#e88dc4", "#8cc8e8", "#d4a76a", "#9ca3af", "#fbbf24"];
+          const idx = Number(s.activeItemIdx ?? 0);
+          const itemTint = TINTS[idx % TINTS.length];
+          const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
+          const activeBomDesc = isMP && (s.bomItems[idx]?.desc) ? s.bomItems[idx].desc : "";
+          if (!isMP || s.freightScope === "Per Job" || s.quoteFOB === "Origin" || s.quoteFOB === "LocalDelivery") return null;
+          return (
+            <div data-testid="freight-active-comp" style={{
+              fontSize: 10, fontWeight: 700, color: itemTint,
+              padding: "3px 8px", marginBottom: 4, borderRadius: 3,
+              background: `${itemTint}18`, border: `1px solid ${itemTint}55`,
+              borderLeft: `4px solid ${itemTint}`,
+              display: "inline-flex", alignItems: "center", gap: 6,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 3, background: itemTint }} />
+              {idx + 1}. {(activeBomDesc || `Item ${idx + 1}`).slice(0, 32)}
+              <span style={{ color: "var(--spot-text3)", fontWeight: 500 }}>· per-component freight</span>
+            </div>
+          );
+        })()}
         <div style={rowSpaced}>
           <span style={lbl}>FOB</span>
           <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
@@ -232,6 +257,7 @@ function FreightPanel({ s }) {
                   freightTreatment: "None",
                   freightCarrier: "",
                   freightTransit: "",
+                  freightMarkup: "0.15",  // preserve legacy default
                 };
                 // Clear each component's freight in MP mode
                 if (Array.isArray(s.bomItems) && s.bomItems.length > 0) {
@@ -252,7 +278,7 @@ function FreightPanel({ s }) {
                 // Ship: Per Item / Line defaults (legacy). Clear LocalDelivery zone.
                 const patch = {
                   quoteFOB: "Destination",
-                  freightMarkup: s.freightMarkup || "0.15",
+                  freightMarkup: "0.15",   // legacy default — always restore on Ship
                   localDeliveryZone: null,
                   jobFreightCost: "",
                   jobFreightTreatment: "Separate Line",
@@ -422,23 +448,31 @@ function FreightPanel({ s }) {
             )}
 
             {s.quoteType === "Multi-Part" && s.freightScope === "Per Job" ? (
-              // Per Job mode — freight $ is set in Pricing Strategy → Job-Level Cost Allocation
+              // Per Job mode — freight $ + markup display, no verbose pointer text.
               <>
-              <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
-                border: "1px solid #06b6d444", borderRadius: 4 }} data-testid="freight-per-job-pointer">
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#06b6d4",
-                  textTransform: "uppercase", letterSpacing: ".06em" }}>Per-Job Freight</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text)", marginTop: 2 }}
-                  data-testid="freight-per-job-amount">
-                  {fmtMoney(Number(s.jobFreightCost) || 0)}
-                  <span style={{ fontSize: 10, color: "var(--spot-text3)", marginLeft: 6 }}>
-                    split {s.freightAllocMethod || "By MSF"} across {(s.bomItems || []).length} components
-                  </span>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 10, color: "var(--spot-text3)" }}>
-                  Set the amount + allocation method in <b>Pricing Strategy → Job-Level Cost Allocation</b>
-                </div>
-              </div>
+              {(() => {
+                const raw = Number(s.jobFreightCost) || 0;
+                const mk  = Number(s.freightMarkup ?? 0.15) || 0;
+                const total = raw * (1 + mk);
+                return (
+                  <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
+                    border: "1px solid #06b6d444", borderRadius: 4 }} data-testid="freight-per-job-pointer">
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#06b6d4",
+                      textTransform: "uppercase", letterSpacing: ".06em" }}>Per-Job Freight</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 2 }}>
+                      <span style={{ fontSize: 11, color: "var(--spot-text3)" }}
+                        data-testid="freight-per-job-base">
+                        {fmtMoney(raw)} + {(mk * 100).toFixed(0)}% markup
+                      </span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: "#06b6d4" }}
+                        data-testid="freight-per-job-amount">{fmtMoney(total)}</span>
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 10, color: "var(--spot-text3)" }}>
+                      Allocated {s.freightAllocMethod || "By MSF"} across {(s.bomItems || []).length} components
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Per-Job mode still needs Ship-To ZIP + Update All + Dashboard for rate lookup */}
               <div style={rowSpaced}>
                 <span style={lbl}>Ship To</span>
@@ -447,7 +481,7 @@ function FreightPanel({ s }) {
                   onChange={(e) => setField("destZip", e.target.value)}
                   style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
                 <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
-                <input className="sp-input" value={s.freightMarkup || ""}
+                <input className="sp-input" value={s.freightMarkup ?? "0.15"}
                   data-testid="freight-markup-input"
                   onChange={(e) => setField("freightMarkup", e.target.value)}
                   style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
@@ -504,32 +538,45 @@ function FreightPanel({ s }) {
                 onChange={(e) => setField("destZip", e.target.value)}
                 style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
               <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
-              <input className="sp-input" value={s.freightMarkup || ""}
+              <input className="sp-input" value={s.freightMarkup ?? "0.15"}
                 data-testid="freight-markup-input"
                 onChange={(e) => setField("freightMarkup", e.target.value)}
                 style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
             </div>
 
-            <div style={{ marginTop: 8, padding: "6px 8px", background: "var(--spot-accent-soft)",
-              border: "1px solid var(--spot-accent)", borderRadius: 4 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-accent)",
-                textTransform: "uppercase", letterSpacing: ".06em" }}>Item Freight</div>
-              {(() => {
-                const raw = Number(s.freightCost) || 0;
-                const mk  = Number(s.freightMarkup) || 0;
-                const display = raw * (1 + mk);
-                return (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                    <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>DEST</span>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: "var(--spot-accent)" }}
+            {(() => {
+              const TINTS = ["#e8927c", "#b08cf5", "#7dd3c0", "#e88dc4", "#8cc8e8", "#d4a76a", "#9ca3af", "#fbbf24"];
+              const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
+              const idx = Number(s.activeItemIdx ?? 0);
+              const tint = isMP ? TINTS[idx % TINTS.length] : "var(--spot-accent)";
+              const tintSoft = isMP ? `${tint}18` : "var(--spot-accent-soft)";
+              const raw = Number(s.freightCost) || 0;
+              const mk  = Number(s.freightMarkup ?? 0.15) || 0;
+              const total = raw * (1 + mk);
+              return (
+                <div style={{ marginTop: 8, padding: "8px 10px",
+                  background: tintSoft, border: `1px solid ${tint}`,
+                  borderLeft: `4px solid ${tint}`, borderRadius: 4 }}
+                  data-testid="freight-item-card">
+                  <div style={{ fontSize: 10, fontWeight: 700, color: tint,
+                    textTransform: "uppercase", letterSpacing: ".06em" }}>
+                    {isMP ? `Item ${idx + 1} · Freight` : "Item Freight"}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between",
+                    alignItems: "baseline", marginTop: 2 }}>
+                    <span style={{ fontSize: 11, color: "var(--spot-text3)" }}
+                      data-testid="freight-item-base">
+                      {fmtMoney(raw)} + {(mk * 100).toFixed(0)}% markup
+                    </span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: tint }}
                       data-testid="freight-amount-display"
-                      title={mk > 0 ? `Raw ${fmtMoney(raw)} + ${(mk * 100).toFixed(0)}% markup` : undefined}>
-                      {fmtMoney(display)}
+                      title={`Total to ship individually (cost + markup)`}>
+                      {fmtMoney(total)}
                     </span>
                   </div>
-                );
-              })()}
-            </div>
+                </div>
+              );
+            })()}
 
             <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 11, color: Number(s.freightCost) > 0 ? "var(--spot-green)" : "var(--spot-text3)" }}>
