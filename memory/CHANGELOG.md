@@ -2,6 +2,53 @@
 
 Append-only log of shipped features and fixes.
 
+# SPOT Cloud — Changelog
+
+Append-only log of shipped features and fixes.
+
+## 2026-02-10 — MP-Individual per-component layout (Quote Table + PDF)
+
+User feedback: in MP-Individual mode (each component has its own qty tier(s)),
+the Quote Table was showing a single aggregate row missing Sheet/#Out/CAD-hrs/
+Freight detail, and the PDF only rendered the active component. Legacy showed
+all components but applied every component's qty to every component (wrong).
+The new design follows the user-specified structure: each BOM component
+becomes its own section with its own qty rows, and Per-Job costs (freight,
+prepress) move to a Job Totals footer.
+
+### Backend
+- `POST /api/engine/calculate-multi-part` now returns `componentPricing[]` and
+  `jobTotals`. Each `componentPricing` entry: `{itemId, itemIndex, desc, type,
+  pcsPerSet, boardSpec, rows[]}`. Each row carries qty, sellPc, costPc, perM,
+  sellMSF, costMSF, sheetW, sheetL, pcsPerSheet, route, cadHrs, freightLine,
+  dieLineCost, prepressLineCost, sellTotal. In Individual mode rows come from
+  the component's own `state.qtys[]` (blanks skipped); in Matched Set mode rows
+  come from top-level set qtys with `qty = set_qty × pcsPerSet`.
+- `POST /api/pdf/preview-quote` now accepts `componentPricing` + `jobTotals`
+  and renders per-component sections (`pricing_table = sections + footer`) when
+  the quote is MP-Individual. Matched Set + Single-Part PDFs unchanged.
+
+### Frontend
+- `QuoteTableSec` rewritten with two layouts:
+  - **FlatLayout** (SP + MP-MatchedSet): unchanged behavior plus added Die +
+    Prepress columns to every row.
+  - **ComponentLayout** (MP-Individual): collapsible per-component sections
+    with sub-tables. Expand-All / Collapse-All buttons + component nav chips
+    scale cleanly to 25+ components. Job Totals footer with grand total.
+- `PreviewPdfModal` adds `PerComponentSections` for the on-screen PDF preview
+  (matches the backend PDF layout). Items / Per-Item / Per-Job rows in footer.
+- `useEngine` returns `componentPricing` + `jobTotals` in addition to existing
+  fields.
+
+### Tested
+- Backend: 22/22 tests pass (10 new + 12 regression) — verified Individual
+  picks each component's own qtys, Matched Set multiplies by pcsPerSet.
+- Frontend: Quote Table testids (`qt-comp-section-*`, `qt-comp-table-*`,
+  `qt-expand-all`, `qt-collapse-all`, `qt-job-totals`, `qt-grand-total`) all
+  render. Preview testids (`preview-comp-section-*`, `preview-grand-total`)
+  render. PDF preview math matches engine ($8,483.08 grand total on the
+  loaded MP sample).
+
 ## 2026-06-03 — Multi-Part Parity Sprint ✅ (MP-1 → MP-6)
 
 Full Multi-Part feature parity with the legacy desktop tool. Most production quotes
