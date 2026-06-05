@@ -391,16 +391,6 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
     setExpanded(none);
   };
   const toggle = (k) => setExpanded((p) => ({ ...p, [k]: !p[k] }));
-  // Clicking a section header also makes that component the ACTIVE BOM item so
-  // the Freight section / RightDashboard updates to show its freight values
-  // (per user: "When I select a BOM item or select an item in the Quote table,
-  // the ITEM freight in the freight section SHOULD SHOW THE SELECTED ITEM'S").
-  const selectComp = (k, itemIndex) => {
-    setExpanded((p) => ({ ...p, [k]: true }));
-    if (typeof itemIndex === "number" && itemIndex !== activeItemIdx) {
-      setField("activeItemIdx", itemIndex);
-    }
-  };
 
   // Toggle a (component, slotIdx) row's exclusion from PDF
   const isRowExcluded = (itemId, slotIdx) => {
@@ -506,9 +496,10 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
               boxShadow: isBomSelected ? `0 0 0 2px ${tintFor(c.itemIndex)}33` : "none",
               transition: "box-shadow .15s, border-color .15s",
             }}>
-            {/* Section header — always visible. Clicking expands AND syncs the
-                active BOM index so the Freight section shows this component. */}
-            <div onClick={() => selectComp(k, c.itemIndex)}
+            {/* Section header — click toggles expand only (no state mutation).
+                Use the BOM tabs or the nav chips above to switch the active
+                component for the Freight section. */}
+            <div onClick={() => toggle(k)}
               style={{
                 cursor: "pointer", padding: "8px 12px",
                 display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",

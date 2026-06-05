@@ -99,14 +99,22 @@ function FreightPanel({ s }) {
   const estimatedWeight = shipmentEst.lbs;
 
   // Per-component shipment weight calculator (for MP+Per Item freight allocation).
-  // Returns array indexed by component idx with { lbs, skids, sqFt }.
+  // Each component uses its OWN qty (the first non-zero entry across its slots),
+  // not the job-level selSlot — critical for MP-Individual where each component
+  // lives at a different slot. Returns array indexed by component idx with
+  // { lbs, skids, sqFt }. Legacy parity: line 4276 fetchFreightRate per item.
   const computePerItemShipmentWeight = () => {
-    const sel = s.selSlot ?? 0;
     const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
       ? s.bomItems : [{ state: s }];
     return items.map((it) => {
       const st = it.state || it;
-      const qty = parseInt((st.qtys || [])[sel] || st.qtys?.[0] || 0, 10);
+      // Find this component's own qty — first non-zero entry across its slots.
+      let qty = 0;
+      const qtys = st.qtys || [];
+      for (let i = 0; i < qtys.length; i++) {
+        const v = parseInt(qtys[i] || 0, 10);
+        if (v > 0) { qty = v; break; }
+      }
       const uw = parseFloat(st.oneUpW || 0);
       const ul = parseFloat(st.oneUpL || 0);
       if (qty <= 0 || uw <= 0 || ul <= 0) return { lbs: 0, skids: 0, sqFt: 0 };
@@ -148,48 +156,56 @@ function FreightPanel({ s }) {
         return;
       }
 
-      // Per-Item (MP): one freightQuote per component, store on each item.state.freightCost.
+      // Per-Item (MP): legacy `updateAllFreight` (spot_r1_5.jsx L4313) gets ONE
+      // combined-shipment quote for the whole job, then ALLOCATES that single
+      // total across components proportionally by each component's weight (not
+      // by fetching N individual quotes — that hits LTL minimums per shipment
+      // and over-counts. Legacy: combined ship quote $X → per-component
+      // share = X * (compWeightLbs / totalWeightLbs)).
       if (isMP && (scope === "None" || scope === "Per Item")) {
         const perItem = computePerItemShipmentWeight();
-        let updated = 0, totalFreight = 0, lastCarrier = "";
-        const nextBom = await Promise.all((s.bomItems || []).map(async (bi, i) => {
+        const totalWeight = perItem.reduce((a, p) => a + (p.lbs || 0), 0);
+        if (totalWeight <= 0) {
+          throw new Error("No qty/dims on any component — set qty + 1-up dims first.");
+        }
+        // Single combined-shipment quote
+        const r = await freightQuote({
+          destZip: s.destZip, weightLbs: totalWeight, freightClass: "70",
+        });
+        const totalFreight = Number(r.totalAmount || 0);
+        const carrier = r.carrier || "";
+        const transit = r.transitDays != null ? String(r.transitDays) : "";
+        // Allocate proportionally by weight (legacy weight allocation parity)
+        const nextBom = (s.bomItems || []).map((bi, i) => {
           const w = perItem[i]?.lbs || 0;
-          if (w <= 0) return bi;
-          try {
-            const r = await freightQuote({
-              destZip: s.destZip, weightLbs: w, freightClass: "70",
-            });
-            updated++;
-            totalFreight += Number(r.totalAmount || 0);
-            lastCarrier = r.carrier || lastCarrier;
-            return {
-              ...bi,
-              state: {
-                ...(bi.state || {}),
-                freightCost: String(r.totalAmount),
-                freightTreatment: (bi.state?.freightTreatment === "None") ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
-                freightCarrier: r.carrier || "",
-                freightTransit: r.transitDays != null ? String(r.transitDays) : "",
-                quoteFOB: "Destination",
-              },
-            };
-          } catch {
-            return bi;
-          }
-        }));
-        // Patch active component's local fields + the bomItems array + top-level carrier display
+          if (w <= 0) return bi;  // no qty → no freight
+          const share = totalFreight * (w / totalWeight);
+          return {
+            ...bi,
+            state: {
+              ...(bi.state || {}),
+              freightCost: share.toFixed(2),  // base $ for this component
+              freightTreatment: (bi.state?.freightTreatment === "None") ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
+              freightCarrier: carrier,
+              freightTransit: transit,
+              quoteFOB: "Destination",
+            },
+          };
+        });
         const patch = {
           bomItems: nextBom,
           quoteFOB: "Destination",
-          freightCarrier: lastCarrier,
+          freightCarrier: carrier,
+          freightTransit: transit,
           freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
         };
+        // Sync active item's surface freight value to match its bomItem entry
         const activeBi = nextBom[s.activeItemIdx ?? 0];
         if (activeBi && activeBi.state) {
-          patch.freightCost = activeBi.state.freightCost || s.freightCost || "0";
+          patch.freightCost = activeBi.state.freightCost || "0";
         }
         setManyFields(patch);
-        pushToast(`Per-Item Freight updated for ${updated} component${updated !== 1 ? "s" : ""} · total ${fmtMoney(totalFreight)}`, "ok");
+        pushToast(`Per-Item Freight — ${fmtMoney(totalFreight)} via ${carrier} allocated across ${perItem.filter(p => p.lbs > 0).length} components by weight (${totalWeight.toLocaleString()} lbs total)`, "ok");
         return;
       }
 
