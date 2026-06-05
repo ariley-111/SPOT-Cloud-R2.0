@@ -135,6 +135,46 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   - 4 KPI cards: Total parses · Anthropic cost · Tokens in · Tokens out
   - By Month / By Customer / By Estimator breakdowns
   - Recent calls log (newest 50): timestamp · estimator · customer · model · tokens · $cost · ✓/✗
+
+### 2026-06-05 — Freight parity restore + Entra SSO scaffolding ✅
+- **Auto-Route resolver parity** verified already correct (`engine/routing.py`
+  L490-513). Crest route stays `viable=True` even when sheet rule inches >1000
+  — only a warning is attached; the cheapest viable route still wins, matching
+  legacy spot_r1_5.jsx L743-749 verbatim.
+- **Combined-shipment freight weight (P0)** — ported legacy `calcShipment`,
+  `calcBoardWeight`, `autoSelectSkid`, `calcPiecesPerSkidLayer` verbatim into
+  `/app/frontend/src/lib/shipment.js`. `RightDashboard.FreightPanel` now
+  computes each component's own weight (grade-derived board lbs/MSF × MSF ×
+  1.05 + per-component skids using flute caliper + auto-skid sizing), sums to
+  combined LTL weight, fires ONE UTS quote, then allocates per-component by
+  weight share. Matches legacy `updateAllFreight` L4314-4395 exactly.
+  Verified live: 90210 destination → 4 skids · 954 lbs combined · $616.92 LTL,
+  allocated correctly across 3 BOM items by weight ratio.
+- **Microsoft Entra ID SSO scaffolding** (Phase 5a):
+  - New `/app/backend/routes/auth_entra.py` — full OIDC Authorization Code
+    flow via `msal.ConfidentialClientApplication`. Endpoints:
+    - `GET /api/auth/entra/login` → 302 to login.microsoftonline.com
+    - `GET /api/auth/entra/callback` → exchange code, validate domain,
+      upsert user, issue internal JWT, 302 to `/auth/callback?token=…`
+  - Domain restriction: `@standardprinting.com` only (configurable via
+    `ALLOWED_EMAIL_DOMAIN` env var)
+  - First-login admin allowlist: ariley, jlittle, rwalter, gkistler, mmusgrave
+    (`SSO_ADMIN_EMAILS` env var)
+  - State cookie signed via `itsdangerous.URLSafeTimedSerializer` (10-min TTL)
+  - New `/api/auth/config` endpoint exposes `{sso_enabled, sso_required,
+    allowed_domain}` for the SPA login screen
+  - `/api/auth/login` now respects `SSO_REQUIRED=true` (returns 403)
+  - `User` schema extended: `auth_provider` ("local"|"entra"), `entra_oid`,
+    `password_hash` defaults to "" for SSO-only users
+  - Frontend: `AuthContext` captures `?token=…` on `/auth/callback`, stores
+    in localStorage like the password flow does. `LoginPage` conditionally
+    renders a Microsoft button (testid `entra-sso-btn`) and hides the
+    password form when `sso_required` flips to true.
+  - Env stubs added to `/app/backend/.env` — Entra creds blank for now;
+    endpoint returns 503 + UI hides the button gracefully until credentials
+    are provided.
+  - Tested 100% (8/8 backend pytest + 3/3 frontend flows) — iteration_13.json
+
   - Window selector (1mo / 3mo / 6mo / 12mo / 24mo) + customer-code filter
   - Sets up for future per-customer cost-allocation / billing
 - `parse_rfq` endpoint extended with `customer_code` / `customer_name` /
