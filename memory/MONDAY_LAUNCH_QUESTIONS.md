@@ -93,4 +93,21 @@
 
 ---
 
+## 12. Matched Set quote-table parity deep-audit
+
+   - User flagged matched-set behavior as "off" in display and math but didn't specify exactly what. The MP-Matched-Set FlatLayout currently shows aggregate rows with `route="Matched Set"` and blank Sheet/#Out (no single sheet for the aggregate).
+   - **Decision needed:** Should MP-Matched-Set ALSO use per-component sections (like MP-Individual), or keep the aggregate flat-row layout? If keeping flat: should the row's Sheet/#Out reflect the "active" component (selected in BOM) for visibility?
+   - **Math audit needed:** estimator to walk a sample matched-set quote line-by-line and confirm where any value differs from legacy.
+
+## 13. PDF output parity (P0 backlog — user flagged)
+
+   - User: "The output PDFs are a mess - not in parity with legacy functionality. Put in backlog to fix."
+   - Open work:
+     - MP-Individual customer PDF: per-component layout shipped but needs side-by-side comparison with legacy export to confirm wording, totals placement, and per-tier breakdown formatting.
+     - MP-Matched-Set customer PDF: aggregate layout needs identical structure to legacy's MATCHED SET / PER COMPONENT PRICING / Quote Summary blocks.
+     - Single-Part customer PDF: confirm legacy parity.
+     - Cost-report (internal) PDF: separate audit needed.
+
+---
+
 _Owner: rwalter@standardprinting.com — living document, appended throughout dev sessions._
