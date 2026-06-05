@@ -136,6 +136,34 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   - By Month / By Customer / By Estimator breakdowns
   - Recent calls log (newest 50): timestamp · estimator · customer · model · tokens · $cost · ✓/✗
 
+### 2026-06-05 — Freight Dashboard + Per-Slot Allocation ✅
+- **New: `/app/frontend/src/components/spot/FreightDashModal.jsx`** (full rewrite).
+  Slot-based tiers, NO synthetic comparison. Per Item mode shows N solo
+  shipments; Per Job mode shows scenarios with combined-shipment allocation.
+  Includes comparison banner, savings recommendation, carrier-options table
+  with FedEx/UPS placeholders, FOB/Type/Markup bar, QTY+ITEMS filter chips.
+- **Rewrote `FreightPanel.updateFreight`** to compute BOTH Per Item AND Per
+  Job in a single click — fires N+M UTS quotes (parallel from the FE) and
+  caches results in `state.freightDashCache`. Toggling the Per Item/Per Job
+  tiles becomes instant (no re-fetch) via new `applyScopeFromCache` helper.
+- **Backend: process-wide `asyncio.Lock` on UTS `_uts_rate_estimate`** —
+  UTS rejects concurrent same-session calls with HTTP 500; serializing them
+  server-side lets the frontend fire calls in parallel safely.
+- **Bugfix: `parseInt("null") === NaN` filter bypass** — cloud's draft
+  serializer writes the literal string `"null"` into empty qty slots, which
+  slipped past `q <= 0` checks. New `_parseQty` helper coerces NaN→0.
+- **Verified live on Jamestown 3-component quote** (D/C Tray 1X @ 42 + Tray
+  2X @ 168 + Carton @ 2,352 to ZIP 14227):
+  - Per Item: $527.08 (3 solo UTS quotes)
+  - Per Job: $199.28 (1 combined LTL allocated by weight share — Tray 1X 7.9%,
+    Tray 2X 13.2%, Carton 78.9%)
+  - Savings: $327.80 (62.2% cheaper together) — recommendation banner fires
+- **Two new bomItem state fields**: `freightByQty[slot]` (solo, Per Item) and
+  `perJobFreightByQty[slot]` (allocated share, Per Job). Engine reads
+  `freightByQty[selSlot]` as before — applyScopeFromCache swaps which cache
+  populates it on mode toggle.
+
+
 ### 2026-06-05 — Entra SSO live in preview ✅
 - User confirmed first successful Microsoft round-trip on
   `ariley@standardprinting.com`. SSO end-to-end working: Microsoft login →

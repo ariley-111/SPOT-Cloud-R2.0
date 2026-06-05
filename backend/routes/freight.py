@@ -6,12 +6,17 @@ Three-tier resolution:
   3. National zone fallback (zone 1-8 CWT pricing) — used when UTS unavailable
 """
 from __future__ import annotations
+import asyncio
 import base64
 import os
 from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
+
+# Process-wide semaphore: UTS returns HTTP 500 if multiple rateestimate calls
+# arrive concurrently on the same auth session, so we funnel them one-at-a-time.
+_UTS_LOCK = asyncio.Lock()
 
 from models.schemas import User
 from routes.auth import get_current_user
@@ -139,7 +144,15 @@ def _fallback_rate(dest_zip: str, weight_lbs: float) -> Dict[str, Any]:
 
 
 async def _uts_rate_estimate(dest_zip: str, weight_lbs: float, freight_class: str = "70") -> Dict[str, Any]:
-    """Verbatim port of legacy utsRateEstimate() — calls UTS /v1/rateestimate."""
+    """Verbatim port of legacy utsRateEstimate() — calls UTS /v1/rateestimate.
+    Serializes all UTS calls behind a process-wide asyncio.Lock — concurrent
+    calls were observed returning HTTP 500 (UTS appears to reject parallel
+    requests on the same auth session)."""
+    async with _UTS_LOCK:
+        return await _uts_rate_estimate_inner(dest_zip, weight_lbs, freight_class)
+
+
+async def _uts_rate_estimate_inner(dest_zip: str, weight_lbs: float, freight_class: str = "70") -> Dict[str, Any]:
     uts_user, uts_key, bill_to_id, origin_zip = _uts_creds()
     if not (uts_user and uts_key):
         raise RuntimeError("UTS credentials not configured")

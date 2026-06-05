@@ -7,6 +7,7 @@ import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
 import { calcShipment } from "../../lib/shipment";
+import FreightDashModal from "./FreightDashModal";
 
 export default function RightDashboard() {
   const { active } = useQuote();
@@ -44,6 +45,7 @@ function FreightPanel({ s }) {
   const { setField, setManyFields, pushToast, active } = useQuote();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [dashOpen, setDashOpen] = useState(false);
 
   // Build per-component construction spec (used in calcShipment). For the
   // active item we read live state (s.*); for the others we read each
@@ -84,10 +86,11 @@ function FreightPanel({ s }) {
   // Per-item shipment using legacy calcShipment(...) verbatim. Returns array
   // aligned to bomItems (or single entry for Simple). Each entry has the same
   // shape as legacy calcShipment output.
+  const _parseQty = (q) => { const n = parseInt(q, 10); return Number.isFinite(n) && n > 0 ? n : 0; };
   const shipmentForQtySlot = (slotIndex) => {
     const items = buildItems();
     return items.map((it) => {
-      const qty = parseInt((it.qtys || [])[slotIndex] || (it.qtys || [])[0] || 0, 10);
+      const qty = _parseQty((it.qtys || [])[slotIndex]) || _parseQty((it.qtys || [])[0]);
       const uw = it.oneUpW, ul = it.oneUpL;
       if (qty <= 0 || uw <= 0 || ul <= 0) {
         return { totalWeight: 0, skidCount: 0, trailerFeet: 0, productWeight: 0 };
@@ -108,7 +111,7 @@ function FreightPanel({ s }) {
       let qty = 0;
       const qtys = it.qtys || [];
       for (let i = 0; i < qtys.length; i++) {
-        const v = parseInt(qtys[i] || 0, 10);
+        const v = _parseQty(qtys[i]);
         if (v > 0) { qty = v; break; }
       }
       const uw = it.oneUpW, ul = it.oneUpL;
@@ -133,96 +136,263 @@ function FreightPanel({ s }) {
   })();
   const estimatedWeight = shipmentEst.lbs;
 
+  // Builds the Per-Job scenario matrix used by both updateFreight and the
+  // Freight Dashboard. Returns { perItemRows, perJobScenarios }.
+  //  - perItemRows[i] = array of { slot, qty, ship: calcShipment() }  for each
+  //    qty in component i's qtys[].
+  //  - perJobScenarios[k] = {
+  //       scenarioIdx,
+  //       perComp: [{ idx, slot, qty, ship }],
+  //       combinedWeight, combinedSkids, combinedFt
+  //    }
+  //    max_slots = max(component.qtys.length). In scenario k, each component
+  //    contributes its qty at min(k, qtys.length - 1) — single-qty components
+  //    repeat their qty across all scenarios; multi-qty components advance.
+  // NOTE: qtys arrays often carry the literal string "null" (cloud's draft
+  // serializer) for empty slots. parseInt("null") returns NaN which slips
+  // past `q <= 0`; we coerce via `|| 0` to drop those properly.
+  const parseQty = (q) => {
+    const n = parseInt(q, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const buildScenarioMatrix = () => {
+    const items = buildItems();
+    const perItemRows = items.map((it) => {
+      const qtys = (it.qtys || []).map(parseQty);
+      return qtys.map((q, slot) => {
+        if (q <= 0 || !it.oneUpW || !it.oneUpL) return null;
+        const oMSF = (it.oneUpW * it.oneUpL * q) / 144 / 1000;
+        return {
+          slot, qty: q,
+          ship: calcShipment(
+            it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
+            oMSF, it.oneUpW, it.oneUpL, q
+          ),
+        };
+      }).filter(Boolean);
+    });
+
+    const maxSlots = Math.max(0, ...items.map((it) => (it.qtys || []).map(parseQty).filter((q) => q > 0).length));
+    const perJobScenarios = [];
+    for (let k = 0; k < maxSlots; k++) {
+      const perComp = items.map((it, i) => {
+        const qtys = (it.qtys || []).map(parseQty).filter((q) => q > 0);
+        if (qtys.length === 0 || !it.oneUpW || !it.oneUpL) return null;
+        const slot = Math.min(k, qtys.length - 1);
+        const qty = qtys[slot];
+        const oMSF = (it.oneUpW * it.oneUpL * qty) / 144 / 1000;
+        return {
+          idx: i, slot, qty,
+          ship: calcShipment(
+            it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
+            oMSF, it.oneUpW, it.oneUpL, qty
+          ),
+        };
+      }).filter(Boolean);
+      const combinedWeight = perComp.reduce((a, p) => a + (p.ship.totalWeight || 0), 0);
+      const combinedSkids  = perComp.reduce((a, p) => a + (p.ship.skidCount   || 0), 0);
+      const combinedFt     = perComp.reduce((a, p) => a + (p.ship.trailerFeet || 0), 0);
+      perJobScenarios.push({ scenarioIdx: k, perComp, combinedWeight, combinedSkids, combinedFt });
+    }
+    return { perItemRows, perJobScenarios };
+  };
+
   const updateFreight = async () => {
     if (!s.destZip) { setErr("Need ship-to ZIP first"); return; }
     setBusy(true); setErr("");
     try {
       const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
-      const scope = s.freightScope || "None";
 
-      // Per-Job: one combined-shipment quote → jobFreightCost (whole job).
-      if (isMP && scope === "Per Job") {
+      // ─── Single-Part fallback ────────────────────────────────────────────
+      if (!isMP) {
         const r = await freightQuote({
           destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
         });
         setManyFields({
-          jobFreightCost: String(r.totalAmount), quoteFOB: "Destination",
-          freightCarrier: r.carrier || "",
-          freightTransit: r.transitDays != null ? String(r.transitDays) : "",
-          jobFreightTreatment: s.jobFreightTreatment || "Separate Line",
-        });
-        pushToast(`Per-Job Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
-        return;
-      }
-
-      // Per-Item (MP) — LEGACY PARITY (spot_r1_5.jsx L4313 updateAllFreight):
-      // For each component, compute its OWN calcShipment weight at its own
-      // first-non-zero qty tier, sum to combined weight, fire ONE UTS quote
-      // for that combined load, then allocate by weight share. Mirrors the
-      // legacy "combined shipment, proportional allocation" pattern exactly
-      // (legacy uses per-slot combined; we collapse to per-component own-qty
-      // here since the UI carries one freight value per item).
-      if (isMP && (scope === "None" || scope === "Per Item")) {
-        // Per-component own-qty shipments (legacy calcShipment, verbatim)
-        const perItem = shipmentForOwnQtys();
-        const combinedWeight = perItem.reduce((a, p) => a + (p.totalWeight || 0), 0);
-        if (combinedWeight <= 0) { setErr("No priceable quantities for freight"); return; }
-
-        // ONE UTS quote for the combined load
-        const r = await freightQuote({
-          destZip: s.destZip, weightLbs: Math.max(100, Math.round(combinedWeight)),
-          freightClass: "70",
-        });
-        const tierTotal = Number(r.totalAmount || 0);
-
-        // Allocate proportionally by per-component weight share
-        let totalAllocated = 0;
-        const nextBom = (s.bomItems || []).map((bi, i) => {
-          const myWeight = perItem[i]?.totalWeight || 0;
-          if (myWeight <= 0) return bi;
-          const share = combinedWeight > 0 ? myWeight / combinedWeight : 0;
-          const myShare = Math.round(share * tierTotal * 100) / 100;
-          totalAllocated += myShare;
-          return {
-            ...bi,
-            state: {
-              ...(bi.state || {}),
-              freightCost: myShare.toFixed(2),
-              freightTreatment: (bi.state?.freightTreatment === "None") ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
-              freightCarrier: r.carrier || "",
-              freightTransit: r.transitDays != null ? String(r.transitDays) : "",
-              quoteFOB: "Destination",
-            },
-          };
-        });
-        const patch = {
-          bomItems: nextBom,
-          quoteFOB: "Destination",
+          freightCost: String(r.totalAmount), quoteFOB: "Destination",
           freightCarrier: r.carrier || "",
           freightTransit: r.transitDays != null ? String(r.transitDays) : "",
           freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
-        };
-        const activeBi = nextBom[s.activeItemIdx ?? 0];
-        if (activeBi && activeBi.state) patch.freightCost = activeBi.state.freightCost || "0";
-        setManyFields(patch);
-        const totalSkids = perItem.reduce((a, p) => a + (p.skidCount || 0), 0);
-        pushToast(`Per-Item Freight ${fmtMoney(totalAllocated)} via ${r.carrier} · ${totalSkids} skids · ${Math.round(combinedWeight)} lbs combined`, "ok");
+        });
+        pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
         return;
       }
 
-      // Single-Part fallback (existing behavior)
-      const r = await freightQuote({
-        destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
+      // ─── Multi-Part: fire BOTH Per-Item AND Per-Job quotes in one pass ───
+      // Per-Item:  one UTS quote per (component × qty)  — solo shipment
+      // Per-Job:   one UTS quote per scenario           — combined shipment
+      // Cache both result sets on the quote so the user can flip the scope
+      // toggle without re-fetching, and the Freight Dashboard can read them.
+      const { perItemRows, perJobScenarios } = buildScenarioMatrix();
+      const flatPerItem = [];
+      perItemRows.forEach((rows, i) => rows.forEach((r) => flatPerItem.push({ idx: i, ...r })));
+      if (flatPerItem.length === 0 && perJobScenarios.length === 0) {
+        setErr("No priceable quantities for freight"); return;
+      }
+
+      const dest = { destZip: s.destZip, freightClass: "70" };
+      // Fire all UTS quotes in parallel — the backend serializes them behind
+      // a single asyncio.Lock (UTS rejects concurrent same-session calls).
+      const [perItemQuotes, perJobQuotes] = await Promise.all([
+        Promise.all(flatPerItem.map(async (row) => {
+          const w = Math.max(100, Math.round(row.ship.totalWeight || 100));
+          try { const r = await freightQuote({ ...dest, weightLbs: w }); return { ...row, weight: w, ...r }; }
+          catch { return { ...row, weight: w, totalAmount: 0, carrier: "", transitDays: null, allCarriers: [] }; }
+        })),
+        Promise.all(perJobScenarios.map(async (sc) => {
+          const w = Math.max(100, Math.round(sc.combinedWeight || 100));
+          try { const r = await freightQuote({ ...dest, weightLbs: w }); return { ...sc, weight: w, ...r }; }
+          catch { return { ...sc, weight: w, totalAmount: 0, carrier: "", transitDays: null, allCarriers: [] }; }
+        })),
+      ]);
+
+      // ─── Per-Item map: { compIdx: { slot: cost } } ─────────────────────
+      const perItemMap = {};
+      perItemQuotes.forEach((q) => {
+        if (!perItemMap[q.idx]) perItemMap[q.idx] = {};
+        perItemMap[q.idx][q.slot] = String(Number(q.totalAmount || 0).toFixed(2));
       });
-      setManyFields({
-        freightCost: String(r.totalAmount), quoteFOB: "Destination",
-        freightCarrier: r.carrier || "",
-        freightTransit: r.transitDays != null ? String(r.transitDays) : "",
+
+      // ─── Per-Job map: { compIdx: { slot: allocated_share } } + totals ──
+      const perJobMap = {};
+      const jobFreightBySlot = {};
+      const carrierBySlot = {};
+      perJobQuotes.forEach((sc) => {
+        const total = Number(sc.totalAmount || 0);
+        jobFreightBySlot[sc.scenarioIdx] = String(total.toFixed(2));
+        carrierBySlot[sc.scenarioIdx] = {
+          carrier: sc.carrier || "", transit: sc.transitDays != null ? String(sc.transitDays) : "",
+          combinedWeight: sc.combinedWeight, combinedSkids: sc.combinedSkids,
+          allCarriers: sc.allCarriers || [],
+        };
+        if (total > 0 && sc.combinedWeight > 0) {
+          sc.perComp.forEach((p) => {
+            const share = p.ship.totalWeight / sc.combinedWeight;
+            const alloc = Math.round(share * total * 100) / 100;
+            if (!perJobMap[p.idx]) perJobMap[p.idx] = {};
+            // Store at this component's slot — note p.slot may be its clamped
+            // last slot for single-qty components participating in higher
+            // scenarios; we still write to that slot so engine picks it up
+            // when user selects scenario k.
+            perJobMap[p.idx][sc.scenarioIdx] = String(alloc.toFixed(2));
+          });
+        }
+      });
+
+      // ─── Apply currently-selected mode's values to live engine state ───
+      const scope = s.freightScope || "None"; // "None" / "Per Item" both = per-item solo
+      const activeIdx = s.activeItemIdx ?? 0;
+      const selSlot = Number(s.selSlot || 0);
+      const isPerJob = scope === "Per Job";
+
+      const nextBom = (s.bomItems || []).map((bi, i) => {
+        const itemPerItem = perItemMap[i] || {};
+        const itemPerJob  = perJobMap[i]  || {};
+        const liveMap = isPerJob ? itemPerJob : itemPerItem;
+        const currentSlot = Number(bi.state?.selSlot ?? selSlot);
+        const liveCost = liveMap[currentSlot] || "0";
+        return {
+          ...bi,
+          state: {
+            ...(bi.state || {}),
+            freightByQty: itemPerItem,           // always store the solo map here
+            perJobFreightByQty: itemPerJob,      // and the allocated map here
+            freightCost: liveCost,                // engine reads this for active mode
+            freightTreatment: bi.state?.freightTreatment === "None" ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
+            freightCarrier: (isPerJob ? carrierBySlot[currentSlot]?.carrier : perItemQuotes.find((q) => q.idx === i && q.slot === currentSlot)?.carrier) || "",
+            freightTransit: (isPerJob ? carrierBySlot[currentSlot]?.transit : (perItemQuotes.find((q) => q.idx === i && q.slot === currentSlot)?.transitDays != null ? String(perItemQuotes.find((q) => q.idx === i && q.slot === currentSlot).transitDays) : "")) || "",
+            quoteFOB: "Destination",
+          },
+        };
+      });
+
+      const activeJobCost = jobFreightBySlot[selSlot] || jobFreightBySlot[0] || "0";
+      const patch = {
+        bomItems: nextBom,
+        quoteFOB: "Destination",
         freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
-      });
-      pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
+        jobFreightBySlot,
+        jobFreightCost: activeJobCost,
+        jobFreightTreatment: s.jobFreightTreatment || "Separate Line",
+        // Snapshot the full cache so the Dashboard renders without re-fetching
+        freightDashCache: {
+          perItemQuotes,   // [{idx, slot, qty, ship, weight, totalAmount, carrier, transitDays, allCarriers}]
+          perJobQuotes,    // [{scenarioIdx, perComp, combinedWeight, weight, totalAmount, carrier, transitDays, allCarriers}]
+          lastCalcZip: s.destZip,
+          lastCalcAt: new Date().toISOString(),
+        },
+      };
+      const activeBi = nextBom[activeIdx];
+      if (activeBi?.state) {
+        patch.freightCost = activeBi.state.freightCost;
+        patch.freightCarrier = isPerJob ? (carrierBySlot[selSlot]?.carrier || "") : (activeBi.state.freightCarrier || "");
+        patch.freightTransit = isPerJob ? (carrierBySlot[selSlot]?.transit || "") : (activeBi.state.freightTransit || "");
+      }
+      setManyFields(patch);
+
+      // Toast summary — show whichever mode is active
+      if (isPerJob) {
+        const total = Number(activeJobCost) || 0;
+        const sc = perJobQuotes[selSlot] || perJobQuotes[0];
+        pushToast(`Per-Job Freight ${fmtMoney(total)} · ${sc?.carrier || "—"} · ${sc?.combinedSkids || 0} skids · ${sc?.combinedWeight || 0} lbs combined`, "ok");
+      } else {
+        const itemTotal = perItemQuotes.reduce((a, q) => a + (Number(q.totalAmount) || 0), 0);
+        pushToast(`Per-Item Freight ${fmtMoney(itemTotal)} across ${perItemQuotes.length} shipments · open Dashboard to compare`, "ok");
+      }
     } catch (e) { setErr(e?.response?.data?.detail || e.message); }
     finally { setBusy(false); }
+  };
+
+  // When the user toggles Per Item ↔ Per Job, swap cached freight values into
+  // live engine state without re-fetching UTS. Called from the FOB/scope tiles.
+  // (Exposed via the s.freightDashCache stored by updateFreight.)
+  const applyScopeFromCache = (nextScope) => {
+    const cache = s.freightDashCache;
+    if (!cache || !Array.isArray(s.bomItems)) return;
+    const isPerJob = nextScope === "Per Job";
+    const selSlot = Number(s.selSlot || 0);
+    const activeIdx = s.activeItemIdx ?? 0;
+    const perItemBy = {}, perJobBy = {};
+    (cache.perItemQuotes || []).forEach((q) => {
+      if (!perItemBy[q.idx]) perItemBy[q.idx] = {};
+      perItemBy[q.idx][q.slot] = String(Number(q.totalAmount || 0).toFixed(2));
+    });
+    (cache.perJobQuotes || []).forEach((sc) => {
+      const total = Number(sc.totalAmount || 0);
+      if (total <= 0 || !sc.combinedWeight) return;
+      sc.perComp.forEach((p) => {
+        const share = p.ship.totalWeight / sc.combinedWeight;
+        const alloc = Math.round(share * total * 100) / 100;
+        if (!perJobBy[p.idx]) perJobBy[p.idx] = {};
+        perJobBy[p.idx][sc.scenarioIdx] = String(alloc.toFixed(2));
+      });
+    });
+    const nextBom = s.bomItems.map((bi, i) => {
+      const liveMap = isPerJob ? (perJobBy[i] || {}) : (perItemBy[i] || {});
+      const currentSlot = Number(bi.state?.selSlot ?? selSlot);
+      return {
+        ...bi,
+        state: {
+          ...(bi.state || {}),
+          freightByQty: perItemBy[i] || {},
+          perJobFreightByQty: perJobBy[i] || {},
+          freightCost: liveMap[currentSlot] || "0",
+        },
+      };
+    });
+    const jobBySlot = {};
+    (cache.perJobQuotes || []).forEach((sc) => {
+      jobBySlot[sc.scenarioIdx] = String(Number(sc.totalAmount || 0).toFixed(2));
+    });
+    const patch = {
+      bomItems: nextBom,
+      jobFreightBySlot: jobBySlot,
+      jobFreightCost: jobBySlot[selSlot] || jobBySlot[0] || "0",
+      freightScope: nextScope,
+    };
+    const activeBi = nextBom[activeIdx];
+    if (activeBi?.state) patch.freightCost = activeBi.state.freightCost;
+    setManyFields(patch);
   };
 
   return (
@@ -230,6 +400,8 @@ function FreightPanel({ s }) {
       <ProgressModal open={busy} accent="#f59e0b"
         title="Getting Freight Quote"
         subtitle={`Calling UTS · ${s.destZip || ""}`} />
+      <FreightDashModal open={dashOpen} onClose={() => setDashOpen(false)}
+        applyScopeFromCache={applyScopeFromCache} updateFreight={updateFreight} busy={busy} />
     <div data-testid="freight-panel" style={panelStyle("#f59e0b")}>
       <div style={panelHeader("#f59e0b")}>🚚 Freight</div>
       <div style={{ padding: "8px 10px" }}>
@@ -417,9 +589,9 @@ function FreightPanel({ s }) {
               {s.quoteType === "Multi-Part" ? (
                 // Multi-Part: scope tiles match legacy (None / Per Item / Per Job)
                 <div style={{ display: "flex", gap: 2 }} data-testid="freight-scope-tiles">
-                  <Tile label="None"     active={s.freightScope === "None-Off"}                onClick={() => setField("freightScope", "None-Off")}                  small data-testid="tile-freight-scope-none" />
-                  <Tile label="Per Item" active={!s.freightScope || s.freightScope === "None"} onClick={() => setField("freightScope", "None")}                      small tint="#22c55e" data-testid="tile-freight-scope-per-item" />
-                  <Tile label="Per Job"  active={s.freightScope === "Per Job"}                 onClick={() => setField("freightScope", "Per Job")}                   small tint="#06b6d4" data-testid="tile-freight-scope-per-job" />
+                  <Tile label="None"     active={s.freightScope === "None-Off"}                onClick={() => setField("freightScope", "None-Off")}                                              small data-testid="tile-freight-scope-none" />
+                  <Tile label="Per Item" active={!s.freightScope || s.freightScope === "None"} onClick={() => { if (s.freightDashCache) applyScopeFromCache("None"); else setField("freightScope", "None"); }} small tint="#22c55e" data-testid="tile-freight-scope-per-item" />
+                  <Tile label="Per Job"  active={s.freightScope === "Per Job"}                 onClick={() => { if (s.freightDashCache) applyScopeFromCache("Per Job"); else setField("freightScope", "Per Job"); }} small tint="#06b6d4" data-testid="tile-freight-scope-per-job" />
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: 2 }}>
@@ -511,7 +683,7 @@ function FreightPanel({ s }) {
                     background: "var(--spot-accent)", color: "#fff",
                     opacity: busy ? 0.7 : 1,
                   }}>{busy ? "…" : "Update All"}</button>
-                <button data-testid="btn-freight-dash" style={{
+                <button data-testid="btn-freight-dash" onClick={() => setDashOpen(true)} style={{
                   all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
                   padding: "5px 10px", borderRadius: 3,
                   background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
@@ -618,7 +790,7 @@ function FreightPanel({ s }) {
                   background: "var(--spot-accent)", color: "#fff",
                   opacity: busy ? 0.7 : 1,
                 }}>{busy ? "…" : "Update All"}</button>
-          <button data-testid="btn-freight-dash" style={{
+          <button data-testid="btn-freight-dash" onClick={() => setDashOpen(true)} style={{
             all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
             padding: "5px 10px", borderRadius: 3,
             background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
