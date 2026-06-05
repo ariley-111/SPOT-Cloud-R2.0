@@ -24,7 +24,7 @@ const COLS = [
 ];
 
 export default function QuoteTableSec({ results, componentPricing, jobTotals, meta }) {
-  const { active, sec, toggleSec, setField, pushToast } = useQuote();
+  const { active, sec, toggleSec, setField, switchBomItem, pushToast } = useQuote();
   const s = active?.state || {};
   const rows = (results || []).filter((r) => Number(r.qty) > 0);
   const selSlot = Math.min(s.selSlot ?? 0, Math.max(0, rows.length - 1));
@@ -146,6 +146,7 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           topQtys={s.qtys || []}
           jobFreightBySlot={s.jobFreightBySlot || {}}
           setField={setField}
+          switchBomItem={switchBomItem}
         />
       ) : (
         <FlatLayout
@@ -337,7 +338,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────
 // Each component is its own collapsible section with its own qty rows.
 // Scales cleanly to 25+ components via expand/collapse controls.
-function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, freightScope, freightMarkup, jobFreightCostRaw, topQtys, jobFreightBySlot, setField }) {
+function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, freightScope, freightMarkup, jobFreightCostRaw, topQtys, jobFreightBySlot, setField, switchBomItem }) {
   // Default: first 3 components expanded, plus the BOM-selected one
   const [expanded, setExpanded] = useState(() => {
     const init = {};
@@ -432,8 +433,16 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
           return (
             <button key={k} data-testid={`qt-nav-comp-${c.itemIndex}`}
               onClick={() => {
+                // Use switchBomItem (the only correct API) — it snapshots the
+                // current active item's slice into bomItems[oldIdx] AND loads
+                // bomItems[newIdx].state into the top-level. Calling
+                // setField("activeItemIdx", …) directly leaves the old item's
+                // values mirrored at top-level under the new index → corrupts
+                // qty/gluing/board on the target component.
                 setExpanded((p) => ({ ...p, [k]: true }));
-                setField("activeItemIdx", c.itemIndex);
+                if (typeof switchBomItem === "function" && c.itemIndex !== activeItemIdx) {
+                  switchBomItem(c.itemIndex);
+                }
               }}
               style={{
                 all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 700,
