@@ -394,6 +394,7 @@ function FreightPanel({ s }) {
 
             {s.quoteType === "Multi-Part" && s.freightScope === "Per Job" ? (
               // Per Job mode — freight $ is set in Pricing Strategy → Job-Level Cost Allocation
+              <>
               <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
                 border: "1px solid #06b6d444", borderRadius: 4 }} data-testid="freight-per-job-pointer">
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#06b6d4",
@@ -409,6 +410,56 @@ function FreightPanel({ s }) {
                   Set the amount + allocation method in <b>Pricing Strategy → Job-Level Cost Allocation</b>
                 </div>
               </div>
+              {/* Per-Job mode still needs Ship-To ZIP + Update All + Dashboard for rate lookup */}
+              <div style={rowSpaced}>
+                <span style={lbl}>Ship To</span>
+                <input className="sp-input" value={s.destZip || ""}
+                  data-testid="freight-zip-input"
+                  onChange={(e) => setField("destZip", e.target.value)}
+                  style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
+                <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
+                <input className="sp-input" value={s.freightMarkup || ""}
+                  data-testid="freight-markup-input"
+                  onChange={(e) => setField("freightMarkup", e.target.value)}
+                  style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
+              </div>
+              <div style={{ marginTop: 6, display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                <button onClick={updateFreight} disabled={busy} data-testid="btn-freight-update"
+                  style={{
+                    all: "unset", cursor: busy ? "wait" : "pointer", fontSize: 11, fontWeight: 700,
+                    padding: "5px 10px", borderRadius: 3,
+                    background: "var(--spot-accent)", color: "#fff",
+                    opacity: busy ? 0.7 : 1,
+                  }}>{busy ? "…" : "Update All"}</button>
+                <button data-testid="btn-freight-dash" style={{
+                  all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                  padding: "5px 10px", borderRadius: 3,
+                  background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
+                  border: "1px solid var(--spot-purple)",
+                }}>Dashboard</button>
+                {shipmentEst.lbs > 100 && (
+                  <span data-testid="freight-shipment-est" style={{
+                    fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
+                    background: "var(--spot-bg3)", color: "var(--spot-text2)",
+                    border: "1px solid var(--spot-border)",
+                    fontFamily: "'JetBrains Mono', monospace", letterSpacing: ".02em",
+                  }} title="Estimated shipment: pallets + weight. Used for UTS rate request.">
+                    📦 {shipmentEst.skids} skid{shipmentEst.skids !== 1 ? "s" : ""}
+                    {" · "}{shipmentEst.lbs.toLocaleString()} lbs est
+                  </span>
+                )}
+              </div>
+              {s.freightCarrier && s.quoteFOB !== "LocalDelivery" && (
+                <div data-testid="freight-carrier" style={{
+                  fontSize: 11, color: "var(--spot-green)", fontWeight: 700,
+                  textAlign: "right", marginTop: 4,
+                }}>
+                  via {s.freightCarrier}
+                  {s.freightTransit && <span style={{ fontWeight: 500, color: "var(--spot-text3)" }}>{" · "}{s.freightTransit} day{s.freightTransit === "1" ? "" : "s"} transit</span>}
+                </div>
+              )}
+              {err && <div style={{ marginTop: 6, fontSize: 11, color: "var(--spot-err)" }} data-testid="freight-err">{err}</div>}
+              </>
             ) : s.quoteType === "Multi-Part" && s.freightScope === "None-Off" ? (
               <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--spot-bg3)",
                 border: "1px solid var(--spot-border)", borderRadius: 4, fontSize: 11,
@@ -456,7 +507,7 @@ function FreightPanel({ s }) {
                 {Number(s.freightCost) > 0 ? "● Freight verified — OK to quote" : "○ No freight yet"}
               </span>
             </div>
-            {s.freightCarrier && (
+            {s.freightCarrier && s.quoteFOB !== "LocalDelivery" && (
               <div data-testid="freight-carrier" style={{
                 fontSize: 11, color: "var(--spot-green)", fontWeight: 700,
                 textAlign: "right", marginTop: 2,

@@ -258,7 +258,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
             const rowTint = r._pipeline?.stockMode ? "#22c55e10" :
                             r._pipeline?.customOrder ? "#3b82f610" :
                             r._pipeline?.belowMin ? "#f59e0b14" : "transparent";
-            const cadLabel = (r.route === "CAD" && Number(r.cadHrs) > 0)
+            const cadLabel = Number(r.cadHrs) > 0 && r.route
               ? `${r.route} ${Number(r.cadHrs).toFixed(1)}h`
               : (r.route || "—");
             return (
@@ -425,24 +425,24 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
           const k = c.itemId || c.itemIndex;
           const open = !!expanded[k];
           const isActive = c.itemIndex === activeItemIdx;
+          const tint = tintFor(c.itemIndex);
           return (
             <button key={k} data-testid={`qt-nav-comp-${c.itemIndex}`}
               onClick={() => {
-                // Selecting a nav chip: highlight the matching component (sync
-                // BOM activeItemIdx) AND expand its section. Auto-scroll fires
-                // via the existing useEffect when activeItemIdx changes.
                 setExpanded((p) => ({ ...p, [k]: true }));
                 setField("activeItemIdx", c.itemIndex);
               }}
               style={{
                 all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 700,
                 padding: "3px 8px", borderRadius: 10,
-                background: isActive
-                  ? "var(--spot-accent)"
-                  : (open ? "var(--spot-accent-soft)" : "var(--spot-bg3)"),
-                color: isActive ? "#fff" : (open ? "var(--spot-accent)" : "var(--spot-text2)"),
-                border: `1px solid ${isActive || open ? "var(--spot-accent)" : "var(--spot-border)"}`,
+                background: isActive ? tint : (open ? `${tint}22` : "var(--spot-bg3)"),
+                color: isActive ? "#1a1a1a" : (open ? tint : "var(--spot-text2)"),
+                border: `1px solid ${isActive || open ? tint : "var(--spot-border)"}`,
               }} title={c.desc}>
+              <span style={{
+                display: "inline-block", width: 6, height: 6, borderRadius: 3,
+                background: isActive ? "#1a1a1a" : tint, marginRight: 5,
+              }} />
               {c.itemIndex + 1}. {(c.desc || `Item ${c.itemIndex + 1}`).slice(0, 24)}
             </button>
           );
@@ -486,10 +486,11 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
           <div key={k} data-comp-section={k} data-testid={`qt-comp-section-${c.itemIndex}`}
             data-bom-selected={isBomSelected ? "true" : "false"}
             style={{
-              border: `${isBomSelected ? "2px" : "1px"} solid ${isBomSelected ? "var(--spot-accent)" : "var(--spot-line)"}`,
+              border: `${isBomSelected ? "2px" : "1px"} solid ${isBomSelected ? tintFor(c.itemIndex) : "var(--spot-line)"}`,
+              borderLeft: `4px solid ${tintFor(c.itemIndex)}`,
               borderRadius: 5, marginBottom: 8,
               background: "var(--spot-bg2)",
-              boxShadow: isBomSelected ? "0 0 0 2px var(--spot-accent-soft)" : "none",
+              boxShadow: isBomSelected ? `0 0 0 2px ${tintFor(c.itemIndex)}33` : "none",
               transition: "box-shadow .15s, border-color .15s",
             }}>
             {/* Section header — always visible */}
@@ -498,7 +499,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                 cursor: "pointer", padding: "8px 12px",
                 display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
                 background: isBomSelected
-                  ? "var(--spot-accent-soft)"
+                  ? `${tintFor(c.itemIndex)}22`
                   : (open ? "var(--spot-bg3)" : "transparent"),
                 borderBottom: open ? "1px solid var(--spot-line)" : "none",
               }}>
@@ -507,14 +508,18 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                 fontSize: 11, color: "var(--spot-text2)",
                 transform: open ? "rotate(90deg)" : "none", transition: "transform .15s",
               }}>▸</span>
+              <span style={{
+                display: "inline-block", width: 8, height: 8, borderRadius: 4,
+                background: tintFor(c.itemIndex),
+              }} />
               <span style={{ fontWeight: 700, fontSize: 13,
-                color: isBomSelected ? "var(--spot-accent)" : "inherit" }}>
+                color: isBomSelected ? tintFor(c.itemIndex) : "inherit" }}>
                 {c.itemIndex + 1}. {c.desc || `Item ${c.itemIndex + 1}`}
               </span>
               {isBomSelected && (
                 <span data-testid={`qt-comp-${c.itemIndex}-bom-selected`} style={{
                   fontSize: 9, fontWeight: 700, padding: "1px 6px",
-                  borderRadius: 2, background: "var(--spot-accent)", color: "#fff",
+                  borderRadius: 2, background: tintFor(c.itemIndex), color: "#1a1a1a",
                   textTransform: "uppercase", letterSpacing: ".06em",
                 }}>BOM</span>
               )}
@@ -576,7 +581,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
           });
         });
         const perSlotList = Object.values(perSlotAgg).sort((a, b) => a.slotIdx - b.slotIdx);
-        const isLocalDelivery = quoteFOB === "Local Delivery";
+        const isLocalDelivery = quoteFOB === "LocalDelivery" || quoteFOB === "Local Delivery";
         const perJobFreightLabel = isLocalDelivery
           ? `Per-Job Freight: Local Delivery${localDeliveryZone ? ` · ${localDeliveryZone}` : ""}`
           : (freightCarrier
@@ -730,7 +735,7 @@ function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggle
           {rows.map((r, i) => {
             const excl = isRowExcluded(comp.itemId, r.slotIdx);
             const isSelRow = i === selRowIdx;
-            const cadLabel = (r.route === "CAD" && Number(r.cadHrs) > 0)
+            const cadLabel = Number(r.cadHrs) > 0 && r.route
               ? `${r.route} ${Number(r.cadHrs).toFixed(1)}h`
               : (r.route || "—");
             const cellBase = { padding: "3px 6px" };
@@ -849,6 +854,13 @@ function PerComponentBreakdownLegacy({ row }) {
     </div>
   );
 }
+
+// BOM component tints — matches the per-component colors used by the BOM
+// section / Placeholders.jsx so the Quote Table component sections + nav
+// chips visually align with the BOM rows.
+const BOM_TINTS = ["#e8927c", "#b08cf5", "#7dd3c0", "#e88dc4", "#8cc8e8", "#d4a76a", "#9ca3af", "#fbbf24"];
+const tintFor = (i) => BOM_TINTS[i % BOM_TINTS.length];
+
 
 function linerShort(liner) {
   // Legacy fmLnr semantics (spot_r1_5.jsx L1218):

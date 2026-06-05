@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration_11 verifies all 7 user-flagged parity regressions. BACKEND: All 16 existing component_pricing tests PASS (regression intact). Added /app/backend/tests/test_per_job_allocation.py with 5 new tests for the legacy `allocateJobCost` port — all 5 PASS. Verified MP-Individual + By MSF: total freightLine across components = 1500 × 1.15 = 1725.00 (exact), split proportionally so smallest oMSF gets smallest share, sellTotal correctly includes per-row freight share. Verified MP-Matched Set + Equal: each of 3 manufactured components gets 575.00 (1725/3) in slot 0. FRONTEND: Live-tested SA-260604-165816 (MP-Individual, 3 components, freightScope=Per Job). All 7 bug fixes confirmed: (1) btn-freight-update visible+enabled in MP+Per Job mode, (2) btn-freight-dash visible+enabled in MP+Per Job mode, (3) FOB→Local→Zone 2 click correctly sets Per-Job Freight to $60.00 and Job Totals row shows testid qt-perjob-freight-label with text 'Per-Job Freight: Local Delivery · Zone 2', (4) freight-carrier element with 'via PITT OHIO EXPRESS' is HIDDEN (count=0) when quoteFOB=LocalDelivery (was count=1 before Local click), (5) Route column shows hours for Crest ('Crest 1.0h') and CAD ('CAD 2.1h', 'CAD 0.7h') — confirmed for all routes not just CAD, (6) BOM tints applied correctly: qt-nav-comp-0 bg=#e8927c, qt-nav-comp-1 bg=rgba(176,140,245,0.133) border=#b08cf5, qt-nav-comp-2 bg=rgba(125,211,192,0.133) border=#7dd3c0 — matches BOM_TINTS[0..2]; qt-comp-section-0/1/2 each have 4px left border in their tint color, (7) iteration_10 regression intact (Per-Job pointer panel, Treatment-tile JLAP wiring, Update All button). Cost Report Order Total updated correctly to $5,134.56 after Local Delivery Zone 2 applied. No backend or frontend bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_component_pricing.py",
+    "/app/backend/tests/test_per_job_allocation.py",
+    "/app/test_reports/pytest/component_pricing_it11.xml",
+    "/app/test_reports/pytest/per_job_alloc_it11.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GOOD: engine_routes._alloc_job (lines 636-661) is a faithful port of legacy allocateJobCost — handles Equal vs By MSF, gracefully falls back to Equal when total_msf<=0, and zeroes out non-Manufactured slots (Purchased/Fulfillment get 0 share).",
+    "GOOD: Individual-mode allocation block (lines 674-723) correctly aggregates per-component oMSF before splitting and then sub-distributes each component's share across its rows by row-level oMSF. Math reconciles exactly to 1725.00 for the user-cited 1500 × 1.15 case.",
+    "GOOD: Matched-Set per-slot allocation (lines 724-777) keeps legacy parity — each slot allocates independently, supports per-slot freight overrides via job_freight_by_slot, applies freight markup once per slot.",
+    "GOOD: RightDashboard.jsx lines 452-460 — freight-carrier is now correctly gated on `s.freightCarrier && s.quoteFOB !== 'LocalDelivery'`. Verified live that carrier disappears the moment Zone 2 is picked.",
+    "GOOD: RightDashboard.jsx lines 395-451 — Per-Job mode now renders the Pointer panel + Ship-To/Markup + Update All + Dashboard. This matches the user's expectation of having the rate-lookup tools available in MP+Per Job mode.",
+    "GOOD: QuoteTableSec.jsx BOM_TINTS palette (#e8927c, #b08cf5, #7dd3c0, #e88dc4, #8cc8e8, #d4a76a, #9ca3af, #fbbf24) is applied uniformly to nav chips and section left-borders via tintFor(i). The visual hierarchy between BOM rows and Quote Table sections now matches.",
+    "MINOR (pre-existing, not iteration_11): test_component_pricing.py and test_per_job_allocation.py both read REACT_APP_BACKEND_URL via os.environ[...] which raises KeyError if pytest is run from a shell without the var exported. The frontend/.env contains it but pytest's CWD does not auto-load. Consider conftest.py with python-dotenv to source /app/frontend/.env at session start — would make CI/local runs frictionless. I worked around it by exporting on the command line."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_per_job_allocation.py (NEW — 5 tests covering Individual/By-MSF and Matched-Set/Equal Per-Job allocation parity)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 component_pricing regression + 5/5 new per-job allocation = 21/21 PASS)",
+    "frontend": "100% (7/7 user-flagged regressions verified fixed end-to-end + iteration_10 carry-over checks intact)"
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working",
+  "seed_data_creation": "Used existing auto-loaded sample quote SA-260604-165816 (Apex Display Group, MP-Individual, 3 manufactured components: Display Base / 60ct. Tray / Header). Quote has freightScope=Per Job preconfigured, which exercises every iteration_11 fix.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 7 critical parity regressions are fixed and verified. New regression file /app/backend/tests/test_per_job_allocation.py is now part of the safety net — keep green on any future engine_routes.py edits. If running pytest from a fresh shell, remember to `export REACT_APP_BACKEND_URL=$(grep ^REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2)` first. For UI re-verification, the simplest reproduction is: log in → open SA-260604-165816 (MP-Individual, 3 comps, freightScope=Per Job already set) → assert update/dashboard btns visible, then click any FOB Local button + tile-local-Zone2 → assert qt-perjob-freight-label text contains 'Local Delivery · Zone 2' and freight-carrier count=0.",
+  "rca of the issue": "Root causes already addressed by main agent before this test pass: (a) Per-Job allocation was missing the legacy split-by-oMSF math, fixed by porting `allocateJobCost` to _alloc_job; (b) FOB=LocalDelivery (no space) was breaking string-equality checks scattered across Job Totals label + carrier-hide guard, fixed by accepting both 'LocalDelivery' and 'Local Delivery'; (c) Update All & Dashboard were gated on `freightScope !== 'Per Job'`, fixed by adding the Per-Job branch that re-renders those controls; (d) Route column hours were gated on `route === 'CAD'`, fixed by checking `Number(r.cadHrs) > 0 && r.route`; (e) BOM tint palette was inconsistent between BOM section rows and Quote Table — unified via BOM_TINTS + tintFor() helper. Verification: all live in this iteration via the screenshots and selector probes captured above."
+}

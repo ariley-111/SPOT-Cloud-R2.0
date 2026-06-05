@@ -617,6 +617,165 @@ async def calculate_multi_part(
             "rows": rows_out,
         })
 
+    # ── Legacy parity: Allocate Per-Job freight + prepress across components ──
+    # Legacy `allocateJobCost(items, totalCost, method)` (spot_r1_5.jsx L897):
+    # "Equal" splits across Manufactured items; "By MSF" weights by item oMSF.
+    # Purchased/Fulfillment always get 0. We allocate PER SLOT (per qty tier) so
+    # multi-qty freight (jobFreightBySlot) flows correctly to each tier.
+    freight_scope = (payload.get("freightScope") or "").strip()
+    prepress_scope = (payload.get("prepressScope") or "").strip()
+    alloc_method = payload.get("freightAllocMethod") or "By MSF"
+    prep_alloc_method = payload.get("prepressAllocMethod") or "Equal"
+    job_freight_by_slot = payload.get("jobFreightBySlot") or {}
+    job_freight_flat = _safe_float(payload.get("jobFreightCost"))
+    job_prepress_flat = _safe_float(payload.get("jobPrepressCost"))
+    freight_markup = _safe_float(payload.get("freightMarkup") or 0.15)
+    job_freight_treat = payload.get("jobFreightTreatment") or "Separate Line"
+    job_prep_treat = payload.get("jobPrepressTreatment") or "Separate Line"
+
+    def _alloc_job(items_for_slot, total_cost, method):
+        """Port of legacy allocateJobCost. items_for_slot is a list of
+        {idx, type, oMSF} pairs aligned with component_pricing order. Returns
+        a list of $ allocations (same length). Purchased/Fulfillment get 0."""
+        n = len(items_for_slot)
+        out = [0.0] * n
+        if n == 0 or total_cost <= 0:
+            return out
+        mfg_idxs = [i for i, it in enumerate(items_for_slot) if (it["type"] or "Manufactured") == "Manufactured"]
+        if not mfg_idxs:
+            return out
+        if method == "Equal":
+            share = total_cost / len(mfg_idxs)
+            for i in mfg_idxs:
+                out[i] = share
+        else:
+            # By MSF — proportional. Fallback to Equal if no MSF data.
+            total_msf = sum(items_for_slot[i]["oMSF"] for i in mfg_idxs)
+            if total_msf <= 0:
+                share = total_cost / len(mfg_idxs)
+                for i in mfg_idxs:
+                    out[i] = share
+            else:
+                for i in mfg_idxs:
+                    out[i] = total_cost * (items_for_slot[i]["oMSF"] / total_msf)
+        return out
+
+    # Allocate per-slot when scope = Per Job. Affects componentPricing rows for
+    # each manufactured component, mirroring legacy line 3442 behavior.
+    if freight_scope == "Per Job" or prepress_scope == "Per Job":
+        # In MP-Individual each component lives at a unique slot, so a per-slot
+        # allocation would dump the whole job total on a single component. For
+        # Individual mode we instead allocate the total job cost across ALL
+        # components by each component's total oMSF (legacy parity for jobs
+        # that consolidate to a single freight shipment). Matched Set keeps
+        # the per-slot allocation because all components share each slot.
+        is_individual = pricing_mode == "Individual"
+
+        if is_individual:
+            # Compute total oMSF per component (sum of its rows' oMSFs)
+            items_for_alloc = []
+            for c in component_pricing:
+                tot_msf = sum(float(r.get("oMSF") or 0) for r in c["rows"])
+                items_for_alloc.append({
+                    "type": c["type"], "oMSF": tot_msf, "rows": c["rows"],
+                })
+            # Per-Job freight allocation
+            if freight_scope == "Per Job":
+                slot_freight = job_freight_flat * (1.0 + freight_markup)
+                allocs = _alloc_job(items_for_alloc, slot_freight, alloc_method)
+                for j, it in enumerate(items_for_alloc):
+                    share = allocs[j]
+                    if share <= 0 or not it["rows"]:
+                        continue
+                    # Distribute share across this component's rows by row oMSF
+                    rows = it["rows"]
+                    tot = sum(float(r.get("oMSF") or 0) for r in rows) or 1
+                    for r in rows:
+                        row_share = share * (float(r.get("oMSF") or 0) / tot) if tot > 0 else share / len(rows)
+                        r["freightLine"] = row_share if job_freight_treat == "Separate Line" else 0.0
+                        r["freightEmbed"] = row_share if job_freight_treat != "Separate Line" else 0.0
+                        base_sell = float(r["itemSell"])
+                        if r["freightEmbed"] > 0 and float(r["qty"] or 0) > 0:
+                            base_sell += r["freightEmbed"]
+                            r["itemSell"] = base_sell
+                            r["sellPc"] = base_sell / float(r["qty"])
+                            r["perM"] = r["sellPc"] * 1000.0
+                        r["sellTotal"] = base_sell + r["freightLine"] + float(r["dieLineCost"]) + float(r["prepressLineCost"]) + float(r["miscLineCost"])
+            # Per-Job prepress
+            if prepress_scope == "Per Job":
+                slot_prep = _safe_float(job_prepress_flat)
+                allocs_p = _alloc_job(items_for_alloc, slot_prep, prep_alloc_method)
+                for j, it in enumerate(items_for_alloc):
+                    share = allocs_p[j]
+                    if share <= 0 or not it["rows"]:
+                        continue
+                    rows = it["rows"]
+                    tot = sum(float(r.get("oMSF") or 0) for r in rows) or 1
+                    for r in rows:
+                        row_share = share * (float(r.get("oMSF") or 0) / tot) if tot > 0 else share / len(rows)
+                        r["prepressLineCost"] = row_share if job_prep_treat == "Separate Line" else 0.0
+                        base_sell = float(r["itemSell"])
+                        if job_prep_treat != "Separate Line" and float(r["qty"] or 0) > 0:
+                            base_sell += row_share
+                            r["itemSell"] = base_sell
+                            r["sellPc"] = base_sell / float(r["qty"])
+                            r["perM"] = r["sellPc"] * 1000.0
+                        r["sellTotal"] = base_sell + float(r["freightLine"]) + float(r["dieLineCost"]) + float(r["prepressLineCost"]) + float(r["miscLineCost"])
+        else:
+            # Matched Set: per-slot allocation (legacy line 3442 parity)
+            all_slots: set = set()
+            for c in component_pricing:
+                for r in c["rows"]:
+                    all_slots.add(r["slotIdx"])
+            for slot_i in sorted(all_slots):
+                items_for_slot = []
+                for c in component_pricing:
+                    row = next((r for r in c["rows"] if r["slotIdx"] == slot_i), None)
+                    items_for_slot.append({
+                        "idx": c["itemIndex"], "type": c["type"],
+                        "oMSF": float((row or {}).get("oMSF") or 0), "row": row,
+                    })
+                if freight_scope == "Per Job":
+                    raw = job_freight_by_slot.get(str(slot_i)) if isinstance(job_freight_by_slot, dict) else None
+                    if raw in (None, ""):
+                        raw = job_freight_by_slot.get(slot_i) if isinstance(job_freight_by_slot, dict) else None
+                    if raw in (None, ""):
+                        raw = job_freight_flat
+                    slot_freight = _safe_float(raw) * (1.0 + freight_markup)
+                    alloc = _alloc_job(items_for_slot, slot_freight, alloc_method)
+                    for j, it in enumerate(items_for_slot):
+                        if it["row"] is None:
+                            continue
+                        share = alloc[j]
+                        if share <= 0:
+                            continue
+                        it["row"]["freightLine"] = share if job_freight_treat == "Separate Line" else 0.0
+                        it["row"]["freightEmbed"] = share if job_freight_treat != "Separate Line" else 0.0
+                        base_sell = float(it["row"]["itemSell"])
+                        if it["row"]["freightEmbed"] > 0 and float(it["row"]["qty"] or 0) > 0:
+                            base_sell += it["row"]["freightEmbed"]
+                            it["row"]["itemSell"] = base_sell
+                            it["row"]["sellPc"] = base_sell / float(it["row"]["qty"])
+                            it["row"]["perM"] = it["row"]["sellPc"] * 1000.0
+                        it["row"]["sellTotal"] = base_sell + it["row"]["freightLine"] + float(it["row"]["dieLineCost"]) + float(it["row"]["prepressLineCost"]) + float(it["row"]["miscLineCost"])
+                if prepress_scope == "Per Job":
+                    slot_prep = _safe_float(job_prepress_flat)
+                    alloc_p = _alloc_job(items_for_slot, slot_prep, prep_alloc_method)
+                    for j, it in enumerate(items_for_slot):
+                        if it["row"] is None:
+                            continue
+                        share = alloc_p[j]
+                        if share <= 0:
+                            continue
+                        it["row"]["prepressLineCost"] = share if job_prep_treat == "Separate Line" else 0.0
+                        base_sell = float(it["row"]["itemSell"])
+                        if job_prep_treat != "Separate Line" and float(it["row"]["qty"] or 0) > 0:
+                            base_sell += share
+                            it["row"]["itemSell"] = base_sell
+                            it["row"]["sellPc"] = base_sell / float(it["row"]["qty"])
+                            it["row"]["perM"] = it["row"]["sellPc"] * 1000.0
+                        it["row"]["sellTotal"] = base_sell + float(it["row"]["freightLine"]) + float(it["row"]["dieLineCost"]) + float(it["row"]["prepressLineCost"]) + float(it["row"]["miscLineCost"])
+
     # ── Job-level totals (for footer when Per-Job costs exist) ───────────
     job_totals = {
         "freightScope": payload.get("freightScope") or "None",
@@ -625,6 +784,9 @@ async def calculate_multi_part(
         "jobFreightTreatment": payload.get("jobFreightTreatment") or "",
         "jobPrepressCost": _safe_float(payload.get("jobPrepressCost")),
         "jobPrepressTreatment": payload.get("jobPrepressTreatment") or "",
+        "freightAllocMethod": alloc_method,
+        "prepressAllocMethod": prep_alloc_method,
+        "jobFreightBySlot": job_freight_by_slot if isinstance(job_freight_by_slot, dict) else {},
     }
 
     meta = {
