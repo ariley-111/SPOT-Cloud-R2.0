@@ -6,6 +6,7 @@ import { freightQuote, compareRoutes } from "../../api/spot";
 import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
+import { calcShipment } from "../../lib/shipment";
 
 export default function RightDashboard() {
   const { active } = useQuote();
@@ -44,120 +45,93 @@ function FreightPanel({ s }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // Estimate shipment weight from the engine output of the selected qty row.
-  // Density tables from APICS BS-1505 standard corrugate weights (lbs / sq ft).
-  // Pallet ≈ 30 lbs each; assume 1 pallet per 40k sq ft (typical packout).
-  const lbsPerSqFt = (() => {
-    const flute = s.flute || "C";
-    // Mid-range medium weight per flute. C is the workhorse; B/E lighter.
-    const m = { B: 0.058, C: 0.078, E: 0.046, F: 0.040, "B/C": 0.110 };
-    return m[flute] || 0.078;
-  })();
-
-  // Pallet-stack estimator (WFC Skid Calc parity). For each component:
-  // - Stack pieces on a Standard 40×48 skid (most common for boxes)
-  // - pieces_per_layer = floor((48-0.5)/piece_W) × floor((40-0.5)/piece_L), try both orientations
-  // - max stack height 44" (5" skid + product ≤ 50" total)
-  // - skids = ceil(qty × thickness / (pieces_per_layer × max_height))
-  // - skid_wt = 75 lbs per skid (Std), 100 lbs (Large), 200 lbs (WF)
-  const computeShipmentWeight = () => {
-    const sel = s.selSlot ?? 0;
-    const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
-      ? s.bomItems : [{ state: s }];
-    let totalSqFt = 0;
-    let totalSkids = 0;
-    items.forEach((it) => {
-      const st = it.state || it;
-      const qty = parseInt((st.qtys || [])[sel] || st.qtys?.[0] || 0, 10);
-      const uw = parseFloat(st.oneUpW || 0);
-      const ul = parseFloat(st.oneUpL || 0);
-      if (qty <= 0 || uw <= 0 || ul <= 0) return;
-      // Sq-ft × waste/spoilage factor 1.25
-      totalSqFt += (uw * ul * qty * 1.25) / 144;
-      // Skid math — Standard 40×48, allow 0.5" guard each side
-      const longSide = Math.max(uw, ul), shortSide = Math.min(uw, ul);
-      const piecesPerLayer = Math.max(
-        Math.floor((48 - 0.5) / longSide) * Math.floor((40 - 0.5) / shortSide),
-        Math.floor((48 - 0.5) / shortSide) * Math.floor((40 - 0.5) / longSide),
-        1
-      );
-      // Estimate caliper ≈ 0.16" for typical C-flute corrugate
-      const caliperIn = ({ B: 0.125, C: 0.1875, E: 0.0625, F: 0.05, "B/C": 0.236 })[st.flute || "C"] || 0.1875;
-      // Stacks of 44" max → stack_pieces = floor(44/caliper)
-      const stackPieces = Math.max(1, Math.floor(44 / caliperIn));
-      const skids = Math.max(1, Math.ceil(qty / (piecesPerLayer * stackPieces)));
-      totalSkids += skids;
+  // Build per-component construction spec (used in calcShipment). For the
+  // active item we read live state (s.*); for the others we read each
+  // bomItem.state. Matches legacy updateAllFreight L4326-4328 selection.
+  const activeIdx = s.activeItemIdx ?? 0;
+  const buildItems = () => {
+    const items = Array.isArray(s.bomItems) && s.bomItems.length > 0 ? s.bomItems : null;
+    if (!items) {
+      return [{
+        boardGrade: s.boardGrade, flute: s.flute,
+        outsideLiner: s.outsideLiner || "None",
+        insideLiner: s.insideLiner || "None",
+        medium: s.medium || "None",
+        oneUpW: parseFloat(s.oneUpW || 0),
+        oneUpL: parseFloat(s.oneUpL || 0),
+        qtys: s.qtys || [],
+      }];
+    }
+    return items.map((it, i) => {
+      const st = (i === activeIdx)
+        ? { boardGrade: s.boardGrade, flute: s.flute,
+            outsideLiner: s.outsideLiner, insideLiner: s.insideLiner, medium: s.medium,
+            oneUpW: s.oneUpW, oneUpL: s.oneUpL, qtys: s.qtys }
+        : (it.state || {});
+      return {
+        boardGrade: st.boardGrade,
+        flute: st.flute,
+        outsideLiner: st.outsideLiner || "None",
+        insideLiner: st.insideLiner || "None",
+        medium: st.medium || "None",
+        oneUpW: parseFloat(st.oneUpW || 0),
+        oneUpL: parseFloat(st.oneUpL || 0),
+        qtys: st.qtys || [],
+      };
     });
-    const boardLbs = totalSqFt * lbsPerSqFt;
-    const palletLbs = totalSkids * 75;     // Standard 40×48 skid weight
-    return {
-      lbs: Math.max(100, Math.round(boardLbs + palletLbs)),
-      skids: totalSkids, sqFt: Math.round(totalSqFt),
-    };
   };
-  const shipmentEst = computeShipmentWeight();
-  const estimatedWeight = shipmentEst.lbs;
 
-  // Per-component shipment-weight breakdown for proportional Per-Item freight
-  // allocation. CRITICAL legacy parity: we consolidate ALL pieces into ONE
-  // pallet load (legacy treats the job as a single LTL shipment), compute skid
-  // count ONCE for the consolidated load, then attribute each component's
-  // board weight + a pro-rata share of the consolidated pallet weight. This
-  // matches legacy weight calc that gave 2 skids @ 864 lbs (vs our previous
-  // per-component summing that mistakenly produced 4 skids @ 691 lbs).
-  const computePerItemShipmentWeight = () => {
-    const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
-      ? s.bomItems : [{ state: s }];
-    // Pass 1: per-component board weight and footprint
-    const perComp = items.map((it) => {
-      const st = it.state || it;
+  // Per-item shipment using legacy calcShipment(...) verbatim. Returns array
+  // aligned to bomItems (or single entry for Simple). Each entry has the same
+  // shape as legacy calcShipment output.
+  const shipmentForQtySlot = (slotIndex) => {
+    const items = buildItems();
+    return items.map((it) => {
+      const qty = parseInt((it.qtys || [])[slotIndex] || (it.qtys || [])[0] || 0, 10);
+      const uw = it.oneUpW, ul = it.oneUpL;
+      if (qty <= 0 || uw <= 0 || ul <= 0) {
+        return { totalWeight: 0, skidCount: 0, trailerFeet: 0, productWeight: 0 };
+      }
+      // oMSF approximation when engine shippedMSF not available in this scope.
+      const oMSF = (uw * ul * qty) / 144 / 1000;
+      return calcShipment(
+        it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
+        oMSF, uw, ul, qty
+      );
+    });
+  };
+
+  // Per-item shipment at each component's OWN first-non-zero qty.
+  const shipmentForOwnQtys = () => {
+    const items = buildItems();
+    return items.map((it) => {
       let qty = 0;
-      const qtys = st.qtys || [];
+      const qtys = it.qtys || [];
       for (let i = 0; i < qtys.length; i++) {
         const v = parseInt(qtys[i] || 0, 10);
         if (v > 0) { qty = v; break; }
       }
-      const uw = parseFloat(st.oneUpW || 0);
-      const ul = parseFloat(st.oneUpL || 0);
-      if (qty <= 0 || uw <= 0 || ul <= 0) return { lbs: 0, skids: 0, sqFt: 0, boardLbs: 0 };
-      const sqFt = (uw * ul * qty * 1.25) / 144;
-      const boardLbs = sqFt * lbsPerSqFt;
-      return { boardLbs, sqFt: Math.round(sqFt), qty, uw, ul, flute: st.flute };
-    });
-    // Pass 2: ONE consolidated skid count using the dominant component's footprint
-    // (the one with the largest area × qty contribution). Approximates legacy's
-    // "biggest piece sets the pallet pattern" behavior.
-    let dominant = perComp[0];
-    let maxBoard = 0;
-    perComp.forEach((p) => { if ((p.boardLbs || 0) > maxBoard) { maxBoard = p.boardLbs; dominant = p; } });
-    const totalQty = perComp.reduce((a, p) => a + (p.qty || 0), 0);
-    let consolidatedSkids = 0;
-    if (dominant && dominant.uw && dominant.ul && totalQty > 0) {
-      const longSide = Math.max(dominant.uw, dominant.ul);
-      const shortSide = Math.min(dominant.uw, dominant.ul);
-      const piecesPerLayer = Math.max(
-        Math.floor((48 - 0.5) / longSide) * Math.floor((40 - 0.5) / shortSide),
-        Math.floor((48 - 0.5) / shortSide) * Math.floor((40 - 0.5) / longSide),
-        1,
-      );
-      const caliperIn = ({ B: 0.125, C: 0.1875, E: 0.0625, F: 0.05, "B/C": 0.236 })[dominant.flute || "C"] || 0.1875;
-      const stackPieces = Math.max(1, Math.floor(44 / caliperIn));
-      consolidatedSkids = Math.max(1, Math.ceil(totalQty / (piecesPerLayer * stackPieces)));
-    }
-    const totalBoardLbs = perComp.reduce((a, p) => a + (p.boardLbs || 0), 0);
-    const totalPalletLbs = consolidatedSkids * 75;
-    const totalShipLbs = Math.max(100, Math.round(totalBoardLbs + totalPalletLbs));
-    // Pass 3: per-component lbs = board lbs + pro-rata pallet share
-    return perComp.map((p) => {
-      if (!p.boardLbs) return { lbs: 0, skids: 0, sqFt: 0 };
-      const palletShare = totalBoardLbs > 0 ? totalPalletLbs * (p.boardLbs / totalBoardLbs) : 0;
-      return {
-        lbs: Math.max(0, Math.round(p.boardLbs + palletShare)),
-        skids: consolidatedSkids,  // shared across the job
-        sqFt: p.sqFt,
-      };
+      const uw = it.oneUpW, ul = it.oneUpL;
+      if (qty <= 0 || uw <= 0 || ul <= 0) {
+        return { totalWeight: 0, skidCount: 0, trailerFeet: 0, productWeight: 0, qty: 0 };
+      }
+      const oMSF = (uw * ul * qty) / 144 / 1000;
+      return { ...calcShipment(
+        it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
+        oMSF, uw, ul, qty
+      ), qty };
     });
   };
+
+  // Aggregate weight for the Update-All header/summary. Sums each component's
+  // own-qty calcShipment totalWeight + skidCount (legacy: combined LTL load).
+  const shipmentEst = (() => {
+    const per = shipmentForOwnQtys();
+    const lbs = per.reduce((a, p) => a + (p.totalWeight || 0), 0);
+    const skids = per.reduce((a, p) => a + (p.skidCount || 0), 0);
+    return { lbs: Math.max(100, Math.round(lbs)), skids };
+  })();
+  const estimatedWeight = shipmentEst.lbs;
 
   const updateFreight = async () => {
     if (!s.destZip) { setErr("Need ship-to ZIP first"); return; }
@@ -181,38 +155,42 @@ function FreightPanel({ s }) {
         return;
       }
 
-      // Per-Item (MP): legacy `updateAllFreight` (spot_r1_5.jsx L4313) gets ONE
-      // combined-shipment quote for the whole job, then ALLOCATES that single
-      // total across components proportionally by each component's weight (not
-      // by fetching N individual quotes — that hits LTL minimums per shipment
-      // and over-counts. Legacy: combined ship quote $X → per-component
-      // share = X * (compWeightLbs / totalWeightLbs)).
+      // Per-Item (MP) — LEGACY PARITY (spot_r1_5.jsx L4313 updateAllFreight):
+      // For each component, compute its OWN calcShipment weight at its own
+      // first-non-zero qty tier, sum to combined weight, fire ONE UTS quote
+      // for that combined load, then allocate by weight share. Mirrors the
+      // legacy "combined shipment, proportional allocation" pattern exactly
+      // (legacy uses per-slot combined; we collapse to per-component own-qty
+      // here since the UI carries one freight value per item).
       if (isMP && (scope === "None" || scope === "Per Item")) {
-        const perItem = computePerItemShipmentWeight();
-        const totalWeight = perItem.reduce((a, p) => a + (p.lbs || 0), 0);
-        if (totalWeight <= 0) {
-          throw new Error("No qty/dims on any component — set qty + 1-up dims first.");
-        }
-        // Single combined-shipment quote
+        // Per-component own-qty shipments (legacy calcShipment, verbatim)
+        const perItem = shipmentForOwnQtys();
+        const combinedWeight = perItem.reduce((a, p) => a + (p.totalWeight || 0), 0);
+        if (combinedWeight <= 0) { setErr("No priceable quantities for freight"); return; }
+
+        // ONE UTS quote for the combined load
         const r = await freightQuote({
-          destZip: s.destZip, weightLbs: totalWeight, freightClass: "70",
+          destZip: s.destZip, weightLbs: Math.max(100, Math.round(combinedWeight)),
+          freightClass: "70",
         });
-        const totalFreight = Number(r.totalAmount || 0);
-        const carrier = r.carrier || "";
-        const transit = r.transitDays != null ? String(r.transitDays) : "";
-        // Allocate proportionally by weight (legacy weight allocation parity)
+        const tierTotal = Number(r.totalAmount || 0);
+
+        // Allocate proportionally by per-component weight share
+        let totalAllocated = 0;
         const nextBom = (s.bomItems || []).map((bi, i) => {
-          const w = perItem[i]?.lbs || 0;
-          if (w <= 0) return bi;  // no qty → no freight
-          const share = totalFreight * (w / totalWeight);
+          const myWeight = perItem[i]?.totalWeight || 0;
+          if (myWeight <= 0) return bi;
+          const share = combinedWeight > 0 ? myWeight / combinedWeight : 0;
+          const myShare = Math.round(share * tierTotal * 100) / 100;
+          totalAllocated += myShare;
           return {
             ...bi,
             state: {
               ...(bi.state || {}),
-              freightCost: share.toFixed(2),  // base $ for this component
+              freightCost: myShare.toFixed(2),
               freightTreatment: (bi.state?.freightTreatment === "None") ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
-              freightCarrier: carrier,
-              freightTransit: transit,
+              freightCarrier: r.carrier || "",
+              freightTransit: r.transitDays != null ? String(r.transitDays) : "",
               quoteFOB: "Destination",
             },
           };
@@ -220,17 +198,15 @@ function FreightPanel({ s }) {
         const patch = {
           bomItems: nextBom,
           quoteFOB: "Destination",
-          freightCarrier: carrier,
-          freightTransit: transit,
+          freightCarrier: r.carrier || "",
+          freightTransit: r.transitDays != null ? String(r.transitDays) : "",
           freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
         };
-        // Sync active item's surface freight value to match its bomItem entry
         const activeBi = nextBom[s.activeItemIdx ?? 0];
-        if (activeBi && activeBi.state) {
-          patch.freightCost = activeBi.state.freightCost || "0";
-        }
+        if (activeBi && activeBi.state) patch.freightCost = activeBi.state.freightCost || "0";
         setManyFields(patch);
-        pushToast(`Per-Item Freight — ${fmtMoney(totalFreight)} via ${carrier} allocated across ${perItem.filter(p => p.lbs > 0).length} components by weight (${totalWeight.toLocaleString()} lbs total)`, "ok");
+        const totalSkids = perItem.reduce((a, p) => a + (p.skidCount || 0), 0);
+        pushToast(`Per-Item Freight ${fmtMoney(totalAllocated)} via ${r.carrier} · ${totalSkids} skids · ${Math.round(combinedWeight)} lbs combined`, "ok");
         return;
       }
 
