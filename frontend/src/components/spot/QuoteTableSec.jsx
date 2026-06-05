@@ -1,5 +1,5 @@
 /* eslint-disable */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
@@ -137,6 +137,11 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           bomItems={s.bomItems || []}
           activeItemIdx={s.activeItemIdx ?? 0}
           excludeMap={s.exportExcludeByComponent || {}}
+          quoteFOB={s.quoteFOB || ""}
+          localDeliveryZone={s.localDeliveryZone || ""}
+          freightCarrier={s.freightCarrier || ""}
+          topQtys={s.qtys || []}
+          jobFreightBySlot={s.jobFreightBySlot || {}}
           setField={setField}
         />
       ) : (
@@ -329,7 +334,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────
 // Each component is its own collapsible section with its own qty rows.
 // Scales cleanly to 25+ components via expand/collapse controls.
-function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, setField }) {
+function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, topQtys, jobFreightBySlot, setField }) {
   // Default: first 3 components expanded, plus the BOM-selected one
   const [expanded, setExpanded] = useState(() => {
     const init = {};
@@ -338,13 +343,21 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
     });
     return init;
   });
-  // Auto-expand and scroll-into-view when user picks a different component in BOM
+  // Track per-component selected qty row (default = first row).
+  // Keyed by itemId so the selection survives across engine recomputations.
+  const [selRowByComp, setSelRowByComp] = useState({});
+
+  // Auto-scroll-into-view fires ONLY when the user changes the active BOM
+  // component (not on every engine recompute / data refresh). We track the
+  // previous activeItemIdx in a ref to detect the actual user intent.
+  const prevActiveRef = useRef(activeItemIdx);
   useEffect(() => {
+    if (prevActiveRef.current === activeItemIdx) return;  // not a user-initiated change
+    prevActiveRef.current = activeItemIdx;
     const target = componentPricing.find((c) => c.itemIndex === activeItemIdx);
     if (!target) return;
     const k = target.itemId || target.itemIndex;
     setExpanded((prev) => prev[k] ? prev : { ...prev, [k]: true });
-    // Scroll the selected section into view (smooth, top-aligned)
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-comp-section="${k}"]`);
       if (el && typeof el.scrollIntoView === "function") {
@@ -411,21 +424,24 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
         {componentPricing.map((c) => {
           const k = c.itemId || c.itemIndex;
           const open = !!expanded[k];
+          const isActive = c.itemIndex === activeItemIdx;
           return (
             <button key={k} data-testid={`qt-nav-comp-${c.itemIndex}`}
               onClick={() => {
+                // Selecting a nav chip: highlight the matching component (sync
+                // BOM activeItemIdx) AND expand its section. Auto-scroll fires
+                // via the existing useEffect when activeItemIdx changes.
                 setExpanded((p) => ({ ...p, [k]: true }));
-                setTimeout(() => {
-                  const el = document.querySelector(`[data-comp-section="${k}"]`);
-                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                }, 50);
+                setField("activeItemIdx", c.itemIndex);
               }}
               style={{
-                all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 600,
+                all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 700,
                 padding: "3px 8px", borderRadius: 10,
-                background: open ? "var(--spot-accent-soft)" : "var(--spot-bg3)",
-                color: open ? "var(--spot-accent)" : "var(--spot-text2)",
-                border: `1px solid ${open ? "var(--spot-accent)" : "var(--spot-border)"}`,
+                background: isActive
+                  ? "var(--spot-accent)"
+                  : (open ? "var(--spot-accent-soft)" : "var(--spot-bg3)"),
+                color: isActive ? "#fff" : (open ? "var(--spot-accent)" : "var(--spot-text2)"),
+                border: `1px solid ${isActive || open ? "var(--spot-accent)" : "var(--spot-border)"}`,
               }} title={c.desc}>
               {c.itemIndex + 1}. {(c.desc || `Item ${c.itemIndex + 1}`).slice(0, 24)}
             </button>
@@ -438,8 +454,25 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
         const k = c.itemId || c.itemIndex;
         const open = !!expanded[k];
         const isBomSelected = c.itemIndex === activeItemIdx;
-        const compSell = (c.rows || []).reduce((a, r) => a + Number(r.itemSell || 0), 0);
-        const totalQtyCount = (c.rows || []).length;
+        const compRows = c.rows || [];
+        const totalQtyCount = compRows.length;
+        // Selected qty row (default = first available row).
+        const selRowIdx = Math.min(
+          selRowByComp[k] ?? 0,
+          Math.max(0, totalQtyCount - 1),
+        );
+        const selRow = compRows[selRowIdx];
+        // Header total reflects the selected qty row's full sellTotal.
+        const headerTotal = selRow ? Number(selRow.sellTotal || 0) : 0;
+        // Breakdown of what's included in the selected total
+        const breakdownParts = [];
+        if (selRow) {
+          breakdownParts.push(`base ${fmtMoney(selRow.itemSell || 0)}`);
+          if (Number(selRow.freightLine) > 0)      breakdownParts.push(`frt ${fmtMoney(selRow.freightLine)}`);
+          if (Number(selRow.dieLineCost) > 0)      breakdownParts.push(`die ${fmtMoney(selRow.dieLineCost)}`);
+          if (Number(selRow.prepressLineCost) > 0) breakdownParts.push(`prep ${fmtMoney(selRow.prepressLineCost)}`);
+          if (Number(selRow.miscLineCost) > 0)     breakdownParts.push(`misc ${fmtMoney(selRow.miscLineCost)}`);
+        }
         const bs = c.boardSpec || {};
         const specLine = [
           bs.custIdent,
@@ -463,7 +496,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
             <div onClick={() => toggle(k)}
               style={{
                 cursor: "pointer", padding: "8px 12px",
-                display: "flex", alignItems: "center", gap: 12,
+                display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
                 background: isBomSelected
                   ? "var(--spot-accent-soft)"
                   : (open ? "var(--spot-bg3)" : "transparent"),
@@ -497,14 +530,26 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
               {specLine && (
                 <span style={{ fontSize: 11, color: "var(--spot-text2)" }}>{specLine}</span>
               )}
-              <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: "var(--spot-accent)" }}>
-                {fmtMoney(compSell)}
-              </span>
+              {/* Header total: reflects the SELECTED qty row, with breakdown of what it includes. */}
+              <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-accent)" }}
+                  data-testid={`qt-comp-${c.itemIndex}-sel-total`}>
+                  {selRow ? `@${fmtInt(selRow.qty)}: ${fmtMoney(headerTotal)}` : "—"}
+                </span>
+                {breakdownParts.length > 0 && (
+                  <span style={{ fontSize: 10, color: "var(--spot-text3)", marginTop: 1 }}
+                    title="Breakdown of the selected quantity's total">
+                    {breakdownParts.join(" + ")}
+                  </span>
+                )}
+              </div>
             </div>
 
             {open && (
               <ComponentSubTable
                 comp={c}
+                selRowIdx={selRowIdx}
+                onSelectRow={(idx) => setSelRowByComp((p) => ({ ...p, [k]: idx }))}
                 isRowExcluded={isRowExcluded}
                 toggleRowExclude={toggleRowExclude}
               />
@@ -513,54 +558,135 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
         );
       })}
 
-      {/* Job Totals footer — only when any per-job cost exists */}
-      {(perJobFreight > 0 || perJobPrepress > 0 || componentPricing.length > 1) && (
-        <div data-testid="qt-job-totals" style={{
-          marginTop: 10, padding: "10px 14px", borderRadius: 5,
-          background: "var(--spot-bg3)", border: "1px solid var(--spot-line)",
-        }}>
-          <div style={{
-            fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
-            textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6,
-          }}>Job Totals</div>
-          <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-            <tbody>
-              <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Items (base sell)</td>
-                <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseSell)}</td></tr>
-              {baseFreight > 0 && (
-                <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Freight (sum)</td>
-                  <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseFreight)}</td></tr>
+      {/* Job Totals footer — labels per-job freight as Local Delivery + Zone
+          when applicable; surfaces per-qty freight when costs vary by slot. */}
+      {(perJobFreight > 0 || perJobPrepress > 0 || componentPricing.length > 1) && (() => {
+        // Detect per-qty variation: any component with 2+ qty rows AND freight differs
+        const anyMultiQty = componentPricing.some((c) => (c.rows || []).length > 1);
+        // Aggregate per-slot data: items+freight summed across components per slot
+        const perSlotAgg = {};  // slotIdx -> { qty, items, freight, die, prep }
+        componentPricing.forEach((c) => {
+          (c.rows || []).forEach((r) => {
+            const si = r.slotIdx;
+            if (!perSlotAgg[si]) perSlotAgg[si] = { slotIdx: si, qty: r.qty, items: 0, freight: 0, die: 0, prep: 0 };
+            perSlotAgg[si].items   += Number(r.itemSell || 0);
+            perSlotAgg[si].freight += Number(r.freightLine || 0);
+            perSlotAgg[si].die     += Number(r.dieLineCost || 0);
+            perSlotAgg[si].prep    += Number(r.prepressLineCost || 0);
+          });
+        });
+        const perSlotList = Object.values(perSlotAgg).sort((a, b) => a.slotIdx - b.slotIdx);
+        const isLocalDelivery = quoteFOB === "Local Delivery";
+        const perJobFreightLabel = isLocalDelivery
+          ? `Per-Job Freight: Local Delivery${localDeliveryZone ? ` · ${localDeliveryZone}` : ""}`
+          : (freightCarrier
+            ? `Per-Job Freight · via ${freightCarrier}`
+            : "Per-Job Freight");
+        // Per-slot Per-Job freight: jobFreightBySlot may hold different freight
+        // values per qty tier (legacy parity). Falls back to flat jobFreightCost.
+        const perJobBySlot = perSlotList.map((p) => {
+          const v = jobFreightBySlot[p.slotIdx];
+          const amt = (v !== undefined && v !== "" && v !== null) ? Number(v) : (perJobFreight / Math.max(1, perSlotList.length));
+          return { ...p, perJobFreightAtSlot: amt };
+        });
+
+        return (
+          <div data-testid="qt-job-totals" style={{
+            marginTop: 10, padding: "10px 14px", borderRadius: 5,
+            background: "var(--spot-bg3)", border: "1px solid var(--spot-line)",
+          }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+              textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span>Job Totals</span>
+              {anyMultiQty && (
+                <span style={{ fontSize: 9, color: "var(--spot-text3)", fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>
+                  Costs vary by qty — breakdown shown by quantity tier
+                </span>
               )}
-              {baseDie > 0 && (
-                <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Die (sum)</td>
-                  <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseDie)}</td></tr>
-              )}
-              {basePrepress > 0 && (
-                <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Prepress (sum)</td>
-                  <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(basePrepress)}</td></tr>
-              )}
-              {perJobFreight > 0 && (
-                <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Job Freight</td>
-                  <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td></tr>
-              )}
-              {perJobPrepress > 0 && (
-                <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Job Prepress</td>
-                  <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobPrepress)}</td></tr>
-              )}
-              <tr style={{ borderTop: "1px solid var(--spot-line)" }}>
-                <td style={{ padding: "6px 0 0", fontWeight: 700, color: "var(--spot-accent)" }}>Quote Grand Total</td>
-                <td style={{ padding: "6px 0 0", textAlign: "right", fontWeight: 700, fontSize: 14,
-                  color: "var(--spot-accent)" }} data-testid="qt-grand-total">{fmtMoney(grandTotal)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+
+            {anyMultiQty ? (
+              // Per-qty breakdown layout (legacy: jobFreightBySlot for multi-qty per-job)
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }} data-testid="qt-job-totals-by-qty">
+                <thead><tr style={{ borderBottom: "1px solid var(--spot-line)" }}>
+                  <th style={{ ...thMini, textAlign: "left" }}>Qty Tier</th>
+                  <th style={{ ...thMini, textAlign: "right" }}>Items</th>
+                  {baseFreight > 0   && <th style={{ ...thMini, textAlign: "right" }}>Per-Item Freight</th>}
+                  {baseDie > 0       && <th style={{ ...thMini, textAlign: "right" }}>Die</th>}
+                  {basePrepress > 0  && <th style={{ ...thMini, textAlign: "right" }}>Prepress</th>}
+                  {perJobFreight > 0 && <th style={{ ...thMini, textAlign: "right" }}>{isLocalDelivery ? "Local Delivery" : "Per-Job Freight"}</th>}
+                  <th style={{ ...thMini, textAlign: "right", color: "var(--spot-accent)" }}>Total @ Tier</th>
+                </tr></thead>
+                <tbody>
+                  {perJobBySlot.map((p) => {
+                    const tierTotal = p.items + p.freight + p.die + p.prep
+                      + (perJobFreight > 0 ? p.perJobFreightAtSlot : 0);
+                    return (
+                      <tr key={p.slotIdx} style={{ borderBottom: "1px solid var(--spot-line)" }}
+                        data-testid={`qt-job-totals-tier-${p.slotIdx}`}>
+                        <td style={{ padding: "4px 6px", fontWeight: 600 }}>@ {fmtInt(p.qty)}</td>
+                        <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.items)}</td>
+                        {baseFreight > 0   && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.freight)}</td>}
+                        {baseDie > 0       && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.die)}</td>}
+                        {basePrepress > 0  && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.prep)}</td>}
+                        {perJobFreight > 0 && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.perJobFreightAtSlot)}</td>}
+                        <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 700,
+                          color: "var(--spot-accent)" }}>{fmtMoney(tierTotal)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              // Simple single-qty layout
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Items (base sell)</td>
+                    <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseSell)}</td></tr>
+                  {baseFreight > 0 && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Freight (sum)</td>
+                      <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseFreight)}</td></tr>
+                  )}
+                  {baseDie > 0 && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Die (sum)</td>
+                      <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseDie)}</td></tr>
+                  )}
+                  {basePrepress > 0 && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Prepress (sum)</td>
+                      <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(basePrepress)}</td></tr>
+                  )}
+                  {perJobFreight > 0 && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-perjob-freight-label">
+                      {perJobFreightLabel}</td>
+                      <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td></tr>
+                  )}
+                  {perJobPrepress > 0 && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Job Prepress</td>
+                      <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobPrepress)}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            <div style={{
+              borderTop: "1px solid var(--spot-line)", marginTop: 6, paddingTop: 6,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-accent)" }}>Quote Grand Total</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--spot-accent)" }}
+                data-testid="qt-grand-total">{fmtMoney(grandTotal)}</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
-function ComponentSubTable({ comp, isRowExcluded, toggleRowExclude }) {
+function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggleRowExclude }) {
   const rows = comp.rows || [];
   // Sub-table column set matches the user's requested legacy order:
   // Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF, Freight, Sheet Size, #Out, Route
@@ -603,15 +729,25 @@ function ComponentSubTable({ comp, isRowExcluded, toggleRowExclude }) {
         <tbody>
           {rows.map((r, i) => {
             const excl = isRowExcluded(comp.itemId, r.slotIdx);
+            const isSelRow = i === selRowIdx;
             const cadLabel = (r.route === "CAD" && Number(r.cadHrs) > 0)
               ? `${r.route} ${Number(r.cadHrs).toFixed(1)}h`
               : (r.route || "—");
             const cellBase = { padding: "3px 6px" };
             return (
               <tr key={i} data-testid={`qt-comp-${comp.itemIndex}-row-${i}`}
-                style={{ borderBottom: "1px solid var(--spot-line)", opacity: excl ? 0.45 : 1 }}>
+                data-row-selected={isSelRow ? "true" : "false"}
+                onClick={() => onSelectRow && onSelectRow(i)}
+                style={{
+                  cursor: "pointer",
+                  borderBottom: "1px solid var(--spot-line)",
+                  opacity: excl ? 0.45 : 1,
+                  background: isSelRow ? "var(--spot-accent-soft)" : "transparent",
+                  outline: isSelRow ? "1px solid var(--spot-accent)" : "none",
+                  outlineOffset: "-1px",
+                }}>
                 <td style={{ ...cellBase, textAlign: "center" }}
-                  onClick={() => toggleRowExclude(comp.itemId, r.slotIdx)}>
+                  onClick={(e) => { e.stopPropagation(); toggleRowExclude(comp.itemId, r.slotIdx); }}>
                   <span style={{
                     display: "inline-block", width: 13, height: 13, borderRadius: 3,
                     border: `2px solid ${excl ? "var(--spot-text3)" : "var(--spot-accent)"}`,
@@ -620,7 +756,16 @@ function ComponentSubTable({ comp, isRowExcluded, toggleRowExclude }) {
                     cursor: "pointer",
                   }}>{excl ? "" : "✓"}</span>
                 </td>
-                <td style={{ ...cellBase, textAlign: "right", fontWeight: 600 }}>{fmtInt(r.qty)}</td>
+                <td style={{ ...cellBase, textAlign: "right", fontWeight: isSelRow ? 800 : 600 }}>
+                  {fmtInt(r.qty)}
+                  {isSelRow && (
+                    <span style={{
+                      marginLeft: 4, fontSize: 8, fontWeight: 700, padding: "0px 4px",
+                      borderRadius: 2, background: "var(--spot-accent)", color: "#fff",
+                      verticalAlign: "middle",
+                    }}>SEL</span>
+                  )}
+                </td>
                 <td style={{ ...cellBase, textAlign: "right" }}>{fmtMoney(r.sellPc, 2)}</td>
                 <td style={{ ...cellBase, textAlign: "right",
                   color: (r.gmPct || 0) >= 0 ? "var(--spot-green)" : "var(--spot-err)", fontWeight: 600 }}>
@@ -756,3 +901,8 @@ const tbtnAccent = (c) => ({
   padding: "4px 10px", borderRadius: 3,
   background: `${c}22`, color: c, border: `1px solid ${c}44`,
 });
+const thMini = {
+  padding: "3px 6px", fontSize: 10, fontWeight: 700,
+  textTransform: "uppercase", letterSpacing: ".06em",
+  color: "var(--spot-text3)",
+};

@@ -98,14 +98,104 @@ function FreightPanel({ s }) {
   const shipmentEst = computeShipmentWeight();
   const estimatedWeight = shipmentEst.lbs;
 
+  // Per-component shipment weight calculator (for MP+Per Item freight allocation).
+  // Returns array indexed by component idx with { lbs, skids, sqFt }.
+  const computePerItemShipmentWeight = () => {
+    const sel = s.selSlot ?? 0;
+    const items = Array.isArray(s.bomItems) && s.bomItems.length > 0
+      ? s.bomItems : [{ state: s }];
+    return items.map((it) => {
+      const st = it.state || it;
+      const qty = parseInt((st.qtys || [])[sel] || st.qtys?.[0] || 0, 10);
+      const uw = parseFloat(st.oneUpW || 0);
+      const ul = parseFloat(st.oneUpL || 0);
+      if (qty <= 0 || uw <= 0 || ul <= 0) return { lbs: 0, skids: 0, sqFt: 0 };
+      const sqFt = (uw * ul * qty * 1.25) / 144;
+      const longSide = Math.max(uw, ul), shortSide = Math.min(uw, ul);
+      const piecesPerLayer = Math.max(
+        Math.floor((48 - 0.5) / longSide) * Math.floor((40 - 0.5) / shortSide),
+        Math.floor((48 - 0.5) / shortSide) * Math.floor((40 - 0.5) / longSide),
+        1,
+      );
+      const caliperIn = ({ B: 0.125, C: 0.1875, E: 0.0625, F: 0.05, "B/C": 0.236 })[st.flute || "C"] || 0.1875;
+      const stackPieces = Math.max(1, Math.floor(44 / caliperIn));
+      const skids = Math.max(1, Math.ceil(qty / (piecesPerLayer * stackPieces)));
+      const boardLbs = sqFt * lbsPerSqFt;
+      const palletLbs = skids * 75;
+      return { lbs: Math.max(100, Math.round(boardLbs + palletLbs)), skids, sqFt: Math.round(sqFt) };
+    });
+  };
+
   const updateFreight = async () => {
     if (!s.destZip) { setErr("Need ship-to ZIP first"); return; }
     setBusy(true); setErr("");
     try {
+      const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
+      const scope = s.freightScope || "None";
+
+      // Per-Job: one combined-shipment quote → jobFreightCost (whole job).
+      if (isMP && scope === "Per Job") {
+        const r = await freightQuote({
+          destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
+        });
+        setManyFields({
+          jobFreightCost: String(r.totalAmount), quoteFOB: "Destination",
+          freightCarrier: r.carrier || "",
+          freightTransit: r.transitDays != null ? String(r.transitDays) : "",
+          jobFreightTreatment: s.jobFreightTreatment || "Separate Line",
+        });
+        pushToast(`Per-Job Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
+        return;
+      }
+
+      // Per-Item (MP): one freightQuote per component, store on each item.state.freightCost.
+      if (isMP && (scope === "None" || scope === "Per Item")) {
+        const perItem = computePerItemShipmentWeight();
+        let updated = 0, totalFreight = 0, lastCarrier = "";
+        const nextBom = await Promise.all((s.bomItems || []).map(async (bi, i) => {
+          const w = perItem[i]?.lbs || 0;
+          if (w <= 0) return bi;
+          try {
+            const r = await freightQuote({
+              destZip: s.destZip, weightLbs: w, freightClass: "70",
+            });
+            updated++;
+            totalFreight += Number(r.totalAmount || 0);
+            lastCarrier = r.carrier || lastCarrier;
+            return {
+              ...bi,
+              state: {
+                ...(bi.state || {}),
+                freightCost: String(r.totalAmount),
+                freightTreatment: (bi.state?.freightTreatment === "None") ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
+                freightCarrier: r.carrier || "",
+                freightTransit: r.transitDays != null ? String(r.transitDays) : "",
+                quoteFOB: "Destination",
+              },
+            };
+          } catch {
+            return bi;
+          }
+        }));
+        // Patch active component's local fields + the bomItems array + top-level carrier display
+        const patch = {
+          bomItems: nextBom,
+          quoteFOB: "Destination",
+          freightCarrier: lastCarrier,
+          freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
+        };
+        const activeBi = nextBom[s.activeItemIdx ?? 0];
+        if (activeBi && activeBi.state) {
+          patch.freightCost = activeBi.state.freightCost || s.freightCost || "0";
+        }
+        setManyFields(patch);
+        pushToast(`Per-Item Freight updated for ${updated} component${updated !== 1 ? "s" : ""} · total ${fmtMoney(totalFreight)}`, "ok");
+        return;
+      }
+
+      // Single-Part fallback (existing behavior)
       const r = await freightQuote({
-        destZip: s.destZip,
-        weightLbs: estimatedWeight,
-        freightClass: "70",
+        destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
       });
       setManyFields({
         freightCost: String(r.totalAmount), quoteFOB: "Destination",
@@ -267,6 +357,40 @@ function FreightPanel({ s }) {
                 </div>
               )}
             </div>
+
+            {/* Legacy parity: MP mode also exposes Line vs Amortize treatment. In
+                Per Item scope the treatment applies per-component (uses item's
+                freightTreatment); in Per Job scope the treatment applies to the
+                job freight (jobFreightTreatment). */}
+            {s.quoteType === "Multi-Part" && s.freightScope !== "None-Off" && (
+              <div style={rowSpaced} data-testid="freight-treatment-mp-row">
+                <span style={lbl}>Treatment</span>
+                {s.freightScope === "Per Job" ? (
+                  <div style={{ display: "flex", gap: 2 }} data-testid="freight-treatment-mp-perjob">
+                    <Tile label="Line"  active={(s.jobFreightTreatment || "Separate Line") === "Separate Line"}
+                      onClick={() => setField("jobFreightTreatment", "Separate Line")} small tint="#22c55e"
+                      data-testid="tile-jobfreight-line" />
+                    <Tile label="Amort" active={s.jobFreightTreatment === "Amortize"}
+                      onClick={() => setField("jobFreightTreatment", "Amortize")} small
+                      data-testid="tile-jobfreight-amort" />
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 2 }} data-testid="freight-treatment-mp-peritem">
+                    <Tile label="Line"  active={(s.freightTreatment || "Separate Line") === "Separate Line"}
+                      onClick={() => setField("freightTreatment", "Separate Line")} small tint="#22c55e"
+                      data-testid="tile-itemfreight-line" />
+                    <Tile label="Amort" active={s.freightTreatment === "Amortize"}
+                      onClick={() => setField("freightTreatment", "Amortize")} small
+                      data-testid="tile-itemfreight-amort" />
+                  </div>
+                )}
+                <span style={{ fontSize: 10, color: "var(--spot-text3)", marginLeft: "auto" }}>
+                  {s.freightScope === "Per Job"
+                    ? "Job freight is shown as a line item or rolled into per-pc cost"
+                    : "Each component's freight is shown as a line item or rolled into per-pc cost"}
+                </span>
+              </div>
+            )}
 
             {s.quoteType === "Multi-Part" && s.freightScope === "Per Job" ? (
               // Per Job mode — freight $ is set in Pricing Strategy → Job-Level Cost Allocation
