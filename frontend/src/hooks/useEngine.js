@@ -10,6 +10,8 @@ import { useDebounce } from "./useDebounce";
 export function useEngine(state) {
   const [results, setResults] = useState([]);     // per-qty results (or aggregate rows for MP)
   const [perComponent, setPerComponent] = useState([]); // MP only: per-slot per-component
+  const [componentPricing, setComponentPricing] = useState([]); // MP only: per-component view with its own qty rows
+  const [jobTotals, setJobTotals] = useState(null); // MP only: job-level totals for footer
   const [meta, setMeta] = useState(null);         // MP only: meta block
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -21,13 +23,16 @@ export function useEngine(state) {
   const dbg = useDebounce(payload, 400);
 
   useEffect(() => {
-    if (!dbg) { setResults([]); setPerComponent([]); setMeta(null); return; }
+    if (!dbg) { setResults([]); setPerComponent([]); setComponentPricing([]); setJobTotals(null); setMeta(null); return; }
 
     if (isMP) {
       // Multi-Part path
       const qtys = (dbg.qtys || []).filter((q) => Number(q) > 0);
-      if (qtys.length === 0 || !(dbg.bomItems || []).length) {
-        setResults([]); setPerComponent([]); setMeta(null); setErr(null); return;
+      const anyComponentHasQty = (dbg.bomItems || []).some((bi) =>
+        ((bi.state && bi.state.qtys) || []).some((q) => Number(q) > 0)
+      );
+      if ((qtys.length === 0 && !anyComponentHasQty) || !(dbg.bomItems || []).length) {
+        setResults([]); setPerComponent([]); setComponentPricing([]); setJobTotals(null); setMeta(null); setErr(null); return;
       }
       let cancelled = false;
       setLoading(true);
@@ -36,10 +41,12 @@ export function useEngine(state) {
           if (cancelled) return;
           setResults(data.slots || []);
           setPerComponent((data.slots || []).map((s) => ({ slot: s.slot, items: s.perComponent || [] })));
+          setComponentPricing(data.componentPricing || []);
+          setJobTotals(data.jobTotals || null);
           setMeta(data.meta || null);
           setErr(null);
         })
-        .catch((e) => { if (!cancelled) { setErr(e?.response?.data?.detail || e.message); setResults([]); setPerComponent([]); } })
+        .catch((e) => { if (!cancelled) { setErr(e?.response?.data?.detail || e.message); setResults([]); setPerComponent([]); setComponentPricing([]); setJobTotals(null); } })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
     }
@@ -47,20 +54,20 @@ export function useEngine(state) {
     // Simple path (existing behavior)
     const w = Number(dbg.oneUpW || 0), l = Number(dbg.oneUpL || 0);
     const qtys = (dbg.qtys || []).filter((q) => Number(q) > 0);
-    if (w <= 0 || l <= 0 || qtys.length === 0) { setResults([]); setPerComponent([]); setMeta(null); setErr(null); return; }
+    if (w <= 0 || l <= 0 || qtys.length === 0) { setResults([]); setPerComponent([]); setComponentPricing([]); setJobTotals(null); setMeta(null); setErr(null); return; }
 
     let cancelled = false;
     setLoading(true);
     calculateAll(dbg)
       .then((data) => {
-        if (!cancelled) { setResults(data.results || []); setPerComponent([]); setMeta(null); setErr(null); }
+        if (!cancelled) { setResults(data.results || []); setPerComponent([]); setComponentPricing([]); setJobTotals(null); setMeta(null); setErr(null); }
       })
       .catch((e) => { if (!cancelled) { setErr(e?.response?.data?.detail || e.message); setResults([]); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [dbg, isMP]);
 
-  return { results, perComponent, meta, loading, err, isMultiPart: isMP };
+  return { results, perComponent, componentPricing, jobTotals, meta, loading, err, isMultiPart: isMP };
 }
 
 /** Route comparison — runs CAD / Crest / Bobst / Saber+DC for slot 0. */

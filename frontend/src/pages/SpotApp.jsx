@@ -22,7 +22,7 @@ import { useEngine } from "../hooks/useEngine";
 export default function SpotApp({ onOpenAdmin }) {
   const { active, toasts } = useQuote();
   const [modal, setModal] = useState(null);
-  const { results, perComponent, meta, isMultiPart } = useEngine(active?.state);
+  const { results, perComponent, componentPricing, jobTotals, meta, isMultiPart } = useEngine(active?.state);
   const selSlot = (active?.state?.selSlot) || 0;
   const activeItemIdx = active?.state?.activeItemIdx ?? 0;
   // For MP: the active item's pipeline result at the selected slot (so the right
@@ -74,7 +74,7 @@ export default function SpotApp({ onOpenAdmin }) {
           <BomSec />
           <ItemSetupSec result={primary} />
           <ProductionSpecsSec result={primary} />
-          <QuoteTableSec results={results} />
+          <QuoteTableSec results={results} componentPricing={componentPricing} jobTotals={jobTotals} meta={meta} />
           <PricingStrategySec />
           <BoardEngineSec />
           <FilesSec />

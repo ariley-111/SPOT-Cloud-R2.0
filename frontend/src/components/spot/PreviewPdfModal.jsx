@@ -27,6 +27,8 @@ export default function PreviewPdfModal({ onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [results, setResults] = useState([]);
+  const [componentPricing, setComponentPricing] = useState([]);
+  const [jobTotalsState, setJobTotalsState] = useState(null);
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState("");
   const [chargeMode, setChargeMode] = useState("By Type");
@@ -42,11 +44,15 @@ export default function PreviewPdfModal({ onClose }) {
         if (isMP) {
           const payload = buildMpPayload(s);
           const data = await calculateMultiPart(payload);
-          if (!cancel) setResults(data.slots || []);
+          if (!cancel) {
+            setResults(data.slots || []);
+            setComponentPricing(data.componentPricing || []);
+            setJobTotalsState(data.jobTotals || null);
+          }
         } else {
           const payload = buildPayload(s);
           const { results: rs } = await calculateAll(payload);
-          if (!cancel) setResults(rs || []);
+          if (!cancel) { setResults(rs || []); setComponentPricing([]); setJobTotalsState(null); }
         }
       } catch (e) {
         if (!cancel) setErr(e?.response?.data?.detail || e.message);
@@ -107,7 +113,11 @@ export default function PreviewPdfModal({ onClose }) {
         state: s,
       };
       // Only send active (non-excluded) priced rows to the backend PDF generator
-      const blob = await previewPdfBlob(quote, previewRows, { chargeMode });
+      const blob = await previewPdfBlob(quote, previewRows, {
+        chargeMode,
+        componentPricing,
+        jobTotals: jobTotalsState,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = `quote-${s.estNum || "draft"}.pdf`;
@@ -249,13 +259,13 @@ export default function PreviewPdfModal({ onClose }) {
                 )}
               </div>
 
-              {/* MP-5: Bill of Materials listing (MP only) */}
-              {s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (
+              {/* MP-5: Bill of Materials listing (MP-MatchedSet only — Individual shows per-component sections below instead) */}
+              {s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (s.pricingMode || "Matched Set") === "Matched Set" && (
                 <div style={{ background: "#fef3c722", border: "1px solid #f59e0b66",
                   borderRadius: 6, padding: "10px 14px", marginBottom: 16 }}>
                   <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700,
                     textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
-                    Multi-Part · {s.pricingMode || "Matched Set"} · {(s.bomItems || []).length} components
+                    Multi-Part · Matched Set · {(s.bomItems || []).length} components
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead><tr style={{ borderBottom: "1px solid #d1d5db", color: "#6b7280" }}>
@@ -288,13 +298,25 @@ export default function PreviewPdfModal({ onClose }) {
                 </div>
               )}
 
-              {/* Pricing table — Simple quote shape */}
-              <PricingTable
-                rows={previewRows}
-                hasLineItems={hasLineItems}
-                chargeMode={chargeMode}
-                isMP={s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0}
-              />
+              {/* MP-Individual: per-component sections — each component with its own qty rows */}
+              {s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (s.pricingMode || "Matched Set") === "Individual" && componentPricing.length > 0 && (
+                <PerComponentSections
+                  componentPricing={componentPricing}
+                  jobTotals={jobTotalsState}
+                  excludeMap={s.exportExcludeByComponent || {}}
+                  fmLnr={fmLnr}
+                />
+              )}
+
+              {/* Pricing table — for SP and MP-MatchedSet */}
+              {!(s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (s.pricingMode || "Matched Set") === "Individual") && (
+                <PricingTable
+                  rows={previewRows}
+                  hasLineItems={hasLineItems}
+                  chargeMode={chargeMode}
+                  isMP={s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0}
+                />
+              )}
 
               {/* Terms */}
               <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 14,
@@ -448,3 +470,136 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
     </>
   );
 }
+
+// ─── Per-Component Sections (MP-Individual mode) ──────────────────────
+// Each BOM component renders as its own section with its own qty rows.
+// Per-Job costs go in a Job Totals footer at the bottom.
+function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }) {
+  const isExcl = (itemId, slotIdx) => (excludeMap[itemId] || []).includes(slotIdx);
+
+  const perJobFreight = jobTotals?.freightScope === "Per Job" ? Number(jobTotals.jobFreightCost || 0) : 0;
+  const perJobPrepress = jobTotals?.prepressScope === "Per Job" ? Number(jobTotals.jobPrepressCost || 0) : 0;
+
+  let baseSell = 0, baseFrt = 0, baseDie = 0, basePrep = 0;
+  componentPricing.forEach((c) => {
+    (c.rows || []).forEach((r) => {
+      if (isExcl(c.itemId, r.slotIdx)) return;
+      baseSell += Number(r.itemSell || 0);
+      baseFrt += Number(r.freightLine || 0);
+      baseDie += Number(r.dieLineCost || 0);
+      basePrep += Number(r.prepressLineCost || 0);
+    });
+  });
+  const grandTotal = baseSell + baseFrt + baseDie + basePrep + perJobFreight + perJobPrepress;
+
+  return (
+    <div data-testid="preview-mp-individual-sections">
+      {componentPricing.map((c) => {
+        const bs = c.boardSpec || {};
+        const specLine = [
+          bs.custIdent,
+          bs.boardGrade && bs.flute ? `${bs.boardGrade}# ${bs.flute}` : "",
+          (bs.outsideLiner || bs.insideLiner) ? `${fmLnr(bs.outsideLiner)}/${fmLnr(bs.insideLiner)}` : "",
+          (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0)
+            ? `${fmtNum(bs.oneUpW, 4)}×${fmtNum(bs.oneUpL, 4)}` : "",
+          `${c.pcsPerSet || 1} pc/set`,
+        ].filter(Boolean).join(" · ");
+        const rows = (c.rows || []).filter((r) => !isExcl(c.itemId, r.slotIdx));
+
+        return (
+          <div key={c.itemId || c.itemIndex} style={{ marginBottom: 18 }}
+            data-testid={`preview-comp-section-${c.itemIndex}`}>
+            <div style={{ background: "#f3f4f6", borderRadius: 6,
+              padding: "8px 12px", marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>
+                {c.desc || `Component ${c.itemIndex + 1}`}
+              </div>
+              {specLine && (
+                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{specLine}</div>
+              )}
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #d1d5db" }}>
+                  <th style={thL}>Qty</th>
+                  <th style={thS}>Each</th>
+                  <th style={thS}>Per/M</th>
+                  <th style={thS}>Freight</th>
+                  <th style={thS}>Die</th>
+                  <th style={thS}>Prepress</th>
+                  <th style={{ ...thS, color: "#1e40af" }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={7} style={{ padding: 16, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>
+                    No qty entered
+                  </td></tr>
+                ) : rows.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid #e5e7eb",
+                    background: i % 2 === 0 ? "#fff" : "#f9fafb" }}>
+                    <td style={{ padding: "6px 10px", fontWeight: 600 }}>{fmtInt(r.qty)}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtMoney(r.sellPc, 4)}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{fmtMoney(r.perM, 2)}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—"}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{Number(r.dieLineCost) > 0 ? fmtMoney(r.dieLineCost) : "—"}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{Number(r.prepressLineCost) > 0 ? fmtMoney(r.prepressLineCost) : "—"}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, color: "#1e40af" }}>
+                      {fmtMoney(r.sellTotal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+
+      {(perJobFreight > 0 || perJobPrepress > 0 || componentPricing.length > 1) && (
+        <div data-testid="preview-job-totals" style={{
+          marginTop: 12, padding: "10px 14px", borderRadius: 6,
+          background: "#f9fafb", border: "1px solid #e5e7eb",
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: "#1e40af",
+            textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6,
+          }}>Job Totals</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <tbody>
+              <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Items (base sell)</td>
+                <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(baseSell)}</td></tr>
+              {baseFrt > 0 && (
+                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Item Freight</td>
+                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(baseFrt)}</td></tr>
+              )}
+              {baseDie > 0 && (
+                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Item Die</td>
+                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(baseDie)}</td></tr>
+              )}
+              {basePrep > 0 && (
+                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Item Prepress</td>
+                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(basePrep)}</td></tr>
+              )}
+              {perJobFreight > 0 && (
+                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Job Freight</td>
+                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td></tr>
+              )}
+              {perJobPrepress > 0 && (
+                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Job Prepress</td>
+                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(perJobPrepress)}</td></tr>
+              )}
+              <tr style={{ borderTop: "1px solid #d1d5db" }}>
+                <td style={{ padding: "6px 0 0", fontWeight: 700, color: "#1e40af" }}>Quote Total</td>
+                <td style={{ padding: "6px 0 0", textAlign: "right", fontWeight: 700,
+                  fontSize: 15, color: "#1e40af" }} data-testid="preview-grand-total">
+                  {fmtMoney(grandTotal)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -1,0 +1,35 @@
+{
+  "summary": "Multi-Part Individual redesign verified end-to-end. Backend componentPricing + jobTotals shape is correct in both Individual (1 row per component, qty from component's own qtys) and Matched Set (3 rows per component, qty = set_qty * pcsPerSet) modes. Frontend Quote Table renders per-component collapsible sections with full column set including real Sheet/Route/CAD-hrs values. Preview PDF modal renders per-component sections + Job Totals footer. Back-compat slots/results preserved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Preview PDF modal (MP-Individual)", "issues": ["Cosmetic: in the loaded SA-260604-155037 sample, the first preview-comp-section's qty-rows table was not visually rendered under its header (header alone shown), while sections 1 and 2 rendered fully. Testid preview-comp-section-0 exists in DOM. Likely a row-ordering / first-component slot-index display issue. Worth a human eye review on Preview output for components whose qty is in a non-zero slot index (e.g., slot 2 only)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_component_pricing.py",
+    "/app/backend/tests/test_multi_part.py",
+    "/app/test_reports/pytest/component_pricing.xml"
+  ],
+  "action_items": [
+    "Optional: Investigate preview-comp-section-0 rendering when the component's qty is in a non-default slot index (slot >0). The DOM section exists and the math is correct (Quote Total $8,483.08 matches), but the qty rows under the first section header didn't paint in the loaded sample. Sections 1/2 rendered correctly. Confirm whether this is a CSS/ordering quirk vs. an actual rendering bug.",
+    "Optional: PDF Export click was not executed end-to-end (would have triggered an actual file download which the headless test harness can't capture cleanly). Manually verify Export → PDF download in real browser."
+  ],
+  "critical_code_review_comments": [
+    "GOOD: engine_routes.py lines 490-618 cleanly separate per-component pricing build from per-slot orchestration. Individual mode uses component's own qtys[]; Matched Set multiplies set_qty * pcsPerSet. Fulfillment correctly converts iq→set_qty_for_ful before calling _calc_fulfillment (line 549).",
+    "GOOD: rows_out includes sellTotal = itemSell + freightLine + dieLineCost + prepressLineCost + miscLineCost — single source of truth for per-row Total column. Frontend uses this directly.",
+    "GOOD: jobTotals block exposes scopes + costs so the footer can show Job-level Freight/Prepress only when scope=Per Job; verified Per Item correctly suppresses footer line and amortizes Prepress into per-component rows ($50.00 on the 2,352 row).",
+    "MINOR: in engine_routes.py line 580, setQty calc 'int(qty_val / pcs_per_set)' for Matched Set assumes pcs_per_set>0 already guarded above. OK as-is but could integer-divide directly for clarity.",
+    "MINOR: backCompat slots[] is still computed even when consumers only need componentPricing. Acceptable for now (small payload, keeps existing UI tabs working), but for a many-slot/many-component MP quote the duplicated work could become noticeable. Consider lazy-compute if perf becomes an issue."
+  ],
+  "updated_files": ["/app/backend/tests/test_component_pricing.py"],
+  "success_rate": {"backend": "100% (10/10 new + 12/12 regression = 22/22)", "frontend": "100% on Quote Table testids + Preview testids; one cosmetic concern on preview section-0 row rendering (not blocking)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (admin) — verified working",
+  "seed_data_creation": "None — used loaded sample quote SA-260604-155037 (Jamestown Container Companies / Sam's Club Pallet Display) which was already in the workspace.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend new endpoints verified via /app/backend/tests/test_component_pricing.py (run with REACT_APP_BACKEND_URL env var). The test exercises both Individual mode (3 components with qtys in different slots 0/1/2 → 3 component entries × 1 row each with correct sheetW/sheetL/route/cadHrs) and Matched Set mode (3 components × 3 rows with qty = set_qty × pcsPerSet, exercising pcsPerSet=1/2/4). Frontend verified via Playwright using loaded MP quote: qt-comp-section-0/1/2, qt-expand-all/collapse-all, qt-comp-table-0 (toggle works), qt-job-totals, qt-grand-total all present; preview-comp-section-0/1/2 + preview-job-totals + preview-grand-total all present in Preview modal. Grand Total matches across Quote Table ($8,483.08) and Preview ($8,483.08). One cosmetic concern: in the Preview modal, the first comp-section's qty rows were not visually rendered (header only) for the loaded sample, while sections 1/2 rendered fully — likely a display-order issue when the first component's qty lives in a non-zero slot. The Quote Table proper (sec-quote-table) DID render all 3 sections correctly with all 13 columns (Act, Qty, Each, Per/M, $/MSF, Cost/MSF, Sheet, #Out, Route, Freight, Die, Prepress, Total) and real sheet dimensions like 63.000×98.000 and route 'CAD 0.5h'. Matched Set fallback (FlatLayout) and Single-Part flat layout were not driven via Playwright but the source code (QuoteTableSec.jsx) clearly branches on pricingMode and backend test verified MS componentPricing shape, so back-compat is preserved by design.",
+  "rca of the issue": "N/A — no functional bug found. The Multi-Part Individual redesign is working as specified: per-component sections with own qty tiers, expand/collapse all controls, full column set with real engine values (sheet/route/CAD hrs), Job Totals footer, and Quote Grand Total all match between QuoteTable and Preview. One cosmetic note about Preview section-0 first-row rendering noted above; backend data is correct so this is purely a frontend display question for E1 to investigate visually."
+}

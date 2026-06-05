@@ -487,6 +487,146 @@ async def calculate_multi_part(
             "perComponent": per_comp,
         })
 
+    # ── Per-component pricing view (for Quote Table + PDF per-component layout) ──
+    # Each component is its own section with its own qty rows. For Individual mode,
+    # rows come from the component's own state.qtys (skipping blanks). For Matched
+    # Set mode, rows come from the top-level set qtys, with item_qty = set_qty * pcsPerSet.
+    component_pricing: List[Dict[str, Any]] = []
+    for ci, item in enumerate(bom_items):
+        item_id    = item.get("id") or ""
+        item_desc  = item.get("desc") or ""
+        item_type  = item.get("type") or "Manufactured"
+        pcs_per_set = max(1, int(item.get("pcsPerSet") or 1))
+        ist = item.get("state") or {}
+
+        # Board / spec sub-header data
+        board_spec_view = {
+            "boardGrade":   ist.get("boardGrade") or "",
+            "flute":        ist.get("flute") or "",
+            "outsideLiner": ist.get("outsideLiner") or "",
+            "insideLiner":  ist.get("insideLiner") or "",
+            "medium":       ist.get("medium") or "None",
+            "oneUpW":       ist.get("oneUpW") or "",
+            "oneUpL":       ist.get("oneUpL") or "",
+            "custIdent":    item.get("custIdent") or ist.get("custIdent") or "",
+        }
+
+        # Determine the qty list for this component
+        if pricing_mode == "Individual":
+            # Use this component's OWN qtys — only non-blank entries
+            comp_qtys: List[int] = []
+            comp_slot_idx: List[int] = []  # which top-level slot each row came from
+            iqs = ist.get("qtys") or []
+            for slot_i in range(min(len(iqs), len(top_qtys))):
+                v = iqs[slot_i]
+                try:
+                    qv = int(v) if v not in ("", None) else 0
+                except (TypeError, ValueError):
+                    qv = 0
+                if qv > 0:
+                    comp_qtys.append(qv)
+                    comp_slot_idx.append(slot_i)
+        else:
+            # Matched Set: use top-level set qtys; item_qty = set_qty * pcs_per_set
+            comp_qtys = []
+            comp_slot_idx = []
+            for slot_i, sq in enumerate(top_qtys):
+                try:
+                    sq_int = int(sq)
+                except (TypeError, ValueError):
+                    sq_int = 0
+                if sq_int > 0:
+                    comp_qtys.append(sq_int * pcs_per_set)
+                    comp_slot_idx.append(slot_i)
+
+        # Build the qty rows for this component
+        rows_out: List[Dict[str, Any]] = []
+        for row_i, (iq, slot_i) in enumerate(zip(comp_qtys, comp_slot_idx)):
+            if item_type == "Purchased":
+                r = _calc_purchased(item, slot_i, iq, purch_margin, payload)
+            elif item_type == "Fulfillment":
+                # Fulfillment fee is per-set; iq here = set qty
+                set_qty_for_ful = iq if pricing_mode == "Individual" else (iq // pcs_per_set if pcs_per_set > 0 else iq)
+                r = _calc_fulfillment(item, slot_i, set_qty_for_ful, ful_margin, payload)
+            else:
+                # Manufactured — run engine
+                # Build a 5-slot qtys array with `iq` at slot 0 (or matching slot)
+                item_qtys = ["", "", "", "", ""]
+                use_slot = 0
+                item_qtys[use_slot] = str(iq)
+                item_payload = _build_item_payload(item, payload, item_qtys)
+                try:
+                    r = run_estimate(item_payload, use_slot)
+                except Exception as e:
+                    r = {"error": f"{type(e).__name__}: {e}", "pricable": False,
+                         "qty": iq, "totalQty": iq,
+                         "itemSell": 0, "totalMfg": 0, "sellTotal": 0,
+                         "oMSF": 0, "shippedMSF": 0, "gmDollar": 0, "gmPct": 0}
+
+            # Compute derived display fields
+            qty_val = float(r.get("qty") or iq)
+            sell_total = float(r.get("itemSell") or r.get("sellTotal") or 0)
+            cost_total = float(r.get("totalMfg") or 0)
+            sell_pc = (sell_total / qty_val) if qty_val > 0 else 0
+            cost_pc = (cost_total / qty_val) if qty_val > 0 else 0
+            o_msf = float(r.get("oMSF") or 0)
+            sell_msf = (sell_total / o_msf) if o_msf > 0 else 0
+            cost_msf = (cost_total / o_msf) if o_msf > 0 else 0
+            cad_hrs = float(r.get("cadHrs") or 0)
+
+            rows_out.append({
+                "slotIdx": slot_i,
+                "qty": int(qty_val),
+                "setQty": int(qty_val / pcs_per_set) if (pricing_mode == "Matched Set" and pcs_per_set > 0) else int(qty_val),
+                "sellPc": sell_pc,
+                "costPc": cost_pc,
+                "perM": sell_pc * 1000.0,
+                "sellMSF": sell_msf,
+                "costMSF": cost_msf,
+                "itemSell": sell_total,
+                "totalMfg": cost_total,
+                "sheetW": r.get("sheetW") or "",
+                "sheetL": r.get("sheetL") or "",
+                "pcsPerSheet": r.get("pcsPerSheet") or 0,
+                "route": r.get("route") or "",
+                "cadHrs": cad_hrs,
+                "freightLine": float(r.get("freightLine") or 0),
+                "freightEmbed": float(r.get("freightEmbed") or 0),
+                "dieLineCost": float(r.get("dieLineCost") or 0),
+                "prepressLineCost": float(r.get("prepressLineCost") or 0),
+                "miscLineCost": float(r.get("miscLineCost") or 0),
+                "sellTotal": sell_total
+                            + float(r.get("freightLine") or 0)
+                            + float(r.get("dieLineCost") or 0)
+                            + float(r.get("prepressLineCost") or 0)
+                            + float(r.get("miscLineCost") or 0),
+                "gmDollar": float(r.get("gmDollar") or 0),
+                "gmPct": float(r.get("gmPct") or 0),
+                "oMSF": o_msf,
+                "pricable": bool(r.get("pricable")),
+                "error": r.get("error"),
+            })
+
+        component_pricing.append({
+            "itemId": item_id,
+            "itemIndex": ci,
+            "desc": item_desc,
+            "type": item_type,
+            "pcsPerSet": pcs_per_set,
+            "boardSpec": board_spec_view,
+            "rows": rows_out,
+        })
+
+    # ── Job-level totals (for footer when Per-Job costs exist) ───────────
+    job_totals = {
+        "freightScope": payload.get("freightScope") or "None",
+        "prepressScope": payload.get("prepressScope") or "None",
+        "jobFreightCost": _safe_float(payload.get("jobFreightCost")),
+        "jobFreightTreatment": payload.get("jobFreightTreatment") or "",
+        "jobPrepressCost": _safe_float(payload.get("jobPrepressCost")),
+        "jobPrepressTreatment": payload.get("jobPrepressTreatment") or "",
+    }
+
     meta = {
         "pricingMode": pricing_mode,
         "setMarginOverride": set_margin_ovride,
@@ -498,5 +638,11 @@ async def calculate_multi_part(
         "hasPurchased": any(it.get("type") == "Purchased" for it in bom_items),
         "hasFulfillment": any(it.get("type") == "Fulfillment" for it in bom_items),
     }
-    return {"slots": out_slots, "meta": meta, "results": out_slots}
+    return {
+        "slots": out_slots,
+        "meta": meta,
+        "results": out_slots,
+        "componentPricing": component_pricing,
+        "jobTotals": job_totals,
+    }
 

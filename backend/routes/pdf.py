@@ -73,7 +73,9 @@ def _ship_to_addr(quote_ship_to: str, dest_zip: str) -> str:
     return dest_zip or quote_ship_to or ""
 
 
-def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], charge_mode: str) -> str:
+def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], charge_mode: str,
+                       component_pricing: List[Dict[str, Any]] = None,
+                       job_totals: Dict[str, Any] = None) -> str:
     state = quote.get("state", {}) or {}
     today = datetime.now(timezone.utc)
     today_str = today.strftime("%B %d, %Y")
@@ -104,8 +106,10 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     is_mp = state.get("quoteType") == "Multi-Part" and isinstance(state.get("bomItems"), list) and len(state["bomItems"]) > 0
     bom_items = state.get("bomItems") or []
     pricing_mode = state.get("pricingMode") or "Matched Set"
+    # MP-Individual switches the pricing area to per-component sections.
+    mp_individual = is_mp and pricing_mode == "Individual" and bool(component_pricing)
 
-    if is_mp:
+    if is_mp and not mp_individual:
         # BOM bar — list each component with its key specs
         bom_rows = []
         for i, it in enumerate(bom_items):
@@ -154,6 +158,19 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             f'</tr></thead>'
             f'<tbody>{"".join(bom_rows)}</tbody></table>'
             f'</div>'
+        )
+    elif mp_individual:
+        # MP-Individual: item bar is just the project title — per-component sections
+        # render below the meta grid as the pricing area.
+        title = item_desc or cust_ref or box_style or f"Multi-Part Display ({len(bom_items)} components)"
+        _fsc_tag = " \u00B7 FSC/SFI" if fsc else ""
+        item_bar = (
+            f'<div style="background:#fef3c722;border:1px solid #f59e0b66;border-radius:6px;padding:10px 14px;margin-bottom:16px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline">'
+            f'<div style="font-size:14px;font-weight:700">{title}</div>'
+            f'<div style="font-size:11px;color:#f59e0b;font-weight:700;text-transform:uppercase;letter-spacing:.06em">'
+            f'Multi-Part \u00B7 Individual \u00B7 {len(bom_items)} components{_fsc_tag}</div>'
+            f'</div></div>'
         )
     else:
         # ─── Single-piece item spec line (legacy L4706-4716) ────────
@@ -251,6 +268,123 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         f'</table>'
     )
 
+    # ─── MP-Individual: per-component sections replace the aggregate table ─
+    if mp_individual:
+        # Build per-component blocks. Each component is its own titled section
+        # with its own qty rows: Qty | Each | Per/M | Freight | Die | Prepress | Total
+        excl_map = state.get("exportExcludeByComponent") or {}
+        sections_html: List[str] = []
+        # Totals for footer
+        total_base_sell = 0.0
+        total_per_item_frt = 0.0
+        total_per_item_die = 0.0
+        total_per_item_prep = 0.0
+
+        for c in component_pricing:
+            item_id_c = c.get("itemId") or ""
+            desc_c = c.get("desc") or f"Component {c.get('itemIndex', 0) + 1}"
+            bs = c.get("boardSpec") or {}
+            spec_parts_c: List[str] = []
+            if bs.get("custIdent"): spec_parts_c.append(str(bs["custIdent"]))
+            if bs.get("boardGrade") and bs.get("flute"):
+                spec_parts_c.append(f'{bs["boardGrade"]}# {bs["flute"]}')
+            if bs.get("outsideLiner") or bs.get("insideLiner"):
+                spec_parts_c.append(f'{_liner_short(bs.get("outsideLiner"))}/{_liner_short(bs.get("insideLiner"))}')
+            try:
+                if float(bs.get("oneUpW") or 0) > 0 and float(bs.get("oneUpL") or 0) > 0:
+                    spec_parts_c.append(f'{_fn(bs["oneUpW"], 4)}\u00D7{_fn(bs["oneUpL"], 4)}')
+            except (ValueError, TypeError):
+                pass
+            spec_parts_c.append(f'{c.get("pcsPerSet", 1)} pc/set')
+            spec_line_c = " \u00B7 ".join([p for p in spec_parts_c if p])
+
+            excl_slots = set(excl_map.get(item_id_c) or [])
+            rows_c = [r for r in (c.get("rows") or []) if r.get("slotIdx") not in excl_slots]
+
+            body_rows_c: List[str] = []
+            for ri, r in enumerate(rows_c):
+                qty_c = float(r.get("qty") or 0)
+                sell_pc_c = float(r.get("sellPc") or 0)
+                per_m_c = sell_pc_c * 1000.0
+                frt_c = float(r.get("freightLine") or 0)
+                die_c = float(r.get("dieLineCost") or 0)
+                prep_c = float(r.get("prepressLineCost") or 0)
+                total_c = float(r.get("sellTotal") or 0)
+                total_base_sell += float(r.get("itemSell") or 0)
+                total_per_item_frt += frt_c
+                total_per_item_die += die_c
+                total_per_item_prep += prep_c
+                bg_c = "#fff" if ri % 2 == 0 else "#f9fafb"
+                body_rows_c.append(
+                    f'<tr style="border-bottom:1px solid #e5e7eb;background:{bg_c}">'
+                    f'<td style="padding:6px 10px;font-weight:600">{_fn(qty_c, 0)}</td>'
+                    f'<td style="padding:6px 10px;text-align:right">{_fm(sell_pc_c)}</td>'
+                    f'<td style="padding:6px 10px;text-align:right;color:#6b7280">{_fm(per_m_c)}</td>'
+                    f'<td style="padding:6px 10px;text-align:right;color:#6b7280">{_fm(frt_c) if frt_c > 0 else DASH}</td>'
+                    f'<td style="padding:6px 10px;text-align:right;color:#6b7280">{_fm(die_c) if die_c > 0 else DASH}</td>'
+                    f'<td style="padding:6px 10px;text-align:right;color:#6b7280">{_fm(prep_c) if prep_c > 0 else DASH}</td>'
+                    f'<td style="padding:6px 10px;text-align:right;font-weight:700;color:#1e40af">{_fm(total_c)}</td>'
+                    f'</tr>'
+                )
+            if not body_rows_c:
+                body_rows_c.append(
+                    f'<tr><td colspan="7" style="padding:14pt;text-align:center;color:#9ca3af;font-size:12px">No qty entered</td></tr>'
+                )
+
+            sections_html.append(
+                f'<div style="margin-bottom:16px">'
+                f'<div style="background:#f3f4f6;border-radius:6px;padding:8px 12px;margin-bottom:4px">'
+                f'<div style="font-size:13px;font-weight:700">{desc_c}</div>'
+                f'<div style="font-size:11px;color:#6b7280;margin-top:2px">{spec_line_c}</div>'
+                f'</div>'
+                f'<table style="width:100%;border-collapse:collapse">'
+                f'<thead><tr style="border-bottom:1px solid #d1d5db">'
+                f'<th style="padding:6px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Qty</th>'
+                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Each</th>'
+                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Per/M</th>'
+                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Freight</th>'
+                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Die</th>'
+                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Prepress</th>'
+                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e40af">Total</th>'
+                f'</tr></thead>'
+                f'<tbody>{"".join(body_rows_c)}</tbody>'
+                f'</table>'
+                f'</div>'
+            )
+
+        # Job Totals footer — only when per-job costs or multiple components exist
+        per_job_frt = float(job_totals.get("jobFreightCost") or 0) if (job_totals.get("freightScope") == "Per Job") else 0.0
+        per_job_prep = float(job_totals.get("jobPrepressCost") or 0) if (job_totals.get("prepressScope") == "Per Job") else 0.0
+        grand_total = total_base_sell + total_per_item_frt + total_per_item_die + total_per_item_prep + per_job_frt + per_job_prep
+
+        footer_rows: List[str] = []
+        footer_rows.append(f'<tr><td style="padding:3px 0;color:#6b7280">Items (base sell)</td><td style="padding:3px 0;text-align:right">{_fm(total_base_sell)}</td></tr>')
+        if total_per_item_frt > 0:
+            footer_rows.append(f'<tr><td style="padding:3px 0;color:#6b7280">Per-Item Freight</td><td style="padding:3px 0;text-align:right">{_fm(total_per_item_frt)}</td></tr>')
+        if total_per_item_die > 0:
+            footer_rows.append(f'<tr><td style="padding:3px 0;color:#6b7280">Per-Item Die</td><td style="padding:3px 0;text-align:right">{_fm(total_per_item_die)}</td></tr>')
+        if total_per_item_prep > 0:
+            footer_rows.append(f'<tr><td style="padding:3px 0;color:#6b7280">Per-Item Prepress</td><td style="padding:3px 0;text-align:right">{_fm(total_per_item_prep)}</td></tr>')
+        if per_job_frt > 0:
+            footer_rows.append(f'<tr><td style="padding:3px 0;color:#6b7280">Per-Job Freight</td><td style="padding:3px 0;text-align:right">{_fm(per_job_frt)}</td></tr>')
+        if per_job_prep > 0:
+            footer_rows.append(f'<tr><td style="padding:3px 0;color:#6b7280">Per-Job Prepress</td><td style="padding:3px 0;text-align:right">{_fm(per_job_prep)}</td></tr>')
+        footer_rows.append(
+            f'<tr style="border-top:1px solid #d1d5db">'
+            f'<td style="padding:6px 0 0;font-weight:700;color:#1e40af">Quote Total</td>'
+            f'<td style="padding:6px 0 0;text-align:right;font-weight:700;font-size:15px;color:#1e40af">{_fm(grand_total)}</td>'
+            f'</tr>'
+        )
+        job_totals_html = (
+            f'<div style="margin-top:12px;padding:10px 14px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb">'
+            f'<div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Job Totals</div>'
+            f'<table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>{"".join(footer_rows)}</tbody></table>'
+            f'</div>'
+        )
+
+        # Replace the aggregate pricing_table with per-component sections + footer
+        pricing_table = "".join(sections_html) + job_totals_html
+
     # ─── Item description bar — already built above (see MP-5 branch).
     # No duplicate item_bar here; just use what we have.
 
@@ -347,7 +481,11 @@ async def preview_quote(
     quote = body.get("quote", {})
     results = body.get("results", [])
     charge_mode = body.get("chargeMode") or "By Type"
-    html = _customer_pdf_html(quote, results, charge_mode)
+    # MP-Individual: per-component sections render in place of the aggregate pricing table.
+    component_pricing = body.get("componentPricing") or []
+    job_totals = body.get("jobTotals") or {}
+    html = _customer_pdf_html(quote, results, charge_mode,
+                              component_pricing=component_pricing, job_totals=job_totals)
     pdf_bytes = HTML(string=html).write_pdf()
     est_num = quote.get("est_num") or quote.get("state", {}).get("estNum") or "draft"
     return StreamingResponse(
