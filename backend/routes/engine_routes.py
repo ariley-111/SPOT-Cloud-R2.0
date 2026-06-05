@@ -405,6 +405,11 @@ async def calculate_multi_part(
         # display Freight / Die / Prepress separately (matches Quote Table)
         line_freight = sum(_safe_float(pc.get("freightLine")) for pc in per_comp
                            if _safe_float(pc.get("freightLine")) > 0)
+        # If freight is allocated at the JOB level (Local Delivery, Per-Job UTS),
+        # add the job-level total to the aggregate (per-item freightLine was zeroed
+        # in the payload to avoid double-billing).
+        if freight_scope == "Per Job":
+            line_freight += _safe_float(payload.get("jobFreightCost"))
         line_die = sum(_safe_float(pc.get("dieLineCost")) for pc in per_comp
                        if _safe_float(pc.get("dieLineCost")) > 0)
         line_prepress = sum(_safe_float(pc.get("prepressLineCost")) for pc in per_comp

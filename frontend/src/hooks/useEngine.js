@@ -186,7 +186,16 @@ export function buildMpPayload(state) {
     purchasedMarginPct: state.purchasedMarginPct || "0.40",
     qtys: (state.qtys || []).map(String),
     activeItemIdx: activeIdx,
-    bomItems: items,
+    // When freight is being allocated at the job level (Local Delivery, Per-Job UTS, etc.)
+    // we MUST zero out each component's per-item freightCost — otherwise the engine
+    // computes BOTH per-component freight AND the job-level allocation, double-billing.
+    // (Reported: Zone 1 $35 → $191 on 3-component MP RFQ.)
+    bomItems: state.freightScope === "Per Job"
+      ? items.map((it) => ({
+          ...it,
+          state: { ...(it.state || {}), freightCost: "0", freightTreatment: "None" },
+        }))
+      : items,
     // Job-level overlays
     estInitials: state.estInitials,
     custName: state.custName, custCode: state.custCode, custRef: state.custRef,
