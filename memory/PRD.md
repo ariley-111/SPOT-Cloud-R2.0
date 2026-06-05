@@ -177,6 +177,22 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   `allCarriers[].transit` was read as `c.transitDays` in the modal.
   Fixed via fallback (`c.transit ?? c.transitDays`).
 
+### 2026-06-05 (cont.) — Quote Table "Job Totals" rewritten to scenarios ✅
+- Removed the nonsensical sum-of-all-rows "Quote Grand Total" for multi-qty
+  MP-Individual quotes (it was adding 9 different prices that represented
+  9 different shipment scenarios — meaningless number).
+- New Job Totals footer shows ONE row per scenario:
+  - "Scenario N · A@qty + B@qty + C@qty"  (uses each component's actual
+    qty in that scenario; single-qty components repeat, multi-qty advance)
+  - Columns: Total Pcs · Items · Die · Prepress · Per-Job Freight · Job Total · Price/PC
+  - Each "Job Total" cell is the real shippable number for that scenario
+- Verified live against Jamestown 3×3 quote — Scenario 1 ($9,076) /
+  Scenario 2 ($12,349) / Scenario 3 ($15,559).
+- Single-qty quotes keep the existing single-row footer + Grand Total
+  (no UX regression for the simple case).
+- PDF rewrite (Monday item A) will reuse the same scenario grouping logic.
+
+
 - User confirmed first successful Microsoft round-trip on
   `ariley@standardprinting.com`. SSO end-to-end working: Microsoft login →
   callback → user upsert with admin role (bootstrap allowlist) → JWT issued
