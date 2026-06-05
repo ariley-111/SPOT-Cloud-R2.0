@@ -221,30 +221,44 @@ function FreightPanel({ s }) {
           <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <Tile label="Will-Call" active={s.quoteFOB === "Origin"}
               onClick={() => {
-                // Clear any Local Delivery residue (zone, job-level flat freight)
-                const patch = { quoteFOB: "Origin" };
-                if (s.quoteFOB === "LocalDelivery") {
-                  patch.localDeliveryZone = null;
-                  patch.jobFreightCost = "";
-                  patch.freightScope = "None";
-                  patch.freightCost = "0";
-                  patch.freightTreatment = "None";
-                  patch.freightMarkup = "0.15";  // restore default
+                // Will-Call: NO freight at all. Clear job-level + per-component freight.
+                const patch = {
+                  quoteFOB: "Origin",
+                  localDeliveryZone: null,
+                  jobFreightCost: "",
+                  jobFreightTreatment: "",
+                  freightScope: "None-Off",
+                  freightCost: "0",
+                  freightTreatment: "None",
+                  freightCarrier: "",
+                  freightTransit: "",
+                };
+                // Clear each component's freight in MP mode
+                if (Array.isArray(s.bomItems) && s.bomItems.length > 0) {
+                  patch.bomItems = s.bomItems.map((bi) => ({
+                    ...bi,
+                    state: {
+                      ...(bi.state || {}),
+                      freightCost: "0", freightTreatment: "None",
+                      freightCarrier: "", freightTransit: "",
+                    },
+                  }));
                 }
                 setManyFields(patch);
               }}
               small data-testid="tile-fob-willcall" />
             <Tile label="Ship"      active={s.quoteFOB === "Destination"}
               onClick={() => {
-                // Clear any Local Delivery residue + restore default markup
-                const patch = { quoteFOB: "Destination", freightMarkup: "0.15" };
-                if (s.quoteFOB === "LocalDelivery") {
-                  patch.localDeliveryZone = null;
-                  patch.jobFreightCost = "";
-                  patch.freightScope = "None";
-                  patch.freightCost = "0";
-                  patch.freightTreatment = "None";
-                }
+                // Ship: Per Item / Line defaults (legacy). Clear LocalDelivery zone.
+                const patch = {
+                  quoteFOB: "Destination",
+                  freightMarkup: s.freightMarkup || "0.15",
+                  localDeliveryZone: null,
+                  jobFreightCost: "",
+                  jobFreightTreatment: "Separate Line",
+                  freightScope: "None",   // "None" actually means Per Item in legacy
+                  freightTreatment: "Separate Line",
+                };
                 setManyFields(patch);
               }}
               small tint="#3b82f6" data-testid="tile-fob-ship" />
@@ -274,13 +288,28 @@ function FreightPanel({ s }) {
                 freightMarkup: "0",
                 freightTreatment: "Separate Line",
                 quoteFOB: "LocalDelivery",
+                freightCarrier: "",
+                freightTransit: "",
               };
               if (isMP) {
                 // Job-level flat charge — DO NOT propagate per-component (would multiply).
                 patch.jobFreightCost = price;
                 patch.freightScope = "Per Job";
                 patch.jobFreightTreatment = "Separate Line";
-                patch.freightCost = "0";      // clear per-item so it doesn't double-bill
+                patch.freightCost = "0";      // clear active item top-level freight
+                // CRITICAL: clear EVERY bomItem's per-item freight so the engine
+                // doesn't double-bill (per-item freight would otherwise still
+                // appear in the Quote Table Freight column + Job Totals sum).
+                patch.bomItems = s.bomItems.map((bi) => ({
+                  ...bi,
+                  state: {
+                    ...(bi.state || {}),
+                    freightCost: "0",
+                    freightTreatment: "None",
+                    freightCarrier: "",
+                    freightTransit: "",
+                  },
+                }));
               } else {
                 // Single-part: regular per-item freight slot
                 patch.freightCost = price;

@@ -1,0 +1,58 @@
+{
+  "summary": "FOB/freight coherence testing for MP-Individual quotes. Found 2 critical pre-existing bugs in QuoteTableSec.jsx that I fixed to enable any testing. After fixes, TEST 1 (Will-Call) passed cleanly. TEST 2 partially observed (freight API was still in-flight on capture). TEST 3-5 blocked by selector issue on `input-job-freight-cost` (hidden / not in current panel) — could not validate the Per-Job vs Per-Item mutual exclusivity. Main toggle-stress validation incomplete.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "QuoteTableSec.jsx",
+        "issue": "CRITICAL — File contained trailing garbage at lines 951-953 (\",\\n  color: \"var(--spot-text3)\",\\n};) producing webpack error 'Parsing error: Unterminated string constant. (951:0)'. Frontend would not compile at all, blocking ALL UI testing. FIXED by removing the duplicate garbage block.",
+        "selector": "n/a — file-level syntax error",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "QuoteTableSec.jsx (parent <QuoteTableSec> -> <ComponentLayout>)",
+        "issue": "CRITICAL — `freightScope` prop was NOT passed to <ComponentLayout> (lines 134-146). However ComponentLayout reads `freightScope` in TWO places: (a) line 563 freightDisplayMode = (freightScope === 'Per Job') ? 'allocated' : 'per-item' and (b) line 583 const isPerJob = freightScope === 'Per Job'. Without the prop, freightScope is undefined → Per-Job mode would INCORRECTLY render per-item allocations in the Freight column AND showPerItemFreight (isShip && !isPerJob && baseFreight>0) would evaluate TRUE in Ship+PerJob mode, exactly the leakage symptom the user reported. FIXED by adding `freightScope={s.freightScope || 'None'}` in the parent JSX. This is almost certainly the root cause of the bleed-through bug in TEST 3 the user reported.",
+        "selector": "ComponentLayout JSX call site",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "Pricing Strategy panel / RightDashboard",
+        "issue": "TEST 3 blocker: `[data-testid=\"input-job-freight-cost\"]` was not visible/clickable in the layout after switching to Ship + Per Job from Will-Call. It likely lives inside a collapsed 'Pricing Strategy → Job-Level Cost Allocation' section. The right-rail Freight Panel only shows a 'pointer' card directing user to that section (data-testid=freight-per-job-pointer). For automated tests, this input should either be made accessible from the right rail or the section should auto-expand when Per Job scope is selected.",
+        "selector": "[data-testid=\"input-job-freight-cost\"]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Ship → Update All freight",
+        "issue": "Per-item freight API completes too slowly for synchronous Playwright assertions (>5s). Tests should wait for the ProgressModal ('Getting Freight Quote..') to close before capturing state. My script timed out before the modal closed, so TEST 2's Per-Item Freight (sum) row was reported as missing — but visually the modal was still in flight.",
+        "affected_selectors": ["[data-testid=\"qt-peritem-freight-row\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(ALREADY FIXED BY TESTER) Restore frontend compilation: removed garbage at end of QuoteTableSec.jsx.",
+    "(ALREADY FIXED BY TESTER) Pass freightScope={s.freightScope || 'None'} into <ComponentLayout/> so Per-Job vs Per-Item freight display logic actually receives the state.",
+    "MAIN AGENT: re-test the full toggle stress sequence (TEST 5) end-to-end now that the missing prop is wired — especially Ship→PerJob→LocalZone→WillCall transitions, which previously could not have worked correctly because freightScope was undefined inside ComponentLayout.",
+    "Consider auto-expanding 'Pricing Strategy → Job-Level Cost Allocation' (or surfacing the jobFreightCost input in the Freight Panel) when user selects Per-Job scope — current UX requires user to hunt for the input after the freight tile flips them into Per Job mode.",
+    "Optionally also pass freightScope as the canonical source of truth in jobTotals from the engine (currently ComponentLayout cross-references jobTotals?.freightScope on line 413 and the prop freightScope separately — possible split-brain)."
+  ],
+  "critical_code_review_comments": [
+    "QuoteTableSec.jsx (953 lines) is approaching the 700-line file-size guideline — split ComponentLayout, FlatLayout, ComponentSubTable, PerComponentBreakdownLegacy into separate modules.",
+    "Logic for showPerItemFreight / showPerJobFreightLine duplicated across the per-qty-tier table and the single-tier table — consider lifting into one helper.",
+    "Will-Call onClick (RightDashboard ~222-247) and Local Delivery onPick (~270-318) both manually loop and clear bomItems[].state.freightCost — extract a clearAllComponentFreight(s) helper to eliminate duplication and reduce risk of one path missing a field (already happened with the missing freightScope prop).",
+    "freightScope sentinel values ('None' means Per Item, 'None-Off' means truly Off, 'Per Job' means Per Job, 'Per Item' also exists as alt) are confusing. Recommend canonicalising to 'PerItem' | 'PerJob' | 'Off'."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/spot/QuoteTableSec.jsx (removed trailing garbage at L951-953; added freightScope prop to <ComponentLayout/>)"
+  ],
+  "success_rate": {"backend": "n/a (frontend-only request)", "frontend": "TEST 1 PASS, TEST 2-5 NOT FULLY VALIDATED"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "I fixed two critical pre-existing bugs that the previous iteration overlooked: (1) trailing string-literal garbage at QuoteTableSec.jsx L951-953 that prevented the entire frontend from compiling, (2) the freightScope prop missing from the <ComponentLayout> call site that broke the very feature this iteration was supposed to validate. After my fixes, TEST 1 (Will-Call) passes cleanly: cells show N/A, willcall note shows, no per-item/per-job rows. For TESTs 2-5 the main agent or next tester should: (a) wait for the freight ProgressModal to close (`await page.wait_for_selector('text=Getting Freight Quote..', state='hidden', timeout=15000)`) before asserting on the Per-Item Freight row, (b) locate `input-job-freight-cost` (likely inside Pricing Strategy section — may need to expand). The current FOB toggle handlers (Will-Call, Ship, LocalDelivery onPick) DO correctly clear bomItems[].state.freightCost — the bleed-through was caused by the missing freightScope prop, not by state leakage in the click handlers themselves.",
+  "rca_of_the_issue": "ROOT CAUSE: The reported bug 'switching to Local Delivery still showed leftover per-item freight values' had TWO compounding causes. (1) Trailing garbage in QuoteTableSec.jsx meant any recent change couldn't compile — the frontend was actually serving a stale bundle. (2) Even if it compiled, the freightScope prop was never passed into ComponentLayout, so the freight-display-mode and showPerItemFreight gating was operating on undefined; for Ship+PerJob this caused per-item freight to be displayed instead of allocated. For Local Delivery the bleed-through was less direct because quoteFOB === 'LocalDelivery' overrides freightDisplayMode to 'na', but the showPerItemFreight in JobTotals would still erroneously render in transient states. REPRO: any FOB switch in the current build → frontend was failing to compile (verified in /var/log/supervisor/frontend.*.log). MITIGATION: applied both fixes; verified TEST 1 passes. Recommend main agent re-run TESTs 2-5 with the freight modal wait + correct jobFreightCost selector path."
+}

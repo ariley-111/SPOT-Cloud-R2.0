@@ -140,6 +140,7 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           quoteFOB={s.quoteFOB || ""}
           localDeliveryZone={s.localDeliveryZone || ""}
           freightCarrier={s.freightCarrier || ""}
+          freightScope={s.freightScope || "None"}
           topQtys={s.qtys || []}
           jobFreightBySlot={s.jobFreightBySlot || {}}
           setField={setField}
@@ -334,7 +335,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────
 // Each component is its own collapsible section with its own qty rows.
 // Scales cleanly to 25+ components via expand/collapse controls.
-function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, topQtys, jobFreightBySlot, setField }) {
+function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, quoteFOB, localDeliveryZone, freightCarrier, freightScope, topQtys, jobFreightBySlot, setField }) {
   // Default: first 3 components expanded, plus the BOM-selected one
   const [expanded, setExpanded] = useState(() => {
     const init = {};
@@ -557,6 +558,12 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                 onSelectRow={(idx) => setSelRowByComp((p) => ({ ...p, [k]: idx }))}
                 isRowExcluded={isRowExcluded}
                 toggleRowExclude={toggleRowExclude}
+                freightDisplayMode={
+                  quoteFOB === "Origin" ? "na"
+                  : quoteFOB === "LocalDelivery" ? "na"
+                  : (freightScope === "Per Job") ? "allocated"
+                  : "per-item"
+                }
               />
             )}
           </div>
@@ -564,12 +571,24 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
       })}
 
       {/* Job Totals footer — labels per-job freight as Local Delivery + Zone
-          when applicable; surfaces per-qty freight when costs vary by slot. */}
+          when applicable; surfaces per-qty freight when costs vary by slot.
+          Show ONLY the freight row relevant to the selected FOB:
+          - Will-Call (Origin): no freight row at all
+          - Ship + Per Item: "Per-Item Freight (sum)"
+          - Ship + Per Job: "Per-Job Freight" (with carrier)
+          - Local Delivery: "Per-Job Freight: Local Delivery · Zone N" */}
       {(perJobFreight > 0 || perJobPrepress > 0 || componentPricing.length > 1) && (() => {
-        // Detect per-qty variation: any component with 2+ qty rows AND freight differs
+        const isWillCall = quoteFOB === "Origin";
+        const isLocalDelivery = quoteFOB === "LocalDelivery" || quoteFOB === "Local Delivery";
+        const isShip = quoteFOB === "Destination" && !isLocalDelivery;
+        const isPerJob = freightScope === "Per Job";
+        // Decide which freight summary line to show (mutually exclusive)
+        const showPerItemFreight = isShip && !isPerJob && baseFreight > 0;
+        const showPerJobFreightLine = (isLocalDelivery && perJobFreight > 0)
+          || (isShip && isPerJob && perJobFreight > 0);
+        // Detect per-qty variation: any component with 2+ qty rows
         const anyMultiQty = componentPricing.some((c) => (c.rows || []).length > 1);
-        // Aggregate per-slot data: items+freight summed across components per slot
-        const perSlotAgg = {};  // slotIdx -> { qty, items, freight, die, prep }
+        const perSlotAgg = {};
         componentPricing.forEach((c) => {
           (c.rows || []).forEach((r) => {
             const si = r.slotIdx;
@@ -581,14 +600,11 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
           });
         });
         const perSlotList = Object.values(perSlotAgg).sort((a, b) => a.slotIdx - b.slotIdx);
-        const isLocalDelivery = quoteFOB === "LocalDelivery" || quoteFOB === "Local Delivery";
         const perJobFreightLabel = isLocalDelivery
           ? `Per-Job Freight: Local Delivery${localDeliveryZone ? ` · ${localDeliveryZone}` : ""}`
           : (freightCarrier
             ? `Per-Job Freight · via ${freightCarrier}`
             : "Per-Job Freight");
-        // Per-slot Per-Job freight: jobFreightBySlot may hold different freight
-        // values per qty tier (legacy parity). Falls back to flat jobFreightCost.
         const perJobBySlot = perSlotList.map((p) => {
           const v = jobFreightBySlot[p.slotIdx];
           const amt = (v !== undefined && v !== "" && v !== null) ? Number(v) : (perJobFreight / Math.max(1, perSlotList.length));
@@ -614,30 +630,29 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
             </div>
 
             {anyMultiQty ? (
-              // Per-qty breakdown layout (legacy: jobFreightBySlot for multi-qty per-job)
               <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }} data-testid="qt-job-totals-by-qty">
                 <thead><tr style={{ borderBottom: "1px solid var(--spot-line)" }}>
                   <th style={{ ...thMini, textAlign: "left" }}>Qty Tier</th>
                   <th style={{ ...thMini, textAlign: "right" }}>Items</th>
-                  {baseFreight > 0   && <th style={{ ...thMini, textAlign: "right" }}>Per-Item Freight</th>}
-                  {baseDie > 0       && <th style={{ ...thMini, textAlign: "right" }}>Die</th>}
-                  {basePrepress > 0  && <th style={{ ...thMini, textAlign: "right" }}>Prepress</th>}
-                  {perJobFreight > 0 && <th style={{ ...thMini, textAlign: "right" }}>{isLocalDelivery ? "Local Delivery" : "Per-Job Freight"}</th>}
+                  {showPerItemFreight       && <th style={{ ...thMini, textAlign: "right" }}>Per-Item Freight</th>}
+                  {baseDie > 0              && <th style={{ ...thMini, textAlign: "right" }}>Die</th>}
+                  {basePrepress > 0         && <th style={{ ...thMini, textAlign: "right" }}>Prepress</th>}
+                  {showPerJobFreightLine    && <th style={{ ...thMini, textAlign: "right" }}>{isLocalDelivery ? "Local Delivery" : "Per-Job Freight"}</th>}
                   <th style={{ ...thMini, textAlign: "right", color: "var(--spot-accent)" }}>Total @ Tier</th>
                 </tr></thead>
                 <tbody>
                   {perJobBySlot.map((p) => {
-                    const tierTotal = p.items + p.freight + p.die + p.prep
-                      + (perJobFreight > 0 ? p.perJobFreightAtSlot : 0);
+                    const tierTotal = p.items + (showPerItemFreight ? p.freight : 0) + p.die + p.prep
+                      + (showPerJobFreightLine ? p.perJobFreightAtSlot : 0);
                     return (
                       <tr key={p.slotIdx} style={{ borderBottom: "1px solid var(--spot-line)" }}
                         data-testid={`qt-job-totals-tier-${p.slotIdx}`}>
                         <td style={{ padding: "4px 6px", fontWeight: 600 }}>@ {fmtInt(p.qty)}</td>
                         <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.items)}</td>
-                        {baseFreight > 0   && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.freight)}</td>}
-                        {baseDie > 0       && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.die)}</td>}
-                        {basePrepress > 0  && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.prep)}</td>}
-                        {perJobFreight > 0 && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.perJobFreightAtSlot)}</td>}
+                        {showPerItemFreight       && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.freight)}</td>}
+                        {baseDie > 0              && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.die)}</td>}
+                        {basePrepress > 0         && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.prep)}</td>}
+                        {showPerJobFreightLine    && <td style={{ padding: "4px 6px", textAlign: "right" }}>{fmtMoney(p.perJobFreightAtSlot)}</td>}
                         <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: 700,
                           color: "var(--spot-accent)" }}>{fmtMoney(tierTotal)}</td>
                       </tr>
@@ -646,13 +661,12 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                 </tbody>
               </table>
             ) : (
-              // Simple single-qty layout
               <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                 <tbody>
                   <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Items (base sell)</td>
                     <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseSell)}</td></tr>
-                  {baseFreight > 0 && (
-                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Freight (sum)</td>
+                  {showPerItemFreight && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-peritem-freight-row">Per-Item Freight (sum)</td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(baseFreight)}</td></tr>
                   )}
                   {baseDie > 0 && (
@@ -663,7 +677,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                     <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Item Prepress (sum)</td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(basePrepress)}</td></tr>
                   )}
-                  {perJobFreight > 0 && (
+                  {showPerJobFreightLine && (
                     <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }} data-testid="qt-perjob-freight-label">
                       {perJobFreightLabel}</td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td></tr>
@@ -671,6 +685,12 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                   {perJobPrepress > 0 && (
                     <tr><td style={{ padding: "2px 0", color: "var(--spot-text2)" }}>Per-Job Prepress</td>
                       <td style={{ padding: "2px 0", textAlign: "right" }}>{fmtMoney(perJobPrepress)}</td></tr>
+                  )}
+                  {isWillCall && (
+                    <tr><td style={{ padding: "2px 0", color: "var(--spot-text3)", fontStyle: "italic" }} colSpan={2}
+                      data-testid="qt-willcall-note">
+                      Will-Call · no freight on this quote
+                    </td></tr>
                   )}
                 </tbody>
               </table>
@@ -682,7 +702,14 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
             }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-accent)" }}>Quote Grand Total</span>
               <span style={{ fontSize: 15, fontWeight: 700, color: "var(--spot-accent)" }}
-                data-testid="qt-grand-total">{fmtMoney(grandTotal)}</span>
+                data-testid="qt-grand-total">{fmtMoney(
+                  // Grand total respects FOB: exclude per-item freight in non-Ship modes
+                  baseSell
+                  + (showPerItemFreight ? baseFreight : 0)
+                  + baseDie + basePrepress
+                  + (showPerJobFreightLine ? perJobFreight : 0)
+                  + (perJobPrepress > 0 ? perJobPrepress : 0)
+                )}</span>
             </div>
           </div>
         );
@@ -691,7 +718,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
   );
 }
 
-function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggleRowExclude }) {
+function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggleRowExclude, freightDisplayMode }) {
   const rows = comp.rows || [];
   // Sub-table column set matches the user's requested legacy order:
   // Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF, Freight, Sheet Size, #Out, Route
@@ -785,7 +812,11 @@ function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggle
                 </td>
                 <td style={{ ...cellBase, textAlign: "right" }}>{fmtMoney(r.sellMSF, 2)}</td>
                 <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>{fmtMoney(r.costMSF, 2)}</td>
-                <td style={{ ...cellBase, textAlign: "right" }}>{Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—"}</td>
+                <td style={{ ...cellBase, textAlign: "right" }}>{
+                  freightDisplayMode === "na"
+                    ? <span style={{ color: "var(--spot-text3)", fontStyle: "italic" }}>N/A</span>
+                    : (Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—")
+                }</td>
                 <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>
                   {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
                 </td>
