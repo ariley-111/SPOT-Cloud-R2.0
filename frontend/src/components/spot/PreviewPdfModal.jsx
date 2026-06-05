@@ -500,6 +500,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
           bs.custIdent,
           bs.boardGrade && bs.flute ? `${bs.boardGrade}# ${bs.flute}` : "",
           (bs.outsideLiner || bs.insideLiner) ? `${fmLnr(bs.outsideLiner)}/${fmLnr(bs.insideLiner)}` : "",
+          (bs.medium && bs.medium !== "None") ? String(bs.medium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "",
           (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0)
             ? `${fmtNum(bs.oneUpW, 4)}×${fmtNum(bs.oneUpL, 4)}` : "",
           `${c.pcsPerSet || 1} pc/set`,

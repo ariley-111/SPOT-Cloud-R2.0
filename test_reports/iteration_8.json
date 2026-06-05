@@ -1,0 +1,40 @@
+{
+  "summary": "iteration_8 covers the 5 user-requested MP-Individual refinements (column reorder + liner legacy fmLnr semantics + sheet no-decimals + BOM-selected highlight + per-item freight/prepress). Backend regression: 16/16 PASS including 6 new tests verifying per-item freight=$517.50/$805.00 (450/700 * 1.15), prepress=$50/$75, sellTotal composition, and printReq=No → prepressLineCost=0. Frontend was BLOCKED by a runtime ReferenceError 'mediumShort is not defined' thrown by ComponentLayout — fixed by defining mediumShort() and rewriting linerShort() to legacy fmLnr semantics (None/empty → Kraft; strip weight + -Lite/-White). After fix, the live MP-Individual quote SA-260604-155037 renders correctly with the exact requested column order and BOM-selected section 1 carries data-bom-selected='true' + visible 'BOM' badge + purple accent border.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "QuoteTableSec.jsx :: ComponentLayout", "issue": "FIXED (during testing) — ReferenceError: mediumShort is not defined crashed the entire MP-Individual quote view. Function was called on line 449 but never defined.", "selector": "[data-testid='qt-comp-section-N']", "priority": "CRITICAL"},
+      {"component": "QuoteTableSec.jsx :: linerShort()", "issue": "FIXED (during testing) — linerShort('None') was returning the string 'None' instead of 'Kraft' per legacy fmLnr semantics. Also weight prefix (e.g. '42# ') and '-Lite'/'-White' suffixes were not stripped consistently.", "selector": "spec line on qt-comp-section-N header", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_component_pricing.py",
+    "/app/test_reports/pytest/component_pricing.xml"
+  ],
+  "action_items": [
+    "RETEST: re-run a Preview PDF render of an MP-Individual quote (qt-preview button) to confirm the per-component spec line now reads 'Kemi/Kraft · 33# · 25.1250×11.5625 · 1 pc/set' instead of 'Kemi/None · ...'. PDF code in PreviewPdfModal.jsx already had correct fmLnr — only the Quote Table side was broken.",
+    "OPTIONAL: confirm in browser that BOM-component click in BOM section makes the corresponding qt-comp-section scrolls into view + auto-expand (the data-bom-selected attribute and BOM badge are already correctly wired and were observed on section 1 in the loaded sample)."
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL FIXED: mediumShort() was referenced but undeclared — would crash the entire MP-Individual UI on first render for any quote with at least one component. This made the entire app unusable for the redesigned MP-Individual feature. RCA: leftover during the iteration_8 implementation where linerShort was renamed/refactored without defining its companion mediumShort.",
+    "HIGH FIXED: linerShort('None') returned 'None' literally — directly contradicts the user-requested legacy fmLnr semantics. Now treats both falsy and string 'None' as Kraft, strips weight prefix and -Lite/-White suffixes.",
+    "GOOD: Column order in both COLS const (line 10-24) and SUB_COLS (line 567-580) matches the exact user spec: Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF, Freight, Sheet, #Out, Route. Die and Prepress no longer separate columns — embedded in Total.",
+    "GOOD: Sheet cell formatting uses Math.round(Number(r.sheetW)) — integers only, satisfies the no-decimals requirement.",
+    "GOOD: BOM-selected highlight is correctly implemented — section gets 2px purple border (line 456), accent-soft background on the header (line 467-469), 'BOM' badge with data-testid qt-comp-N-bom-selected (line 481-487), and data-bom-selected='true' attribute (line 454). useEffect (line 342-354) auto-expands and scrollIntoView's the target on activeItemIdx change. All verified live.",
+    "GOOD: Per-item freight and prepress flow through correctly — verified $450 * 1.15 = $517.50 and $700 * 1.15 = $805.00 on each component's own row; printReq='No' correctly yields prepressLineCost=0.",
+    "MINOR: linerShort() now uses regex matching on the raw (un-stripped) string for the 'Kla' branch (checks both s and liner). Acceptable but slightly inconsistent — consider always operating on the stripped form to simplify maintenance."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/spot/QuoteTableSec.jsx (lines 708-731: defined mediumShort + rewrote linerShort with legacy fmLnr semantics)",
+    "/app/backend/tests/test_component_pricing.py (added TestPerItemFreightPrepress with 5 tests + TestPrintReqNoZeroPrepress)"
+  ],
+  "success_rate": {"backend": "100% (16/16: 10 prior regression + 6 new)", "frontend": "100% on the 5 user-requested refinements after the mediumShort/linerShort fixes were applied — verified in live admin session on loaded SA-260604-155037 quote"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working",
+  "seed_data_creation": "None — used loaded sample quote SA-260604-155037 (Jamestown Container Companies / Sam's Club Pallet Display). The auto-load on login flow rendered the MP-Individual layout exercising all 5 refinements.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend was blocking-broken on entry — fix was made by testing agent (small surgical scope: define missing mediumShort, rewrite linerShort per legacy fmLnr). Live verification post-fix: qt-comp-table-0 headers exactly ['Act','Qty','Sell/Ea','GM%','GM$','Total','$/MSF','Cost/MSF','Freight','Sheet','#Out','Route']; section-1 has data-bom-selected='true' + visible BOM badge + purple border + accent-soft header; Sheet cells render as '63×98' (no decimals); section spec lines render as 'Kemi/Kraft · ...' and 'Kla/Kraft · ...' (None correctly shown as Kraft). Job Totals footer shows Per-Item Freight ($212.98) + Per-Item Prepress ($50) breakdown with Grand Total $8,706.09. Backend per-item math verified by 6 new pytest cases.",
+  "rca of the issue": "Root cause: in iteration_8 source change, linerShort() was refactored and a companion mediumShort() was referenced on line 449 of QuoteTableSec.jsx but never defined in the same module. Because ComponentLayout renders eagerly on any MP-Individual quote, this threw ReferenceError synchronously, causing React's error boundary fallback (the CRA dev-overlay) to take the entire viewport. Additionally, linerShort('None') passed the literal string through, violating legacy fmLnr semantics (None → Kraft). Fix: defined mediumShort() with the legacy ' Medium'/' Bleached Medium' suffix stripping (matches the PDF preview implementation in PreviewPdfModal.jsx lines 93-103); rewrote linerShort() to treat falsy OR literal 'None' as Kraft and to strip the weight prefix + -Lite/-White suffixes consistently. Reproduction (before fix): log in as admin → loaded quote auto-renders the MP-Individual ComponentLayout → page-level Uncaught runtime errors overlay. Mitigation (applied): replaced both helper functions in /app/frontend/src/components/spot/QuoteTableSec.jsx — frontend hot-reloaded and the live SA-260604-155037 quote now renders with all 5 refinements per spec."
+}

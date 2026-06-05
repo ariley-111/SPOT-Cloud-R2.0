@@ -290,6 +290,10 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 spec_parts_c.append(f'{bs["boardGrade"]}# {bs["flute"]}')
             if bs.get("outsideLiner") or bs.get("insideLiner"):
                 spec_parts_c.append(f'{_liner_short(bs.get("outsideLiner"))}/{_liner_short(bs.get("insideLiner"))}')
+            # Legacy L5909: include medium when not "None"
+            med_c = bs.get("medium") or "None"
+            if med_c and med_c != "None":
+                spec_parts_c.append(str(med_c).replace("# Medium", "#").replace("# Bleached Medium", "# Bl"))
             try:
                 if float(bs.get("oneUpW") or 0) > 0 and float(bs.get("oneUpL") or 0) > 0:
                     spec_parts_c.append(f'{_fn(bs["oneUpW"], 4)}\u00D7{_fn(bs["oneUpL"], 4)}')

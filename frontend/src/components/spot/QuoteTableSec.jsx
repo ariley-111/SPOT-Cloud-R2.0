@@ -5,6 +5,8 @@ import Sec from "./Sec";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 
 // Column definitions — used for both Single-Part and the per-component sub-tables.
+// Order per user spec: Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF,
+// Freight, Sheet Size (no decimals), #Out, Route.
 const COLS = [
   { k: "act",     lbl: "Act",      align: "center", w: 24 },
   { k: "qty",     lbl: "Qty",      align: "right" },
@@ -15,8 +17,6 @@ const COLS = [
   { k: "sellMSF", lbl: "$/MSF",    align: "right" },
   { k: "costMSF", lbl: "Cost/MSF", align: "right" },
   { k: "freight", lbl: "Freight",  align: "right" },
-  { k: "die",     lbl: "Die",      align: "right" },
-  { k: "prepress",lbl: "Prepress", align: "right" },
   { k: "sheet",   lbl: "Sheet",    align: "right" },
   { k: "out",     lbl: "#Out",     align: "right" },
   { k: "route",   lbl: "Route",    align: "right" },
@@ -135,6 +135,7 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           componentPricing={componentPricing}
           jobTotals={jobTotals}
           bomItems={s.bomItems || []}
+          activeItemIdx={s.activeItemIdx ?? 0}
           excludeMap={s.exportExcludeByComponent || {}}
           setField={setField}
         />
@@ -299,14 +300,8 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11 }}>
                   {Number(r.freightLine || r.freightEmbed) > 0 ? fmtMoney(r.freightLine || r.freightEmbed) : "—"}
                 </td>
-                <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11 }}>
-                  {Number(r.dieLineCost) > 0 ? fmtMoney(r.dieLineCost) : "—"}
-                </td>
-                <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11 }}>
-                  {Number(r.prepressLineCost) > 0 ? fmtMoney(r.prepressLineCost) : "—"}
-                </td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: "var(--spot-text2)" }}>
-                  {r.sheetW ? `${fmtNum(r.sheetW, 3)}×${fmtNum(r.sheetL, 3)}` : "—"}
+                  {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
                 </td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: routeColor(r.route), fontWeight: 600 }}>
@@ -334,13 +329,29 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────
 // Each component is its own collapsible section with its own qty rows.
 // Scales cleanly to 25+ components via expand/collapse controls.
-function ComponentLayout({ componentPricing, jobTotals, bomItems, excludeMap, setField }) {
-  // Default: first 3 components expanded
+function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx, excludeMap, setField }) {
+  // Default: first 3 components expanded, plus the BOM-selected one
   const [expanded, setExpanded] = useState(() => {
     const init = {};
-    componentPricing.forEach((c, i) => { init[c.itemId || c.itemIndex] = i < 3; });
+    componentPricing.forEach((c, i) => {
+      init[c.itemId || c.itemIndex] = i < 3 || i === activeItemIdx;
+    });
     return init;
   });
+  // Auto-expand and scroll-into-view when user picks a different component in BOM
+  useEffect(() => {
+    const target = componentPricing.find((c) => c.itemIndex === activeItemIdx);
+    if (!target) return;
+    const k = target.itemId || target.itemIndex;
+    setExpanded((prev) => prev[k] ? prev : { ...prev, [k]: true });
+    // Scroll the selected section into view (smooth, top-aligned)
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-comp-section="${k}"]`);
+      if (el && typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  }, [activeItemIdx, componentPricing]);
   useEffect(() => {
     // Keep newly added components closed by default; only adjust if list grows
     setExpanded((prev) => {
@@ -426,28 +437,36 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, excludeMap, se
       {componentPricing.map((c) => {
         const k = c.itemId || c.itemIndex;
         const open = !!expanded[k];
+        const isBomSelected = c.itemIndex === activeItemIdx;
         const compSell = (c.rows || []).reduce((a, r) => a + Number(r.itemSell || 0), 0);
         const totalQtyCount = (c.rows || []).length;
         const bs = c.boardSpec || {};
         const specLine = [
           bs.custIdent,
           bs.boardGrade && bs.flute ? `${bs.boardGrade}# ${bs.flute}` : "",
-          (bs.outsideLiner || bs.insideLiner) ? `${linerShort(bs.outsideLiner)}/${linerShort(bs.insideLiner)}` : "",
+          `${linerShort(bs.outsideLiner)}/${linerShort(bs.insideLiner)}`,
           (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0) ? `${fmtNum(bs.oneUpW, 4)}×${fmtNum(bs.oneUpL, 4)}` : "",
+          mediumShort(bs.medium),
         ].filter(Boolean).join(" · ");
 
         return (
           <div key={k} data-comp-section={k} data-testid={`qt-comp-section-${c.itemIndex}`}
+            data-bom-selected={isBomSelected ? "true" : "false"}
             style={{
-              border: "1px solid var(--spot-line)", borderRadius: 5, marginBottom: 8,
+              border: `${isBomSelected ? "2px" : "1px"} solid ${isBomSelected ? "var(--spot-accent)" : "var(--spot-line)"}`,
+              borderRadius: 5, marginBottom: 8,
               background: "var(--spot-bg2)",
+              boxShadow: isBomSelected ? "0 0 0 2px var(--spot-accent-soft)" : "none",
+              transition: "box-shadow .15s, border-color .15s",
             }}>
             {/* Section header — always visible */}
             <div onClick={() => toggle(k)}
               style={{
                 cursor: "pointer", padding: "8px 12px",
                 display: "flex", alignItems: "center", gap: 12,
-                background: open ? "var(--spot-bg3)" : "transparent",
+                background: isBomSelected
+                  ? "var(--spot-accent-soft)"
+                  : (open ? "var(--spot-bg3)" : "transparent"),
                 borderBottom: open ? "1px solid var(--spot-line)" : "none",
               }}>
               <span style={{
@@ -455,9 +474,17 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, excludeMap, se
                 fontSize: 11, color: "var(--spot-text2)",
                 transform: open ? "rotate(90deg)" : "none", transition: "transform .15s",
               }}>▸</span>
-              <span style={{ fontWeight: 700, fontSize: 13 }}>
+              <span style={{ fontWeight: 700, fontSize: 13,
+                color: isBomSelected ? "var(--spot-accent)" : "inherit" }}>
                 {c.itemIndex + 1}. {c.desc || `Item ${c.itemIndex + 1}`}
               </span>
+              {isBomSelected && (
+                <span data-testid={`qt-comp-${c.itemIndex}-bom-selected`} style={{
+                  fontSize: 9, fontWeight: 700, padding: "1px 6px",
+                  borderRadius: 2, background: "var(--spot-accent)", color: "#fff",
+                  textTransform: "uppercase", letterSpacing: ".06em",
+                }}>BOM</span>
+              )}
               <span style={{
                 fontSize: 10, fontWeight: 700, color: typeColor(c.type),
                 padding: "1px 6px", borderRadius: 3, background: `${typeColor(c.type)}18`,
@@ -535,20 +562,21 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, excludeMap, se
 
 function ComponentSubTable({ comp, isRowExcluded, toggleRowExclude }) {
   const rows = comp.rows || [];
+  // Sub-table column set matches the user's requested legacy order:
+  // Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF, Freight, Sheet Size, #Out, Route
   const SUB_COLS = [
-    { k: "act",     lbl: "Act",     align: "center", w: 24 },
-    { k: "qty",     lbl: "Qty",     align: "right" },
-    { k: "each",    lbl: "Each",    align: "right", accent: true },
-    { k: "perM",    lbl: "Per/M",   align: "right" },
-    { k: "sellMSF", lbl: "$/MSF",   align: "right" },
-    { k: "costMSF", lbl: "Cost/MSF",align: "right" },
-    { k: "sheet",   lbl: "Sheet",   align: "right" },
-    { k: "out",     lbl: "#Out",    align: "right" },
-    { k: "route",   lbl: "Route",   align: "right" },
-    { k: "freight", lbl: "Freight", align: "right" },
-    { k: "die",     lbl: "Die",     align: "right" },
-    { k: "prepress",lbl: "Prepress",align: "right" },
-    { k: "total",   lbl: "Total",   align: "right" },
+    { k: "act",     lbl: "Act",      align: "center", w: 24 },
+    { k: "qty",     lbl: "Qty",      align: "right" },
+    { k: "sellEa",  lbl: "Sell/Ea",  align: "right", accent: true },
+    { k: "gmPct",   lbl: "GM%",      align: "right" },
+    { k: "gmDol",   lbl: "GM$",      align: "right" },
+    { k: "total",   lbl: "Total",    align: "right" },
+    { k: "sellMSF", lbl: "$/MSF",    align: "right" },
+    { k: "costMSF", lbl: "Cost/MSF", align: "right" },
+    { k: "freight", lbl: "Freight",  align: "right" },
+    { k: "sheet",   lbl: "Sheet",    align: "right" },
+    { k: "out",     lbl: "#Out",     align: "right" },
+    { k: "route",   lbl: "Route",    align: "right" },
   ];
   if (rows.length === 0) {
     return (
@@ -594,20 +622,25 @@ function ComponentSubTable({ comp, isRowExcluded, toggleRowExclude }) {
                 </td>
                 <td style={{ ...cellBase, textAlign: "right", fontWeight: 600 }}>{fmtInt(r.qty)}</td>
                 <td style={{ ...cellBase, textAlign: "right" }}>{fmtMoney(r.sellPc, 2)}</td>
-                <td style={{ ...cellBase, textAlign: "right" }}>{fmtMoney(r.perM, 2)}</td>
-                <td style={{ ...cellBase, textAlign: "right" }}>{fmtMoney(r.sellMSF, 2)}</td>
-                <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>{fmtMoney(r.costMSF, 2)}</td>
-                <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>
-                  {r.sheetW ? `${fmtNum(r.sheetW, 3)}×${fmtNum(r.sheetL, 3)}` : "—"}
+                <td style={{ ...cellBase, textAlign: "right",
+                  color: (r.gmPct || 0) >= 0 ? "var(--spot-green)" : "var(--spot-err)", fontWeight: 600 }}>
+                  {fmtPct(r.gmPct || 0, 1)}
                 </td>
-                <td style={{ ...cellBase, textAlign: "right", fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
-                <td style={{ ...cellBase, textAlign: "right", color: routeColor(r.route), fontWeight: 600 }}>{cadLabel}</td>
-                <td style={{ ...cellBase, textAlign: "right" }}>{Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—"}</td>
-                <td style={{ ...cellBase, textAlign: "right" }}>{Number(r.dieLineCost) > 0 ? fmtMoney(r.dieLineCost) : "—"}</td>
-                <td style={{ ...cellBase, textAlign: "right" }}>{Number(r.prepressLineCost) > 0 ? fmtMoney(r.prepressLineCost) : "—"}</td>
+                <td style={{ ...cellBase, textAlign: "right",
+                  color: (r.gmDollar || 0) >= 0 ? "var(--spot-green)" : "var(--spot-err)" }}>
+                  {fmtMoney(r.gmDollar || 0)}
+                </td>
                 <td style={{ ...cellBase, textAlign: "right", fontWeight: 700, color: "var(--spot-accent)" }}>
                   {fmtMoney(r.sellTotal)}
                 </td>
+                <td style={{ ...cellBase, textAlign: "right" }}>{fmtMoney(r.sellMSF, 2)}</td>
+                <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>{fmtMoney(r.costMSF, 2)}</td>
+                <td style={{ ...cellBase, textAlign: "right" }}>{Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—"}</td>
+                <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>
+                  {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
+                </td>
+                <td style={{ ...cellBase, textAlign: "right", fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
+                <td style={{ ...cellBase, textAlign: "right", color: routeColor(r.route), fontWeight: 600 }}>{cadLabel}</td>
               </tr>
             );
           })}
@@ -673,13 +706,26 @@ function PerComponentBreakdownLegacy({ row }) {
 }
 
 function linerShort(liner) {
-  if (!liner) return "None";
-  const s = String(liner).toLowerCase();
-  if (s.includes("kemi")) return "Kemi";
-  if (s.includes("kla") && s.includes("white")) return "Kla";
-  if (s.includes("white")) return "White";
-  if (s.includes("kraft")) return "Kraft";
-  return liner;
+  // Legacy fmLnr semantics (spot_r1_5.jsx L1218):
+  //   null/empty/"None" → "Kraft"; strip weight prefix (e.g. "42# ") and
+  //   trailing "-Lite" / "-White" suffixes.
+  if (!liner || String(liner).toLowerCase() === "none") return "Kraft";
+  const s = String(liner).replace(/^\s*\d+#\s*/, "").replace(/-(Lite|White)$/i, "");
+  if (/kemi/i.test(s)) return "Kemi";
+  if (/kla/i.test(s) && /white/i.test(liner)) return "Kla";
+  if (/white/i.test(s)) return "White";
+  if (/kraft/i.test(s)) return "Kraft";
+  return s;
+}
+
+function mediumShort(medium) {
+  // Strip the trailing " Medium" / " Bleached Medium" — keep the weight prefix
+  // (e.g. "33# Medium" → "33#", "26# Bleached Medium" → "26# Bl").
+  if (!medium || String(medium).toLowerCase() === "none") return "";
+  return String(medium)
+    .replace(/\s*Bleached Medium\s*$/i, " Bl")
+    .replace(/\s*Medium\s*$/i, "")
+    .trim();
 }
 
 function typeColor(t) {

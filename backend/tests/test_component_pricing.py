@@ -186,3 +186,108 @@ class TestMatchedSetComponentPricing:
 
     def test_pricingmode_matched_in_meta(self, resp):
         assert resp["meta"]["pricingMode"] == "Matched Set"
+
+
+# ── Per-Item freight + prepress (iteration_8 user feedback) ────────────
+class TestPerItemFreightPrepress:
+    """When freightScope=Per Item and prepressScope=Per Item, each component
+    must use its OWN freightCost/prepressCost (not aggregated)."""
+
+    @pytest.fixture(scope="class")
+    def resp(self, client):
+        def _state(qtys, freight, prepress):
+            st = _mfg_state(qtys)
+            st["freightCost"] = freight
+            st["prepressCost"] = prepress
+            st["freightTreatment"] = "Separate Line"
+            st["prepressTreatment"] = "Separate Line"
+            st["quoteFOB"] = "Destination"
+            return st
+
+        payload = {
+            "quoteType": "Multi-Part",
+            "pricingMode": "Individual",
+            "setMarginPct": "0.40",
+            "setMarginOverride": False,
+            "purchasedMarginPct": "0.40",
+            "fulfillmentMarginPct": "0.45",
+            "qtys": ["1000", "2000", "", "", ""],
+            "quoteFOB": "Destination",
+            "bomItems": [
+                {"id": "a", "desc": "Comp A", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _state(["1000", "", "", "", ""], "450", "50")},
+                {"id": "b", "desc": "Comp B", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _state(["", "2000", "", "", ""], "700", "75")},
+            ],
+            "freightScope": "Per Item",
+            "prepressScope": "Per Item",
+        }
+        r = client.post(f"{BASE_URL}/api/engine/calculate-multi-part",
+                        json=payload, timeout=60)
+        assert r.status_code == 200, f"{r.status_code} {r.text[:400]}"
+        return r.json()
+
+    def test_comp_a_freight_517_50(self, resp):
+        # 450 * 1.15 = 517.50
+        row = resp["componentPricing"][0]["rows"][0]
+        assert row["freightLine"] == pytest.approx(517.50, abs=0.5), (
+            f"Comp A freightLine: expected 517.50, got {row['freightLine']}"
+        )
+
+    def test_comp_a_prepress_50(self, resp):
+        row = resp["componentPricing"][0]["rows"][0]
+        assert row["prepressLineCost"] == pytest.approx(50.0, abs=0.01), (
+            f"Comp A prepressLineCost: expected 50.0, got {row['prepressLineCost']}"
+        )
+
+    def test_comp_b_freight_805(self, resp):
+        # 700 * 1.15 = 805.00
+        row = resp["componentPricing"][1]["rows"][0]
+        assert row["freightLine"] == pytest.approx(805.0, abs=0.5), (
+            f"Comp B freightLine: expected 805.0, got {row['freightLine']}"
+        )
+
+    def test_comp_b_prepress_75(self, resp):
+        row = resp["componentPricing"][1]["rows"][0]
+        assert row["prepressLineCost"] == pytest.approx(75.0, abs=0.01), (
+            f"Comp B prepressLineCost: expected 75.0, got {row['prepressLineCost']}"
+        )
+
+    def test_sell_total_includes_freight_plus_prepress(self, resp):
+        """sellTotal must = itemSell + freightLine + dieLineCost + prepressLineCost + miscLineCost."""
+        for ci, cp in enumerate(resp["componentPricing"]):
+            for ri, row in enumerate(cp["rows"]):
+                expected = (row["itemSell"] + row["freightLine"] + row["dieLineCost"]
+                            + row["prepressLineCost"] + row["miscLineCost"])
+                assert row["sellTotal"] == pytest.approx(expected, abs=0.5), (
+                    f"comp {ci} row {ri}: sellTotal={row['sellTotal']} expected {expected}"
+                )
+
+
+class TestPrintReqNoZeroPrepress:
+    """Legacy parity: prepress base only applies when printRequired=Yes.
+    If printReq='No', prepressLineCost should be 0 even with prepressCost set."""
+
+    def test_print_no_zeros_prepress(self, client):
+        st = _mfg_state(["1000", "", "", "", ""])
+        st["printReq"] = "No"
+        st["prepressCost"] = "999"
+        st["prepressTreatment"] = "Separate Line"
+        payload = {
+            "quoteType": "Multi-Part", "pricingMode": "Individual",
+            "setMarginPct": "0.40", "setMarginOverride": False,
+            "purchasedMarginPct": "0.40", "fulfillmentMarginPct": "0.45",
+            "qtys": ["1000", "", "", "", ""],
+            "bomItems": [
+                {"id": "x", "desc": "NoPrint", "type": "Manufactured", "pcsPerSet": 1, "state": st},
+            ],
+            "prepressScope": "Per Item", "prepressTreatment": "Separate Line",
+        }
+        r = client.post(f"{BASE_URL}/api/engine/calculate-multi-part",
+                        json=payload, timeout=60)
+        assert r.status_code == 200, f"{r.status_code} {r.text[:300]}"
+        data = r.json()
+        row = data["componentPricing"][0]["rows"][0]
+        assert row["prepressLineCost"] == pytest.approx(0.0, abs=0.01), (
+            f"printReq=No should yield prepressLineCost=0, got {row['prepressLineCost']}"
+        )
