@@ -136,7 +136,18 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   - By Month / By Customer / By Estimator breakdowns
   - Recent calls log (newest 50): timestamp · estimator · customer · model · tokens · $cost · ✓/✗
 
-### 2026-06-05 — Freight parity restore + Entra SSO scaffolding ✅
+### 2026-06-05 — Entra SSO live in preview ✅
+- User confirmed first successful Microsoft round-trip on
+  `ariley@standardprinting.com`. SSO end-to-end working: Microsoft login →
+  callback → user upsert with admin role (bootstrap allowlist) → JWT issued
+  → SPA lands signed in.
+- Preview Entra creds wired in `/app/backend/.env` (tenant
+  `019353eb-…`, client `2ac83fa8-…`). Prod will need its own client
+  secret + APP_BASE_URL.
+- MSAL gotcha resolved: removed `openid/profile/email` from explicit scopes
+  list — MSAL auto-adds them and raises "reserved scope" ValueError if you
+  pass them yourself. `auth_entra.py` now passes `scopes=[]`.
+
 - **Auto-Route resolver parity** verified already correct (`engine/routing.py`
   L490-513). Crest route stays `viable=True` even when sheet rule inches >1000
   — only a warning is attached; the cheapest viable route still wins, matching
