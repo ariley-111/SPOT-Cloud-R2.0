@@ -27,6 +27,8 @@ def hash_password(pw: str) -> str:
 
 
 def verify_password(pw: str, hashed: str) -> bool:
+    if not hashed:
+        return False  # SSO-only users have no password hash
     try:
         return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode("utf-8"))
     except (ValueError, TypeError):
@@ -77,6 +79,11 @@ async def register(body: UserCreate, _admin: User = Depends(require_admin)) -> U
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: UserLogin) -> LoginResponse:
+    if os.environ.get("SSO_REQUIRED", "false").lower() == "true":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Password login is disabled — please use Microsoft SSO",
+        )
     user_doc = await db[COL_USERS].find_one({"email": body.email.lower()}, {"_id": 0})
     if not user_doc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
@@ -96,6 +103,19 @@ async def login(body: UserLogin) -> LoginResponse:
 @router.get("/me", response_model=UserPublic)
 async def me(user: User = Depends(get_current_user)) -> UserPublic:
     return UserPublic(id=user.id, email=user.email, name=user.name, role=user.role)
+
+
+@router.get("/config")
+async def auth_config() -> dict:
+    """Public — frontend reads this on the login screen to know whether to
+    render the Entra button and/or hide the password form."""
+    # Defer import to avoid a circular dep at module-import time.
+    from routes.auth_entra import is_sso_configured
+    return {
+        "sso_enabled": is_sso_configured(),
+        "sso_required": os.environ.get("SSO_REQUIRED", "false").lower() == "true",
+        "allowed_domain": os.environ.get("ALLOWED_EMAIL_DOMAIN", "standardprinting.com"),
+    }
 
 
 @router.post("/logout")

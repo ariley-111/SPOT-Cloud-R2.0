@@ -1,0 +1,32 @@
+{
+  "summary": "Full backend + frontend verification of Entra SSO scaffolding (graceful-disable) and Multi-Part freight panel regression after the calcShipment rewrite. All 8 backend pytest cases PASSED (auth/config, Entra-503, admin login, bad creds, schema with empty password_hash, SSO_REQUIRED guard, MP engine regression). All 3 frontend flows PASSED: login page renders correctly with Entra button hidden + correct footer, password login → SPOT app → logout works, and the high-risk freight-panel Ship+90210 flow produced the exact expected toast and a reasonable per-component allocation.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_entra.py",
+    "/app/test_reports/pytest/auth_entra_it13.xml"
+  ],
+  "action_items": [
+    "None blocking. Entra SSO scaffolding is verified — once Microsoft credentials land in /app/backend/.env (ENTRA_TENANT_ID/CLIENT_ID/CLIENT_SECRET), /api/auth/entra/login should flip from 503 to a 302 to login.microsoftonline.com and /api/auth/config will return sso_enabled=true; UI will auto-show the entra-sso-btn. No further changes needed in the SPOT app."
+  ],
+  "critical_code_review_comments": [
+    "routes/auth_entra.py is well-structured. Minor: `_STATE_SECRET` falls back to JWT_SECRET — when running multi-pod prod, ensure SSO_STATE_SECRET is explicitly set so state cookies survive a JWT_SECRET rotation.",
+    "auth_entra.entra_callback short-circuits with 503 BEFORE the state-cookie check when SSO is unconfigured. This means the test 'callback without cookie returns 400' is technically only true once Entra env vars are set. Documented this in test_entra_callback_503_when_unconfigured (accepts 400 OR 503 to be future-proof).",
+    "frontend/src/lib/shipment.js — new verbatim port of legacy calcShipment. Verified live: combined-shipment freight produced 954 lbs total / 4 skids / $616.92 LTL @ 90210, identical legacy parity expected. No regressions.",
+    "RightDashboard FreightPanel correctly allocates per-component freight by weight — $616.92 total ÷ 3 components produced item-1 base of $56.91 (item 1 is the smallest of the three by weight), totals exactly to the combined LTL quote. Behavior matches the legacy SPOT tool."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_entra.py (NEW — 8 tests covering config/entra/login/schema/regression)"
+  ],
+  "success_rate": {"backend": "100% (8/8 pytest)", "frontend": "100% (3/3 flows)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working via password flow. No Entra credentials needed in this iteration.",
+  "seed_data_creation": "None — used the existing admin seed (idempotent /api/auth/seed-admin on app boot).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Entra SSO is fully scaffolded but env-gated. When the user provides ENTRA_TENANT_ID/CLIENT_ID/CLIENT_SECRET, run these new checks: (1) /api/auth/config → sso_enabled=true; (2) GET /api/auth/entra/login → 302 to login.microsoftonline.com with state cookie set; (3) GET /api/auth/entra/callback (no cookie) → 400 'Missing or expired SSO state cookie' (NOT 503); (4) flip SSO_REQUIRED=true → /api/auth/login returns 403 'Password login is disabled' (the route already has this guard, currently only inert because env=false). For freight: the legacy parity port in /app/frontend/src/lib/shipment.js is now live and emitting correct combined-shipment LTL quotes (verified destZip=90210 → OLD DOMINION 4 skids 954 lbs $616.92). Toast format: 'Per-Item Freight $X via [Carrier] · N skids · M lbs combined'.",
+  "rca_of_the_issue": "No regression detected. Both this session's P0 changes (Auto-Route resolver fix + combined-shipment freight weight) are wired correctly. Backend Entra scaffolding gracefully returns 503 when env vars are blank and the UI hides the Microsoft button accordingly. Multi-Part freight produces a single combined LTL quote ($616.92, 954 lbs, 4 skids) and allocates per-component by weight — matches legacy SPOT behavior."
+}

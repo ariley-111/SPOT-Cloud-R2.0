@@ -7,6 +7,8 @@ export const authLogin = (email, password) =>
 
 export const authMe = () => api.get("/auth/me").then((r) => r.data);
 
+export const authConfig = () => api.get("/auth/config").then((r) => r.data);
+
 export const seedAdmin = () =>
   api.post("/auth/seed-admin").then((r) => r.data);
 

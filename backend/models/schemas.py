@@ -21,7 +21,9 @@ class User(BaseModel):
     email: str
     name: str
     role: str = "estimator"  # admin | estimator | test
-    password_hash: str
+    password_hash: str = ""           # empty for SSO-only users
+    auth_provider: str = "local"      # "local" | "entra"
+    entra_oid: Optional[str] = None
     created_at: str = Field(default_factory=_utc_now)
     last_login: Optional[str] = None
 

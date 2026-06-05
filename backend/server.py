@@ -12,6 +12,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from routes import health as health_routes
 from routes import auth as auth_routes
+from routes import auth_entra as auth_entra_routes
 from routes import customers as customers_routes
 from routes import engine_routes
 from routes import quotes as quotes_routes
@@ -44,6 +45,7 @@ app.add_middleware(
 # Routers
 app.include_router(health_routes.router)
 app.include_router(auth_routes.router)
+app.include_router(auth_entra_routes.router)
 app.include_router(customers_routes.router)
 app.include_router(engine_routes.router)
 app.include_router(quotes_routes.drafts_router)
