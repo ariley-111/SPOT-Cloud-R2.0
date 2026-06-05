@@ -85,4 +85,12 @@
 
 ---
 
-_Owner: rwalter@standardprinting.com — please review before Monday's testing launch._
+## 11. Quote Table column detail (in-progress for today)
+
+   - Legacy quote table shows per-qty rows: `ACT | QTY | SELL/EA | GM% | GM$ | TOTAL | $/MSF | COST/MSF | FREIGHT | SHEET | #OUT | ROUTE (with CAD hrs)`.
+   - Cloud currently misses Freight $ value, $/MSF, COST/MSF, SHEET dimensions, #OUT, and CAD hrs in the Route cell.
+   - This is being fixed in today's batch (P0 UI). No estimator decision needed unless additional columns are wanted.
+
+---
+
+_Owner: rwalter@standardprinting.com — living document, appended throughout dev sessions._
