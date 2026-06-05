@@ -6,6 +6,53 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+# SPOT Cloud — Changelog
+
+Append-only log of shipped features and fixes.
+
+## 2026-02-10 — MP-Individual UX polish (auto-scroll, qty selection, freight treatment, Job Totals)
+
+User feedback after the per-component layout shipped: (a) auto-scroll on every
+engine recompute was disruptive, (b) nav chips next to Expand/Collapse All
+didn't actually select the component, (c) no way to know what the section
+header total reflected when a component had multiple qtys, (d) Freight
+Treatment tiles (Line / Amort) only existed in Single-Part — missing in MP,
+(e) Job Totals didn't label the Local Delivery zone, (f) multi-qty per
+component didn't surface a per-tier breakdown.
+
+### Frontend
+- `QuoteTableSec.jsx`: auto-scroll now uses a `prevActiveRef` so it fires
+  ONLY when `activeItemIdx` actually changes (clicks), not on engine recompute.
+- Nav chips now call `setField("activeItemIdx", …)` so clicking syncs to the
+  BOM section and the matching section gets the BOM badge + auto-scroll.
+- Per-component sub-table: rows are now clickable to SELECT a qty tier. The
+  selected row gets `data-row-selected="true"`, a SEL badge, and an accent
+  outline. The section header shows `@<qty>: $<total>` for the selected row
+  with a breakdown line (`base $X + frt $Y + die $Z + prep $W`).
+- Job Totals footer: when `quoteFOB === "Local Delivery"`, the label becomes
+  `"Per-Job Freight: Local Delivery · <zone>"`. When any component has 2+ qty
+  rows, the layout switches to a per-tier breakdown table
+  (`qt-job-totals-by-qty`) with rows `qt-job-totals-tier-N` showing Items /
+  Per-Item Freight / Die / Prepress / Per-Job Freight / Total at each tier.
+- `Placeholders.jsx::JobLevelAllocPanel`: adds Freight Treatment tiles
+  (`tile-itemfreight-line/amort`, `tile-jobfreight-line/amort`) and Prepress
+  Treatment tiles (`tile-itemprepress-line/amort`, `tile-jobprepress-line/amort`),
+  scope-gated. Targets `freightTreatment` vs `jobFreightTreatment` based on
+  `freightScope`.
+- `RightDashboard.jsx::updateFreight`: rewrote to handle MP+Per Item
+  (iterates `bomItems`, calls `freightQuote` per component using per-component
+  weight, writes each `state.freightCost`) vs MP+Per Job (single combined
+  quote → `jobFreightCost`) vs Single-Part (existing behavior). Carrier + FOB
+  metadata applied across all updated items.
+
+### Tested
+- Backend: 16/16 regression tests still pass (no backend code touched).
+- Frontend: testing_agent_v3_fork iteration_10 verified all 8 freight/prepress
+  treatment testids render + correctly scope-gated; iteration_9 verified
+  nav-chip activeItemIdx, qty-row selection, Local-Delivery label, per-tier
+  breakdown, and the `btn-freight-update` Update All code path. Both ran on
+  live MP-Individual quotes.
+
 ## 2026-02-10 — MP-Individual per-component layout (Quote Table + PDF)
 
 User feedback: in MP-Individual mode (each component has its own qty tier(s)),
