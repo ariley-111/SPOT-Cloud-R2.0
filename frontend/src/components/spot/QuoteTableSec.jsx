@@ -352,8 +352,10 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
   const [selRowByComp, setSelRowByComp] = useState({});
 
   // Auto-scroll-into-view fires ONLY when the user changes the active BOM
-  // component (not on every engine recompute / data refresh). We track the
-  // previous activeItemIdx in a ref to detect the actual user intent.
+  // Expand the active component section when activeItemIdx changes — but
+  // do NOT auto-scroll the page. Scrolling on every BOM-item click was
+  // annoying when the estimator was focused elsewhere (e.g. the right-side
+  // Freight / Economics panels).
   const prevActiveRef = useRef(activeItemIdx);
   useEffect(() => {
     if (prevActiveRef.current === activeItemIdx) return;  // not a user-initiated change
@@ -362,12 +364,6 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
     if (!target) return;
     const k = target.itemId || target.itemIndex;
     setExpanded((prev) => prev[k] ? prev : { ...prev, [k]: true });
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-comp-section="${k}"]`);
-      if (el && typeof el.scrollIntoView === "function") {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    });
   }, [activeItemIdx, componentPricing]);
   useEffect(() => {
     // Keep newly added components closed by default; only adjust if list grows
