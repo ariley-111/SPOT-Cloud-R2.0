@@ -208,6 +208,8 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
                 {(cache.perJobQuotes[0].allCarriers || []).slice(0, 6).map((c, i) => {
                   const isActive = c.name === s.freightCarrier;
                   const wm = (c.total || 0) * (1 + markup);
+                  // Backend's allCarriers maps transitDays → "transit" — accept either.
+                  const transit = c.transit != null ? c.transit : c.transitDays;
                   return (
                     <tr key={i} style={{ borderTop: "1px solid var(--spot-line)",
                                          background: isActive ? "rgba(34,197,94,0.08)" : "transparent" }}>
@@ -220,7 +222,7 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
                       <td style={{ padding: "5px 6px", textAlign: "right" }}>{fmtMoney(c.total || 0)}</td>
                       <td style={{ padding: "5px 6px", textAlign: "right", fontWeight: 700, color: "var(--spot-green)" }}>{fmtMoney(wm)}</td>
                       <td style={{ padding: "5px 6px", textAlign: "right", color: "var(--spot-text3)" }}>
-                        {c.transitDays != null ? `${c.transitDays} day${c.transitDays === 1 ? "" : "s"}` : "—"}
+                        {transit != null ? `${transit} day${transit === 1 ? "" : "s"}` : "—"}
                       </td>
                       <td style={{ padding: "5px 6px", textAlign: "right" }}>
                         {!isActive && (

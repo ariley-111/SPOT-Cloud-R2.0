@@ -256,3 +256,48 @@ async def quote(
         result = _fallback_rate(dest_zip, weight_lbs)
         result["utsError"] = str(uts_err)[:200]
         return result
+
+
+@router.post("/quote-batch")
+async def quote_batch(
+    body: Dict[str, Any] = Body(...),
+    _u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Batch freight quote — accepts an array of {destZip, weightLbs, ...} requests
+    and returns a parallel array of results. Server-side serialization (behind
+    the UTS lock) means many quotes complete in a single HTTP round-trip without
+    blowing the client-side 60s axios timeout.
+
+    Body: { items: [ {destZip, weightLbs, freightClass?, trailerFeet?, ref?}, ... ] }
+    Returns: { results: [ {...quote_response, ref}, ... ] }
+    `ref` is an opaque tag echoed back so the caller can correlate results.
+    """
+    items = body.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(400, "items array required")
+    if len(items) > 50:
+        raise HTTPException(400, "max 50 quotes per batch")
+
+    results: List[Dict[str, Any]] = []
+    for it in items:
+        ref = it.get("ref")
+        dest_zip = str(it.get("destZip") or it.get("dest_zip") or "").strip()
+        weight_lbs = float(it.get("weightLbs") or it.get("weight_lbs") or 0)
+        fc = str(it.get("freightClass") or it.get("freight_class") or "70")
+        trailer_feet = it.get("trailerFeet") or it.get("trailer_feet")
+        if not dest_zip or weight_lbs <= 0:
+            results.append({"ref": ref, "error": "invalid destZip or weightLbs", "totalAmount": 0})
+            continue
+        spc = _spcoc_local_rate(dest_zip, weight_lbs, trailer_feet)
+        if spc:
+            results.append({**spc, "ref": ref})
+            continue
+        try:
+            r = await _uts_rate_estimate(dest_zip, weight_lbs, fc)
+            results.append({**r, "ref": ref})
+        except Exception as uts_err:
+            fb = _fallback_rate(dest_zip, weight_lbs)
+            fb["utsError"] = str(uts_err)[:200]
+            results.append({**fb, "ref": ref})
+    return {"results": results}
+

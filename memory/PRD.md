@@ -165,6 +165,18 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 
 ### 2026-06-05 — Entra SSO live in preview ✅
+
+### 2026-06-05 — Freight Dashboard P0 follow-up fixes ✅
+- **Bug: missing freight on multi-qty scenarios** — root cause was K8s ingress
+  60s timeout. With 9-12 UTS quotes serialized server-side (~10s each), the
+  total batch exceeded the ingress limit. Fix: new `POST /api/freight/quote-batch`
+  endpoint + frontend chunks batches to 4 quotes (~40s each) and runs chunks
+  sequentially. Verified live with 12-quote multi-qty case (Per Item $1,660.24,
+  Per Job $656.80, savings 60.4%).
+- **Bug: transit times showing "—"** — field-name mismatch. Backend's
+  `allCarriers[].transit` was read as `c.transitDays` in the modal.
+  Fixed via fallback (`c.transit ?? c.transitDays`).
+
 - User confirmed first successful Microsoft round-trip on
   `ariley@standardprinting.com`. SSO end-to-end working: Microsoft login →
   callback → user upsert with admin role (bootstrap allowlist) → JWT issued

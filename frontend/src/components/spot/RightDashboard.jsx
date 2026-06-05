@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import { useEngine } from "../../hooks/useEngine";
-import { freightQuote, compareRoutes } from "../../api/spot";
+import { freightQuote, freightQuoteBatch, compareRoutes } from "../../api/spot";
 import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
@@ -231,20 +231,46 @@ function FreightPanel({ s }) {
       }
 
       const dest = { destZip: s.destZip, freightClass: "70" };
-      // Fire all UTS quotes in parallel — the backend serializes them behind
-      // a single asyncio.Lock (UTS rejects concurrent same-session calls).
-      const [perItemQuotes, perJobQuotes] = await Promise.all([
-        Promise.all(flatPerItem.map(async (row) => {
-          const w = Math.max(100, Math.round(row.ship.totalWeight || 100));
-          try { const r = await freightQuote({ ...dest, weightLbs: w }); return { ...row, weight: w, ...r }; }
-          catch { return { ...row, weight: w, totalAmount: 0, carrier: "", transitDays: null, allCarriers: [] }; }
+      // Batch all UTS quotes — but K8s ingress times out at ~60s per HTTP
+      // request, and each UTS call takes ~10s through the server-side lock.
+      // So we chunk to 4 quotes per batch (~40s each) and run chunks in series.
+      const batchItems = [
+        ...flatPerItem.map((row, k) => ({
+          ...dest,
+          weightLbs: Math.max(100, Math.round(row.ship.totalWeight || 100)),
+          ref: `pi:${k}`,
         })),
-        Promise.all(perJobScenarios.map(async (sc) => {
-          const w = Math.max(100, Math.round(sc.combinedWeight || 100));
-          try { const r = await freightQuote({ ...dest, weightLbs: w }); return { ...sc, weight: w, ...r }; }
-          catch { return { ...sc, weight: w, totalAmount: 0, carrier: "", transitDays: null, allCarriers: [] }; }
+        ...perJobScenarios.map((sc, k) => ({
+          ...dest,
+          weightLbs: Math.max(100, Math.round(sc.combinedWeight || 100)),
+          ref: `pj:${k}`,
         })),
-      ]);
+      ];
+      const CHUNK = 4;
+      const byRef = {};
+      try {
+        for (let i = 0; i < batchItems.length; i += CHUNK) {
+          const chunk = batchItems.slice(i, i + CHUNK);
+          const resp = await freightQuoteBatch(chunk);
+          (resp.results || []).forEach((r) => { byRef[r.ref] = r; });
+        }
+      } catch (e) {
+        setErr(`Batch freight quote failed: ${e.message}`); return;
+      }
+      const perItemQuotes = flatPerItem.map((row, k) => {
+        const r = byRef[`pi:${k}`] || {};
+        return { ...row, weight: Math.max(100, Math.round(row.ship.totalWeight || 100)),
+                 totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
+                 transitDays: r.transitDays != null ? r.transitDays : null,
+                 allCarriers: r.allCarriers || [] };
+      });
+      const perJobQuotes = perJobScenarios.map((sc, k) => {
+        const r = byRef[`pj:${k}`] || {};
+        return { ...sc, weight: Math.max(100, Math.round(sc.combinedWeight || 100)),
+                 totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
+                 transitDays: r.transitDays != null ? r.transitDays : null,
+                 allCarriers: r.allCarriers || [] };
+      });
 
       // ─── Per-Item map: { compIdx: { slot: cost } } ─────────────────────
       const perItemMap = {};

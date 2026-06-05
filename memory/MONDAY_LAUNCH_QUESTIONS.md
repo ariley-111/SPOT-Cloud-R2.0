@@ -111,3 +111,55 @@
 ---
 
 _Owner: rwalter@standardprinting.com — living document, appended throughout dev sessions._
+
+
+---
+
+## Monday backlog dropped by Ashley 2026-06-05 evening (P0 PDF + parity work)
+
+### A. PDF — Multi-Qty job totals split per qty set
+**Today:** PDF rolls multi-qty MP-Individual quotes into a single combined total
+section at the bottom.
+**Wanted:** Each qty set should have its OWN job-total summary block, side by
+side or stacked. So if components are at qtys [42, 75, 45] / [168, 250, 500] /
+[2352, 3500, 4265], the PDF should show three job-total summaries (one per
+scenario), not one merged total.
+- File touch points: `/app/backend/routes/pdf.py` + the WeasyPrint HTML
+  template. Look at the multi-part rollup section.
+
+### B. PDF cost-breakdowns — slim down to 4 columns
+**Today:** Per-component cost breakdown sections show ~10-12 columns of
+detail (sheets, board cost, press cost, cutting, die, prepress, freight, etc.)
+**Wanted:** Per component × per qty, ONLY show: **Qty · Each Price · Per M Price · Total**.
+Strip the rest from the PDF (keep the in-app Cost Buildup view as-is — that's
+fine).
+
+### C. Charges selection logic — "Lump Sum / By Type / By Part"
+**Spec needed before implementation.** Likely controls how the one-time-cost
+buckets (die, prepress, freight, misc) get attributed in the PDF:
+  - Lump Sum: one job-level "One-Time Costs $X" line
+  - By Type: one line per type (Die $X, Prepress $Y, Freight $Z)
+  - By Part: distributed across components, amortized into per-piece price
+Need Ashley's mockup or written spec on Monday before coding.
+
+### D. Port Cost Report Modal from legacy → cloud
+**Today:** Cloud has `CostReportModal.jsx` but it's a stub / simplified version.
+**Wanted:** Full legacy Cost Report (the detailed internal cost breakdown shown
+to the estimator before sending the quote). Need to compare line-by-line
+against legacy `spot_r1_5.jsx`'s cost-report HTML generator.
+
+### E. Dimension parser improvements
+**Today:** Anthropic RFQ parser sometimes mis-extracts dimensions (e.g.
+"7+1/4 x 2+3/8 x 9+3/8 (ID)" not properly parsed into W/L/D).
+**Wanted:** Bulletproof dimension extraction for fraction inputs, inches/mm
+units, "ID/OD" suffixes, and "W x L x D" order detection.
+- Pairs with backlog #5 (RFQ-parse 502 timeout — background-job pattern).
+
+### F. Skid math & weight estimate validity — VERIFIED ✅
+Confirmed 1:1 port from legacy `spot_r1_5.jsx` L1118-1248. Same
+`autoSelectSkid` (S/L/WF based on piece dims fitting usable pallet area), same
+`calcPiecesPerSkidLayer` (real nesting both orientations), same `FLUTE_CALIPERS`
+table, same `calcBoardWeight` grade-liner lookup, same 5% ink adder, same
+trailer-feet lookup. If estimators ever push back on a specific number, share
+inputs and we'll trace line-by-line against legacy.
+

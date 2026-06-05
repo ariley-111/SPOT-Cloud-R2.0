@@ -121,6 +121,12 @@ export const updateQuote = (id, body) =>
 // ─── Freight ────────────────────────────────────────────
 export const freightQuote = (body) =>
   api.post("/freight/quote", body).then((r) => r.data);
+
+// Batch freight quoting — server serializes UTS calls behind asyncio.Lock so
+// the client sees ONE long-running request instead of N parallel ones (avoids
+// 60s axios timeout when N gets above ~6 quotes).
+export const freightQuoteBatch = (items) =>
+  api.post("/freight/quote-batch", { items }, { timeout: 240000 }).then((r) => r.data);
 export const freightZones = () =>
   api.get("/freight/zones").then((r) => r.data);
 
