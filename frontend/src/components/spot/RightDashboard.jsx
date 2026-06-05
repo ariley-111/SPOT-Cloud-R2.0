@@ -913,8 +913,15 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 );
               })()}
               {die > 0 && (() => {
-                const baseCost = Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
-                const markupPct = Number(s?.dieMarkup || r.dieMarkup || 0);
+                // In MP mode, use aggregate die base from backend response (sums
+                // each component's cuttingDieCost). Markup is the avg across
+                // components (typically all use the same rate).
+                const baseCost = isMultiPart
+                  ? Number(agg.dieBaseTotal || 0)
+                  : Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
+                const markupPct = isMultiPart
+                  ? Number(agg.dieMarkupAvg || 0)
+                  : Number(s?.dieMarkup || r.dieMarkup || 0);
                 const showBreakdown = baseCost > 0 && markupPct > 0;
                 return (
                   <Row label={

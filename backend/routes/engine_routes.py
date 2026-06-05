@@ -412,6 +412,16 @@ async def calculate_multi_part(
             line_freight += _safe_float(payload.get("jobFreightCost"))
         line_die = sum(_safe_float(pc.get("dieLineCost")) for pc in per_comp
                        if _safe_float(pc.get("dieLineCost")) > 0)
+        # Aggregate die base (pre-markup) so the cost buildup can render
+        # "$X + Y% markup" exactly like legacy in Multi-Part mode.
+        die_base_total = 0.0
+        die_markup_amts = []
+        for bi in (payload.get("bomItems") or []):
+            st = (bi.get("state") or {})
+            if st.get("dieTreatment") in ("Separate Line", "Amortize") and _safe_float(st.get("cuttingDieCost")) > 0:
+                die_base_total += _safe_float(st.get("cuttingDieCost"))
+                die_markup_amts.append(_safe_float(st.get("dieMarkup")))
+        die_markup_avg = (sum(die_markup_amts) / len(die_markup_amts)) if die_markup_amts else 0.0
         line_prepress = sum(_safe_float(pc.get("prepressLineCost")) for pc in per_comp
                             if _safe_float(pc.get("prepressLineCost")) > 0)
         line_misc = sum(_safe_float(pc.get("miscLineCost")) for pc in per_comp
@@ -462,6 +472,8 @@ async def calculate_multi_part(
             "costMSF": (job_cost / omsf_total) if omsf_total > 0 else 0,
             "freightLine": line_freight,
             "dieLineCost": line_die,
+            "dieBaseTotal": die_base_total,
+            "dieMarkupAvg": die_markup_avg,
             "prepressLineCost": line_prepress,
             "miscLineCost": line_misc,
             "miscLineItems": agg_misc_items,
