@@ -6,7 +6,7 @@ import Tile, { Num } from "./Tile";
 import { PRINT_MODES, DIFFICULTY, STRIP_COMP, GLUE_COMP } from "../../lib/defaults";
 
 export default function ProductionSpecsSec({ result }) {
-  const { active, sec, toggleSec, setField } = useQuote();
+  const { active, sec, toggleSec, setField, setManyFields } = useQuote();
   const s = active?.state || {};
   const route = result?.route;
   const ovr = s.routeOverride;
@@ -23,7 +23,16 @@ export default function ProductionSpecsSec({ result }) {
       <div style={{ display: "flex", gap: 24, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
         <F l="Print" inline>
           <div style={{ display: "flex", gap: 2 }}>
-            <Tile label="On"  active={s.printReq === "Yes"} onClick={() => setField("printReq", "Yes")} small tint="#3b82f6" data-testid="tile-print-on" />
+            <Tile label="On"  active={s.printReq === "Yes"}
+              onClick={() => {
+                // Default to Satin / 1-Sided when turning print on, but don't
+                // clobber an existing user selection.
+                const patch = { printReq: "Yes" };
+                if (!s.printMode || s.printMode === "None") patch.printMode = "Satin";
+                if (!s.printSides || s.printSides === "None") patch.printSides = "1-Sided";
+                setManyFields(patch);
+              }}
+              small tint="#3b82f6" data-testid="tile-print-on" />
             <Tile label="Off" active={s.printReq === "No"}  onClick={() => setField("printReq", "No")}  small tint="#3b82f6" data-testid="tile-print-off" />
           </div>
         </F>

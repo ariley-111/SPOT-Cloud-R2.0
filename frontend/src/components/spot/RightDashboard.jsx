@@ -150,13 +150,25 @@ function FreightPanel({ s }) {
             const onPick = (z) => {
               const zone = ZONES.find((x) => x.z === z);
               if (!zone) return;
-              setManyFields({
+              const price = String(zone.price);
+              const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
+              const patch = {
                 localDeliveryZone: z,
-                freightCost: String(zone.price),
-                freightMarkup: "0",         // no markup on local delivery
+                freightMarkup: "0",
                 freightTreatment: "Separate Line",
                 quoteFOB: "LocalDelivery",
-              });
+              };
+              if (isMP) {
+                // Job-level flat charge — DO NOT propagate per-component (would multiply).
+                patch.jobFreightCost = price;
+                patch.freightScope = "Per Job";
+                patch.jobFreightTreatment = "Separate Line";
+                patch.freightCost = "0";      // clear per-item so it doesn't double-bill
+              } else {
+                // Single-part: regular per-item freight slot
+                patch.freightCost = price;
+              }
+              setManyFields(patch);
             };
             return (
               <div data-testid="freight-local-panel" style={{ marginTop: 8 }}>
@@ -865,7 +877,9 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                         </span>
                       )}
                       {isLocal && (
-                        <span style={{ color: "var(--spot-text3)" }}>{" "}flat rate, no markup</span>
+                        <span style={{ display: "block", color: "var(--spot-text3)", fontSize: 10, fontStyle: "italic", paddingLeft: 6, marginTop: 1 }}>
+                          flat rate, no markup
+                        </span>
                       )}
                     </span>
                   } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(freight)}</span>} />

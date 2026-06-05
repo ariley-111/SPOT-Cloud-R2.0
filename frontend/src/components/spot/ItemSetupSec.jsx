@@ -638,8 +638,16 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
           <Tile label="None"  active={s.prepressTreatment === "None"}           onClick={() => setField("prepressTreatment", "None")} small data-testid="tile-prepress-none" />
           <Tile label="Line"  active={s.prepressTreatment === "Separate Line"}  onClick={() => setField("prepressTreatment", "Separate Line")} small data-testid="tile-prepress-line" />
           <Tile label="Amort" active={s.prepressTreatment === "Amortize"}       onClick={() => setField("prepressTreatment", "Amortize")} small data-testid="tile-prepress-amort" />
-          {s.prepressTreatment !== "None" && s.prepressTreatment !== "Auto" && (
-            <Num value={s.prepressCost} onChange={(v) => setField("prepressCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-prepress-cost" />
+          {s.prepressTreatment !== "None" && (
+            <Num
+              value={s.prepressTreatment === "Auto" ? (s.defaultPrepressCost || "50") : s.prepressCost}
+              onChange={(v) => {
+                if (s.prepressTreatment === "Auto") setField("defaultPrepressCost", v);
+                else setField("prepressCost", v);
+              }}
+              step="0.01" min="0"
+              style={{ width: 58, padding: "4px 5px", fontSize: 12 }}
+              data-testid="input-prepress-cost" />
           )}
         </div>
       )}
