@@ -163,3 +163,27 @@ table, same `calcBoardWeight` grade-liner lookup, same 5% ink adder, same
 trailer-feet lookup. If estimators ever push back on a specific number, share
 inputs and we'll trace line-by-line against legacy.
 
+
+
+
+### G. Database backup strategy (NEW — required before go-live)
+**Context:** Prod data was lost on a recent redeploy (cause unknown — platform-side
+incident, Emergent Support engaged). User is OK with this incident because no
+real data was at risk yet, but **backups must be in place before go-live or
+heavier testing**.
+
+**Decisions needed before coding:**
+1. **Frequency** — nightly? every 6 hours? hourly?
+2. **Retention** — daily snapshots for 7 days + weekly for 4 weeks + monthly for 6 months?
+3. **Destination** — three options:
+   - a. On-disk in container `/app/backups/` (cheap but lost if container is rebuilt — same risk we just hit)
+   - b. SharePoint (once the SharePoint integration lands — could double up as the archive location)
+   - c. S3 / GCS / Azure Blob (proper off-platform storage — needs user-provided credentials)
+4. **What to back up** — start with: `quote_drafts`, `users`, `customers`, `bom_templates`, `admin_rates`, `admin_integrations`, `admin_sheets`. Anything else?
+5. **Restore mechanism** — admin-only endpoint that takes a backup file and restores it? Or just give Ashley a runbook for a one-liner mongorestore?
+
+**Sane defaults if Ashley doesn't have strong opinions:**
+- Nightly at 2am ET
+- Retention: 7 daily + 4 weekly + 6 monthly
+- Destination: SharePoint when integration lands; until then, on-disk + a "Download Backup" admin button so she can manually download to local copies
+- Backup format: gzipped JSON dumps per collection (human-readable, easy to inspect/restore)
