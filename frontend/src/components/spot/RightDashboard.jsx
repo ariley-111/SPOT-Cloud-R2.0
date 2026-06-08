@@ -208,14 +208,54 @@ function FreightPanel({ s }) {
         const r = await freightQuote({
           destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
         });
-        // Auto-set markup: 0% when SPC Local Delivery (within our zones), else 15%
         const isLocal = r.carrier === "SPC Local Delivery" || r.source === "spcoc";
+        // Build a synthetic cache so the Freight Dashboard renders properly
+        // for Simple quotes too (mirrors legacy single-row dashboard view).
+        let qty = 0;
+        for (const v of (s.qtys || [])) {
+          const n = parseInt(v, 10);
+          if (Number.isFinite(n) && n > 0) { qty = n; break; }
+        }
+        const uw = parseFloat(s.oneUpW || 0), ul = parseFloat(s.oneUpL || 0);
+        let shipObj = { totalWeight: estimatedWeight, productWeight: 0, skidTotalWeight: 0,
+                        skidCount: shipmentEst.skids || 1, skidKey: "S",
+                        skidLabel: "", trailerFeet: 0, pcsPerLayer: 0, layers: 0,
+                        stackHeight: 0, boardLbsMSF: 0 };
+        if (qty > 0 && uw > 0 && ul > 0) {
+          const oMSF = (uw * ul * qty) / 144 / 1000;
+          shipObj = calcShipment(s.boardGrade, s.flute, s.outsideLiner || "None",
+            s.insideLiner || "None", s.medium || "None", oMSF, uw, ul, qty);
+        }
+        const singleQuote = {
+          idx: 0, slot: 0, qty,
+          ship: shipObj, weight: estimatedWeight,
+          totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
+          transitDays: r.transitDays != null ? r.transitDays : null,
+          allCarriers: r.allCarriers || [],
+        };
+        // Per-Job mirrors Per-Item for a single-item shipment
+        const singleScenario = {
+          scenarioIdx: 0, perComp: [singleQuote],
+          combinedWeight: shipObj.totalWeight,
+          combinedSkids: shipObj.skidCount,
+          combinedFt: shipObj.trailerFeet,
+          weight: estimatedWeight,
+          totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
+          transitDays: r.transitDays != null ? r.transitDays : null,
+          allCarriers: r.allCarriers || [],
+        };
         setManyFields({
           freightCost: String(r.totalAmount), quoteFOB: "Destination",
           freightCarrier: r.carrier || "",
           freightTransit: r.transitDays != null ? String(r.transitDays) : "",
           freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
           freightMarkup: isLocal ? "0" : "0.15",
+          freightDashCache: {
+            perItemQuotes: [singleQuote],
+            perJobQuotes: [singleScenario],
+            lastCalcZip: s.destZip,
+            lastCalcAt: new Date().toISOString(),
+          },
         });
         pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier}${isLocal ? " (no markup, local zone)" : ""} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
         return;

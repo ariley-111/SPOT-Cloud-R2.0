@@ -23,9 +23,13 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
   const { active, setField } = useQuote();
   const s = active?.state || {};
   const markup = Number(s.freightMarkup ?? 0.15) || 0;
-  const bomItems = Array.isArray(s.bomItems) ? s.bomItems : [];
+  const bomItems = Array.isArray(s.bomItems) && s.bomItems.length > 0
+    ? s.bomItems
+    // Single-Part: synthesize a 1-item BOM so the dashboard renders cleanly
+    : (s.quoteType === "Multi-Part" ? [] : [{ desc: s.itemDescription || "Single Item" }]);
   const cache = s.freightDashCache || null;
   const currentMode = s.freightScope === "Per Job" ? "Per Job" : "Per Item";
+  const isSinglePart = !Array.isArray(s.bomItems) || s.bomItems.length === 0;
 
   // Filter chips — qty-slot filter (Per Item) or scenario filter (Per Job)
   const [qtyFilter, setQtyFilter] = useState("all");
@@ -116,7 +120,7 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
         </div>
 
         {/* ─── Comparison + recommendation banner ───────────────────────── */}
-        {cache && (perItemTotal > 0 || perJobTotal > 0) && (
+        {cache && !isSinglePart && (perItemTotal > 0 || perJobTotal > 0) && (
           <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--spot-line)",
                         background: recommendJob ? "rgba(34,197,94,0.06)" : "rgba(6,182,212,0.05)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginBottom: 8 }}>
@@ -179,8 +183,16 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
               No freight quotes yet — click <b>Update All Rates</b> below to fetch live UTS quotes for both Per Item and Per Job modes.
             </div>
           ) : currentMode === "Per Item" ? (
-            <PerItemTable cache={cache} bomItems={bomItems} markup={markup} qtyFilter={qtyFilter} itemFilter={itemFilter}
-                          sections={perItemSections} setQtyFilter={setQtyFilter} setItemFilter={setItemFilter} />
+            <>
+              <PerItemTable cache={cache} bomItems={bomItems} markup={markup} qtyFilter={qtyFilter} itemFilter={itemFilter}
+                            sections={perItemSections} setQtyFilter={setQtyFilter} setItemFilter={setItemFilter} />
+              {isSinglePart && (
+                <div style={{ textAlign: "center", padding: "10px 8px", fontStyle: "italic",
+                              fontSize: 11, color: "var(--spot-text3)" }}>
+                  Single-item quote. Use "Update All Rates" in the shipment panel to fetch carrier data.
+                </div>
+              )}
+            </>
           ) : (
             <PerJobTable cache={cache} bomItems={bomItems} markup={markup} qtyFilter={qtyFilter} itemFilter={itemFilter}
                          setQtyFilter={setQtyFilter} setItemFilter={setItemFilter} />
