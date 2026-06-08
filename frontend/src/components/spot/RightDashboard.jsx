@@ -208,13 +208,16 @@ function FreightPanel({ s }) {
         const r = await freightQuote({
           destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
         });
+        // Auto-set markup: 0% when SPC Local Delivery (within our zones), else 15%
+        const isLocal = r.carrier === "SPC Local Delivery" || r.source === "spcoc";
         setManyFields({
           freightCost: String(r.totalAmount), quoteFOB: "Destination",
           freightCarrier: r.carrier || "",
           freightTransit: r.transitDays != null ? String(r.transitDays) : "",
           freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
+          freightMarkup: isLocal ? "0" : "0.15",
         });
-        pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
+        pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier}${isLocal ? " (no markup, local zone)" : ""} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
         return;
       }
 
@@ -333,6 +336,11 @@ function FreightPanel({ s }) {
       });
 
       const activeJobCost = jobFreightBySlot[selSlot] || jobFreightBySlot[0] || "0";
+      // Auto-set markup based on active scenario's carrier. SPC Local Delivery
+      // (within our zones) → 0% markup. Anything else → 15% legacy default.
+      const activeScenarioCarrier = (perJobQuotes[selSlot] || perJobQuotes[0] || {}).carrier
+        || (perItemQuotes[0] || {}).carrier || "";
+      const activeIsLocal = activeScenarioCarrier === "SPC Local Delivery";
       const patch = {
         bomItems: nextBom,
         quoteFOB: "Destination",
@@ -340,6 +348,7 @@ function FreightPanel({ s }) {
         jobFreightBySlot,
         jobFreightCost: activeJobCost,
         jobFreightTreatment: s.jobFreightTreatment || "Separate Line",
+        freightMarkup: activeIsLocal ? "0" : "0.15",
         // Snapshot the full cache so the Dashboard renders without re-fetching
         freightDashCache: {
           perItemQuotes,   // [{idx, slot, qty, ship, weight, totalAmount, carrier, transitDays, allCarriers}]
@@ -416,6 +425,10 @@ function FreightPanel({ s }) {
       jobFreightCost: jobBySlot[selSlot] || jobBySlot[0] || "0",
       freightScope: nextScope,
     };
+    // Auto-set markup based on currently-selected scenario's carrier
+    const activeCarrier = (cache.perJobQuotes?.[selSlot] || cache.perJobQuotes?.[0] || {}).carrier
+      || (cache.perItemQuotes?.[0] || {}).carrier || "";
+    patch.freightMarkup = activeCarrier === "SPC Local Delivery" ? "0" : "0.15";
     const activeBi = nextBom[activeIdx];
     if (activeBi?.state) patch.freightCost = activeBi.state.freightCost;
     setManyFields(patch);
@@ -503,98 +516,10 @@ function FreightPanel({ s }) {
                 setManyFields(patch);
               }}
               small tint="#3b82f6" data-testid="tile-fob-ship" />
-            <Tile label="Local"     active={s.quoteFOB === "LocalDelivery"} onClick={() => setField("quoteFOB", "LocalDelivery")} small tint="#22c55e" data-testid="tile-fob-local" />
           </div>
         </div>
 
-        {s.quoteFOB === "LocalDelivery" ? (
-          // Local Delivery — flat-rate by distance from Canton, OH (44704).
-          // Zone 1 (closest) $35, Zone 2 $60, Zone 3 (farthest) $85. No markup.
-          // Treated as a line charge (one-time), not a per-MSF freight cost.
-          (() => {
-            const ZONES = [
-              { z: "Zone 1", price: 35, mi: "≤ 30 mi · Akron / Canton metro" },
-              { z: "Zone 2", price: 60, mi: "≤ 60 mi · Cleveland / Medina / Alliance" },
-              { z: "Zone 3", price: 85, mi: "≤ 120 mi · NW OH / Erie / Youngstown" },
-            ];
-            const sel = s.localDeliveryZone || null;
-            const selZone = ZONES.find((z) => z.z === sel);
-            const onPick = (z) => {
-              const zone = ZONES.find((x) => x.z === z);
-              if (!zone) return;
-              const price = String(zone.price);
-              const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
-              const patch = {
-                localDeliveryZone: z,
-                freightMarkup: "0",
-                freightTreatment: "Separate Line",
-                quoteFOB: "LocalDelivery",
-                freightCarrier: "",
-                freightTransit: "",
-              };
-              if (isMP) {
-                // Job-level flat charge — DO NOT propagate per-component (would multiply).
-                patch.jobFreightCost = price;
-                patch.freightScope = "Per Job";
-                patch.jobFreightTreatment = "Separate Line";
-                patch.freightCost = "0";      // clear active item top-level freight
-                // CRITICAL: clear EVERY bomItem's per-item freight so the engine
-                // doesn't double-bill (per-item freight would otherwise still
-                // appear in the Quote Table Freight column + Job Totals sum).
-                patch.bomItems = s.bomItems.map((bi) => ({
-                  ...bi,
-                  state: {
-                    ...(bi.state || {}),
-                    freightCost: "0",
-                    freightTreatment: "None",
-                    freightCarrier: "",
-                    freightTransit: "",
-                  },
-                }));
-              } else {
-                // Single-part: regular per-item freight slot
-                patch.freightCost = price;
-              }
-              setManyFields(patch);
-            };
-            return (
-              <div data-testid="freight-local-panel" style={{ marginTop: 8 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4 }}>
-                  {ZONES.map(({ z, price, mi }) => (
-                    <button key={z} onClick={() => onPick(z)} data-testid={`tile-local-${z.replace(/\s/g, "")}`}
-                      style={{
-                        all: "unset", cursor: "pointer", padding: "8px 8px", textAlign: "center",
-                        borderRadius: 4,
-                        background: sel === z ? "var(--spot-green)" : "var(--spot-bg2)",
-                        color: sel === z ? "#fff" : "var(--spot-text)",
-                        border: `1px solid ${sel === z ? "var(--spot-green)" : "var(--spot-border)"}`,
-                      }}>
-                      <div style={{ fontSize: 11, fontWeight: 700 }}>{z}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>${price}</div>
-                      <div style={{ fontSize: 9, marginTop: 2,
-                        color: sel === z ? "rgba(255,255,255,0.85)" : "var(--spot-text3)" }}>{mi}</div>
-                    </button>
-                  ))}
-                </div>
-                {selZone && (
-                  <div data-testid="freight-local-summary" style={{
-                    marginTop: 8, padding: "6px 10px", background: "#22c55e0c",
-                    border: "1px solid #22c55e44", borderRadius: 4, fontSize: 11,
-                  }}>
-                    <span style={{ fontWeight: 700, color: "var(--spot-green)" }}>Local Delivery</span>
-                    <span style={{ color: "var(--spot-text2)" }}> · {selZone.z} · </span>
-                    <span style={{ fontWeight: 700, color: "var(--spot-text)" }}>{fmtMoney(selZone.price)}</span>
-                    <span style={{ color: "var(--spot-text3)" }}> — no markup, applied as line charge</span>
-                  </div>
-                )}
-                <div style={{ marginTop: 8, padding: "5px 8px", background: "#f59e0b14",
-                  border: "1px solid #f59e0b55", borderRadius: 4, fontSize: 10, color: "#f59e0b" }}>
-                  ⚠ Verify zone is correct before generating PDF — confirm with customer if distance is borderline.
-                </div>
-              </div>
-            );
-          })()
-        ) : s.quoteFOB === "Origin" ? (
+        {s.quoteFOB === "Origin" ? (
           // Will-Call: legacy parity (spot_r1_5.jsx L3890, L4264-4265). Skip Type /
           // Ship-To / Markup / Update All — there's nothing to ship, customer picks up.
           // Engine + PDF already gate on quoteFOB===Destination so no freight is added.
