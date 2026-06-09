@@ -5,13 +5,14 @@ import Sec from "./Sec";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 
 // Column definitions — used for both Single-Part and the per-component sub-tables.
-// Order per user spec: Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF,
-// Freight, Sheet Size (no decimals), #Out, Route.
-// `sellEa` label flips to "Sell/Set" in Matched Set mode (see makeCols below).
-const makeCols = (isMatchedSet) => [
+// `sellEa` column header is click-cyclable:
+//   Matched Set:  Sell/Ea → Sell/M → Sell/Set → Sell/Ea  (ports legacy L6202)
+//   Otherwise:    Sell/Ea ↔ Sell/M
+const sellLabel = (mode) => mode === "set" ? "Sell/Set" : mode === "msf" ? "Sell/M" : "Sell/Ea";
+const makeCols = (sellMode) => [
   { k: "act",     lbl: "Act",      align: "center", w: 24 },
   { k: "qty",     lbl: "Qty",      align: "right" },
-  { k: "sellEa",  lbl: isMatchedSet ? "Sell/Set" : "Sell/Ea",  align: "right", accent: true },
+  { k: "sellEa",  lbl: sellLabel(sellMode),  align: "right", accent: true, cycle: true },
   { k: "gmPct",   lbl: "GM%",      align: "right" },
   { k: "gmDol",   lbl: "GM$",      align: "right" },
   { k: "total",   lbl: "Total",    align: "right" },
@@ -37,6 +38,25 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
   const pricingMode = s.pricingMode || "Matched Set";
   const setOverride = !!s.setMarginOverride;
   const [kitMatrixOpen, setKitMatrixOpen] = useState(false);
+  // sellMode: "ea" | "msf" | "set" — header click cycles the value displayed
+  // in the Sell column. "set" is only available in Matched Set mode.
+  // Auto-defaults to "set" in Matched Set, "ea" otherwise; user can override.
+  const [sellModeRaw, setSellModeRaw] = useState(null);
+  const isMatched = isMP && pricingMode === "Matched Set";
+  const sellMode = sellModeRaw !== null
+    ? (sellModeRaw === "set" && !isMatched ? "ea" : sellModeRaw)
+    : (isMatched ? "set" : "ea");
+  const cycleSellMode = () => {
+    if (isMatched) {
+      // Ea → M → Set → Ea
+      if (sellMode === "ea") setSellModeRaw("msf");
+      else if (sellMode === "msf") setSellModeRaw("set");
+      else setSellModeRaw("ea");
+    } else {
+      // Ea ↔ M
+      setSellModeRaw(sellMode === "ea" ? "msf" : "ea");
+    }
+  };
   // Per-component grouped view is only used in MP-Individual mode where each
   // component has its own qty tier(s). Matched Set keeps the aggregate layout.
   const useComponentLayout = isMP && pricingMode === "Individual"
@@ -158,7 +178,9 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           selSlot={selSlot}
           selectRow={selectRow}
           copyRow={copyRow}
-          cols={makeCols(isMP && pricingMode === "Matched Set")}
+          cols={makeCols(sellMode)}
+          sellMode={sellMode}
+          cycleSellMode={cycleSellMode}
         />
       )}
 
@@ -247,19 +269,40 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
 }
 
 // ─── FlatLayout (SP and MP-Matched Set) ─────────────────────────────────
-function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyRow, cols }) {
+function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyRow, cols, sellMode, cycleSellMode }) {
   const totalCols = cols.length;
+  // Per legacy spot_r1_5.jsx L6223:
+  //   ea  → itemSell / qty
+  //   msf → (itemSell / qty) * 1000
+  //   set → r.setSell (already computed as job_sell / set_qty in backend)
+  const computeSellDisp = (r) => {
+    if (r.qty <= 0) return 0;
+    const perEa = r.itemSell / r.qty;
+    if (sellMode === "msf") return perEa * 1000;
+    if (sellMode === "set") {
+      // r.setSell is already per-set (engine_routes.py L460); fall back to perEa
+      // which is mathematically equivalent in matched-set rows (qty == setQty).
+      return Number(r.setSell || perEa);
+    }
+    return perEa;
+  };
   return (
     <div style={{ overflowX: "auto" }}>
       <table data-testid="quote-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif" }}>
         <thead>
           <tr style={{ background: "var(--spot-bg3)" }}>
             {cols.map((c) => (
-              <th key={c.k} style={{
-                padding: "5px 6px", textAlign: c.align, fontSize: 11, fontWeight: 700,
-                textTransform: "uppercase", color: c.accent ? "var(--spot-accent)" : "var(--spot-text3)",
-                borderBottom: "1px solid var(--spot-line)", whiteSpace: "nowrap",
-              }}>{c.lbl}</th>
+              <th key={c.k}
+                onClick={c.cycle ? cycleSellMode : undefined}
+                data-testid={c.cycle ? "sell-col-header" : undefined}
+                title={c.cycle ? "Click to cycle Sell/Ea ↔ Sell/M" + (sellMode === "set" || (sellMode === "msf" && /* matched */ false) ? " ↔ Sell/Set" : "") : undefined}
+                style={{
+                  padding: "5px 6px", textAlign: c.align, fontSize: 11, fontWeight: 700,
+                  textTransform: "uppercase", color: c.accent ? "var(--spot-accent)" : "var(--spot-text3)",
+                  borderBottom: "1px solid var(--spot-line)", whiteSpace: "nowrap",
+                  cursor: c.cycle ? "pointer" : "default",
+                  userSelect: c.cycle ? "none" : "auto",
+                }}>{c.lbl}</th>
             ))}
           </tr>
         </thead>
@@ -321,8 +364,9 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                     }}>SEL</span>
                   )}
                 </td>
-                <td style={{ padding: "4px 6px", textAlign: "right", color: r.forcedPrice ? "#a855f7" : "var(--spot-text)" }}>
-                  {fmtMoney(r.qty > 0 ? r.itemSell / r.qty : 0, 2)}
+                <td data-testid={`qt-sell-${i}`}
+                  style={{ padding: "4px 6px", textAlign: "right", color: r.forcedPrice ? "#a855f7" : "var(--spot-text)" }}>
+                  {fmtMoney(computeSellDisp(r), 2)}
                 </td>
                 <td style={{ padding: "4px 6px", textAlign: "right", color: r.gmPct >= 0 ? "var(--spot-green)" : "var(--spot-err)", fontWeight: 600 }}>
                   {fmtPct(r.gmPct, 1)}
