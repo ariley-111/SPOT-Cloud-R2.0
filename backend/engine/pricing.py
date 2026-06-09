@@ -238,7 +238,12 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
 
 
 def allocate_job_cost(items: List[Dict[str, Any]], total_cost: float, method: str) -> List[float]:
-    """Allocate job-level cost across MFG items (port of L639-659)."""
+    """Allocate job-level cost across MFG items (port of L639-659).
+
+    Legacy parity: legacy explicitly handles "Equal"; anything else falls back
+    to "By MSF" math. This means legacy's "By Weight" UI option silently uses
+    MSF allocation. Cloud preserves that exact behavior so pricing matches.
+    """
     if not items or len(items) == 0 or total_cost <= 0:
         return [0] * len(items) if items else []
     mfg_idxs = [i for i, it in enumerate(items) if it.get("type") == "Manufactured"]
@@ -250,6 +255,7 @@ def allocate_job_cost(items: List[Dict[str, Any]], total_cost: float, method: st
         for i in mfg_idxs:
             alloc[i] = share
     else:
+        # Both "By MSF" and "By Weight" hit this branch (legacy parity).
         total_msf = sum(items[i].get("oMSF", 0) for i in mfg_idxs)
         if total_msf <= 0:
             share = total_cost / len(mfg_idxs)

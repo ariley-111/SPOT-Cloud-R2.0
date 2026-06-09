@@ -7,10 +7,11 @@ import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 // Column definitions — used for both Single-Part and the per-component sub-tables.
 // Order per user spec: Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF,
 // Freight, Sheet Size (no decimals), #Out, Route.
-const COLS = [
+// `sellEa` label flips to "Sell/Set" in Matched Set mode (see makeCols below).
+const makeCols = (isMatchedSet) => [
   { k: "act",     lbl: "Act",      align: "center", w: 24 },
   { k: "qty",     lbl: "Qty",      align: "right" },
-  { k: "sellEa",  lbl: "Sell/Ea",  align: "right", accent: true },
+  { k: "sellEa",  lbl: isMatchedSet ? "Sell/Set" : "Sell/Ea",  align: "right", accent: true },
   { k: "gmPct",   lbl: "GM%",      align: "right" },
   { k: "gmDol",   lbl: "GM$",      align: "right" },
   { k: "total",   lbl: "Total",    align: "right" },
@@ -156,7 +157,20 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
           selSlot={selSlot}
           selectRow={selectRow}
           copyRow={copyRow}
-          totalCols={COLS.length}
+          cols={makeCols(isMP && pricingMode === "Matched Set")}
+        />
+      )}
+
+      {/* MP Matched Set: collapsible Kit Rollup grid (default closed) — surfaces the
+          per-set-qty totals (price/set, GM%, GM$, freight, etc.) that legacy hides
+          inside the Cost Report modal. Pure additive UI; no math change. */}
+      {isMP && pricingMode === "Matched Set" && rows.length > 0 && (
+        <KitRollup
+          rows={rows}
+          bomItems={s.bomItems || []}
+          selSlot={selSlot}
+          selectRow={selectRow}
+          isExcluded={isExcluded}
         />
       )}
 
@@ -221,13 +235,14 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
 }
 
 // ─── FlatLayout (SP and MP-Matched Set) ─────────────────────────────────
-function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyRow, totalCols }) {
+function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyRow, cols }) {
+  const totalCols = cols.length;
   return (
     <div style={{ overflowX: "auto" }}>
       <table data-testid="quote-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif" }}>
         <thead>
           <tr style={{ background: "var(--spot-bg3)" }}>
-            {COLS.map((c) => (
+            {cols.map((c) => (
               <th key={c.k} style={{
                 padding: "5px 6px", textAlign: c.align, fontSize: 11, fontWeight: 700,
                 textTransform: "uppercase", color: c.accent ? "var(--spot-accent)" : "var(--spot-text3)",
@@ -334,6 +349,122 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
     </div>
   );
 }
+
+// ─── KitRollup (MP-Matched Set only) ────────────────────────────────────
+// Collapsible mini-grid that surfaces per-set-qty totals for every slot.
+// Mirrors the legacy "Kit Rollup" table that lives inside the Cost Report.
+// Default state: collapsed. Click a row to select that slot.
+function KitRollup({ rows, bomItems, selSlot, selectRow, isExcluded }) {
+  const [open, setOpen] = useState(false);
+  const componentsCount = bomItems.length;
+  // Filter out error rows so totals reflect only computable slots
+  const validRows = rows.filter((r) => !r.error);
+  if (validRows.length === 0) return null;
+  return (
+    <div data-testid="kit-rollup" style={{
+      marginTop: 10, border: "1px solid rgba(245,158,11,0.4)", borderRadius: 6,
+      overflow: "hidden", background: "rgba(245,158,11,0.03)",
+    }}>
+      <button data-testid="kit-rollup-toggle"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          all: "unset", cursor: "pointer", width: "100%",
+          padding: "7px 12px", background: "rgba(245,158,11,0.1)",
+          borderBottom: open ? "1px solid rgba(245,158,11,0.27)" : "none",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, color: "#f59e0b",
+          textTransform: "uppercase", letterSpacing: ".08em",
+        }}>
+          <span style={{ display: "inline-block", width: 12, textAlign: "center", marginRight: 4 }}>
+            {open ? "▼" : "▶"}
+          </span>
+          Kit Rollup — {componentsCount} Component{componentsCount !== 1 ? "s" : ""} · Matched Set
+        </span>
+        <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+          {open ? "Click row to select · click header to collapse" : `Per-set breakdown across ${validRows.length} qty tier${validRows.length !== 1 ? "s" : ""}`}
+        </span>
+      </button>
+      {open && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: "var(--spot-bg3)" }}>
+              <th style={kitH}>Set Qty</th>
+              <th style={kitH}>Components</th>
+              <th style={kitH}>Total Cost</th>
+              <th style={kitH}>Charges</th>
+              <th style={kitH}>Total Sell</th>
+              <th style={kitH}>GM$</th>
+              <th style={kitH}>GM%</th>
+              <th style={{ ...kitH, color: "#f59e0b" }}>Price/Set</th>
+            </tr>
+          </thead>
+          <tbody>
+            {validRows.map((r) => {
+              const slot = r.slot ?? rows.indexOf(r);
+              const isSel = slot === selSlot;
+              const excl = isExcluded(slot);
+              const setQty = r.setQty ?? r.qty ?? 0;
+              const totalCost = Number(r.totalMfg || r.jobCost || 0);
+              const totalSell = Number(r.sellTotal || r.itemSell || 0);
+              const baseSell = Number(r.itemSell || r.jobSell || 0);
+              const charges = Math.max(0, totalSell - baseSell);
+              const gmDol = Number(r.gmDollar || (baseSell - totalCost) || 0);
+              const gmPct = baseSell > 0 ? gmDol / baseSell : 0;
+              const pricePerSet = setQty > 0 ? baseSell / setQty : 0;
+              return (
+                <tr key={slot}
+                  data-testid={`kit-rollup-row-${slot}`}
+                  onClick={() => selectRow(slot)}
+                  style={{
+                    cursor: "pointer",
+                    background: isSel ? "rgba(245,158,11,0.08)" : "transparent",
+                    opacity: excl ? 0.45 : 1,
+                    borderBottom: "1px solid rgba(42,46,56,0.4)",
+                  }}>
+                  <td style={{ ...kitTd, fontWeight: isSel ? 700 : 600, color: isSel ? "#f59e0b" : "var(--spot-text)" }}>
+                    {fmtInt(setQty)}
+                    {isSel && (
+                      <span style={{
+                        marginLeft: 4, fontSize: 9, fontWeight: 700, padding: "1px 4px",
+                        borderRadius: 2, background: "#f59e0b", color: "#fff",
+                      }}>SEL</span>
+                    )}
+                  </td>
+                  <td style={kitTd}>{componentsCount}</td>
+                  <td style={kitTd}>{fmtMoney(totalCost)}</td>
+                  <td style={{ ...kitTd, color: charges > 0 ? "#f59e0b" : "var(--spot-text3)" }}>
+                    {charges > 0 ? fmtMoney(charges) : "—"}
+                  </td>
+                  <td style={{ ...kitTd, fontWeight: 600 }}>{fmtMoney(totalSell)}</td>
+                  <td style={{ ...kitTd, color: gmDol >= 0 ? "var(--spot-green)" : "var(--spot-err)" }}>
+                    {fmtMoney(gmDol)}
+                  </td>
+                  <td style={{ ...kitTd, color: gmPct >= 0 ? "var(--spot-green)" : "var(--spot-err)", fontWeight: 600 }}>
+                    {fmtPct(gmPct, 1)}
+                  </td>
+                  <td style={{ ...kitTd, fontWeight: 700, color: "#f59e0b" }}>
+                    {fmtMoney(pricePerSet)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+const kitH = {
+  padding: "5px 8px", textAlign: "right", fontSize: 11, fontWeight: 700,
+  textTransform: "uppercase", letterSpacing: ".06em",
+  color: "rgba(245,158,11,0.75)",
+  borderBottom: "1px solid rgba(245,158,11,0.27)",
+};
+const kitTd = {
+  padding: "5px 8px", textAlign: "right",
+};
 
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────
 // Each component is its own collapsible section with its own qty rows.

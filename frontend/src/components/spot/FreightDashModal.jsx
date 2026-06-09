@@ -105,7 +105,7 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
               style={chip(s.freightScope === "None-Off", "#94a3b8")}>None</button>
             <button data-testid="dash-scope-peritem" onClick={() => { if (cache) applyScopeFromCache("None"); else setField("freightScope", "None"); }}
               style={chip(!s.freightScope || s.freightScope === "None", "#22c55e")}>Per Item</button>
-            <button data-testid="dash-scope-perjob" onClick={() => { if (cache) applyScopeFromCache("Per Job"); else setField("freightScope", "Per Job"); }}
+            <button data-testid="dash-scope-perjob" onClick={() => { if (cache) applyScopeFromCache("Per Job"); else setField("freightScope", "Per Job")}}
               style={chip(s.freightScope === "Per Job", "#06b6d4")}>Per Job</button>
           </div>
           <div style={{ height: 18, width: 1, background: "var(--spot-line)" }} />
@@ -118,6 +118,11 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
             <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>{(markup * 100).toFixed(1)}%</span>
           </div>
         </div>
+
+        {/* ─── ALLOCATE BY / Treatment toolbar (Per Job only, MP only) ──── */}
+        {!isSinglePart && s.freightScope === "Per Job" && (
+          <FreightAllocBar s={s} setField={setField} markup={markup} />
+        )}
 
         {/* ─── Comparison + recommendation banner ───────────────────────── */}
         {cache && !isSinglePart && (perItemTotal > 0 || perJobTotal > 0) && (
@@ -563,3 +568,71 @@ function chipFilter(active, color) {
     border: `1px solid ${active ? color : "var(--spot-border)"}`,
   };
 }
+
+// ─── Allocate-By / Treatment toolbar ─────────────────────────────────
+// Mirrors the legacy "ALLOCATE BY" + "Treatment" controls. Wires to:
+//   - freightAllocMethod (Board MSF | Equal Split | By Weight)
+//   - jobFreightTreatment (Separate Line | Amortize)
+// NOTE on "By Weight": legacy `allocateJobCost` (spot_r1_5.jsx L897-917)
+// silently falls back to By MSF when the method is anything other than
+// "Equal" — so "By Weight" produces identical math to "By MSF" in the
+// legacy engine. Cloud mirrors this for pricing parity.
+function FreightAllocBar({ s, setField, markup }) {
+  const method = s.freightAllocMethod || "By MSF";
+  const treat = s.jobFreightTreatment || "Separate Line";
+  const jobFreight = Number(s.jobFreightCost || 0);
+  const allocChip = (label, value) => ({
+    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: method === value ? 700 : 500,
+    padding: "4px 10px", borderRadius: 3,
+    background: method === value ? "rgba(59,130,246,0.2)" : "transparent",
+    color: method === value ? "#3b82f6" : "var(--spot-text3)",
+    border: `1px solid ${method === value ? "rgba(59,130,246,0.4)" : "var(--spot-border)"}`,
+  });
+  const treatChip = (label, value) => ({
+    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: treat === value ? 700 : 500,
+    padding: "4px 10px", borderRadius: 3,
+    background: treat === value ? "rgba(59,130,246,0.2)" : "transparent",
+    color: treat === value ? "#3b82f6" : "var(--spot-text3)",
+    border: `1px solid ${treat === value ? "rgba(59,130,246,0.4)" : "var(--spot-border)"}`,
+  });
+  return (
+    <div data-testid="freight-alloc-bar" style={{
+      display: "flex", alignItems: "center", gap: 14, padding: "8px 16px",
+      borderBottom: "1px solid var(--spot-line)", fontSize: 12, flexWrap: "wrap",
+    }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+        textTransform: "uppercase", letterSpacing: ".08em" }}>Allocate By</span>
+      <button data-testid="alloc-board-msf"
+        onClick={() => setField("freightAllocMethod", "By MSF")}
+        style={allocChip("Board MSF", "By MSF")}>Board MSF</button>
+      <button data-testid="alloc-equal"
+        onClick={() => setField("freightAllocMethod", "Equal")}
+        style={allocChip("Equal Split", "Equal")}>Equal Split</button>
+      <button data-testid="alloc-by-weight"
+        onClick={() => setField("freightAllocMethod", "By Weight")}
+        title="Legacy behavior: 'By Weight' produces identical math to Board MSF."
+        style={allocChip("By Weight", "By Weight")}>By Weight</button>
+
+      <span style={{ height: 18, width: 1, background: "var(--spot-line)" }} />
+      <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+        textTransform: "uppercase", letterSpacing: ".08em" }}>Treatment:</span>
+      <button data-testid="treat-line-item"
+        onClick={() => setField("jobFreightTreatment", "Separate Line")}
+        style={treatChip("Line Item", "Separate Line")}>Line Item</button>
+      <button data-testid="treat-amortize"
+        onClick={() => setField("jobFreightTreatment", "Amortize")}
+        style={treatChip("Amortize", "Amortize")}>Amortize</button>
+
+      <div style={{ marginLeft: "auto", display: "flex", gap: 12, fontSize: 11, color: "var(--spot-text3)" }}>
+        <span data-testid="alloc-job-freight">
+          <b style={{ color: "var(--spot-text)" }}>Job Freight:</b>{" "}
+          <span style={{ color: "var(--spot-green)", fontWeight: 700 }}>
+            {fmtMoney(jobFreight * (1 + markup))}
+          </span>
+        </span>
+        <span><b style={{ color: "var(--spot-text)" }}>Markup:</b> {(markup * 100).toFixed(1)}%</span>
+      </div>
+    </div>
+  );
+}
+

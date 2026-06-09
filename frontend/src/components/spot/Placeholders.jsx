@@ -229,6 +229,7 @@ function JobLevelAllocPanel({ s, setField }) {
                 fontSize: 10, padding: "2px 4px" }}>
               <option>By MSF</option>
               <option>Equal</option>
+              <option>By Weight</option>
             </select>
           )}
         </div>
