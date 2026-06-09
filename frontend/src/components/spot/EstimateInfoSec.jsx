@@ -74,19 +74,40 @@ export default function EstimateInfoSec() {
             <Tile label="Individual"  active={s.pricingMode === "Individual"}  onClick={() => setPricingMode("Individual")}  small data-testid="tile-pricing-individual" />
             <Tile label="Matched Set" active={s.pricingMode === "Matched Set"} onClick={() => setPricingMode("Matched Set")} small data-testid="tile-pricing-matched" />
             {/* Prepress Scope — ports legacy spot_r1_5.jsx L5598-5610 (MP only, gated on print) */}
-            {s.printReq === "Yes" && (
-              <>
-                <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
-                  textTransform: "uppercase", letterSpacing: ".06em", flexShrink: 0 }}>Prepress</span>
-                <Tile label="None"       active={(s.prepressScope || "Per Item") === "None"}     onClick={() => setField("prepressScope", "None")}     small tint="#94a3b8" data-testid="tile-prepress-scope-none" />
-                <Tile label="Per Item"   active={(s.prepressScope || "Per Item") === "Per Item"} onClick={() => setField("prepressScope", "Per Item")} small tint="#22c55e" data-testid="tile-prepress-scope-item" />
-                <Tile label="Lot Charge" active={(s.prepressScope || "Per Item") === "Per Job"}  onClick={() => {
-                  setField("prepressScope", "Per Job");
-                  if ((s.jobPrepressTreatment || "None") === "None") setField("jobPrepressTreatment", "Separate Line");
-                }} small tint="#06b6d4" data-testid="tile-prepress-scope-lot" />
-              </>
-            )}
+            {s.printReq === "Yes" && (() => {
+              const pScope = s.prepressScope || "Per Item";
+              const treat = s.jobPrepressTreatment || "Separate Line";
+              return (
+                <>
+                  <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
+                    textTransform: "uppercase", letterSpacing: ".06em", flexShrink: 0 }}>Prepress</span>
+                  <Tile label="None"       active={pScope === "None"}     onClick={() => setField("prepressScope", "None")}     small tint="#94a3b8" data-testid="tile-prepress-scope-none" />
+                  <Tile label="Per Item"   active={pScope === "Per Item"} onClick={() => setField("prepressScope", "Per Item")} small tint="#22c55e" data-testid="tile-prepress-scope-item" />
+                  <Tile label="Lot Charge" active={pScope === "Per Job"}  onClick={() => {
+                    setField("prepressScope", "Per Job");
+                    if ((s.jobPrepressTreatment || "None") === "None") setField("jobPrepressTreatment", "Separate Line");
+                  }} small tint="#06b6d4" data-testid="tile-prepress-scope-lot" />
+                  {pScope === "Per Job" && (
+                    <>
+                      <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 2px" }} />
+                      <Tile label="Line"  active={treat === "Separate Line"} onClick={() => setField("jobPrepressTreatment", "Separate Line")} small tint="#22c55e" data-testid="tile-jobprepress-line" />
+                      <Tile label="Amort" active={treat === "Amortize"}      onClick={() => setField("jobPrepressTreatment", "Amortize")}      small data-testid="tile-jobprepress-amort" />
+                      <div style={{ position: "relative", display: "inline-flex" }}>
+                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)",
+                          fontSize: 11, color: "var(--spot-text3)", pointerEvents: "none" }}>$</span>
+                        <input className="sp-input" type="number"
+                          value={s.jobPrepressCost ?? ""}
+                          onChange={(e) => setField("jobPrepressCost", e.target.value)}
+                          step="0.01" min="0"
+                          data-testid="input-job-prepress-cost"
+                          style={{ width: 85, padding: "6px 10px 6px 20px", fontSize: 13 }} />
+                      </div>
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
       </div>

@@ -630,27 +630,75 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         color: "var(--spot-text3)", marginBottom: 6,
       }}>One-Time Costs</div>
 
-      {/* Prepress */}
-      {s.printReq === "Yes" && (
-        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
-          <Tile label="Auto"  active={s.prepressTreatment === "Auto"}           onClick={() => setField("prepressTreatment", "Auto")} small tint="#22c55e" data-testid="tile-prepress-auto" />
-          <Tile label="None"  active={s.prepressTreatment === "None"}           onClick={() => setField("prepressTreatment", "None")} small data-testid="tile-prepress-none" />
-          <Tile label="Line"  active={s.prepressTreatment === "Separate Line"}  onClick={() => setField("prepressTreatment", "Separate Line")} small data-testid="tile-prepress-line" />
-          <Tile label="Amort" active={s.prepressTreatment === "Amortize"}       onClick={() => setField("prepressTreatment", "Amortize")} small data-testid="tile-prepress-amort" />
-          {s.prepressTreatment !== "None" && (
-            <Num
-              value={s.prepressTreatment === "Auto" ? (s.defaultPrepressCost || "50") : s.prepressCost}
-              onChange={(v) => {
-                if (s.prepressTreatment === "Auto") setField("defaultPrepressCost", v);
-                else setField("prepressCost", v);
-              }}
-              step="0.01" min="0"
-              style={{ width: 58, padding: "4px 5px", fontSize: 12 }}
-              data-testid="input-prepress-cost" />
-          )}
-        </div>
-      )}
+      {/* Prepress — ports legacy spot_r1_5.jsx L6024-6053 */}
+      {s.printReq === "Yes" && (() => {
+        const isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
+        const pScope = s.prepressScope || "Per Item";
+        const pNone = isMP && pScope === "None";
+        const pPerJob = isMP && pScope === "Per Job";
+        // pAlloc: allocated share of jobPrepressCost for active item at selected slot
+        // (will be wired through engine results later; for now show "pending setup" if missing)
+        const pAlloc = 0;
+        // Case 1: scope = None
+        if (pNone) {
+          return (
+            <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
+              <span style={{ fontSize: 13, color: "var(--spot-text3)" }} data-testid="prepress-otc-none">None</span>
+            </div>
+          );
+        }
+        // Case 2: scope = Per Job (Lot)
+        if (pPerJob) {
+          const treat = s.jobPrepressTreatment || "Separate Line";
+          if (treat === "None") {
+            return (
+              <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
+                <span style={{ fontSize: 13, color: "var(--spot-text3)" }}>None (Lot)</span>
+              </div>
+            );
+          }
+          return (
+            <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5 }} data-testid="prepress-otc-lot">
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
+              <span style={{ fontSize: 13, color: "var(--spot-text3)" }}>Lot</span>
+              {pAlloc > 0 ? (
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)", marginLeft: "auto" }}>
+                  ${Number(pAlloc).toFixed(2)}
+                </span>
+              ) : (
+                <span style={{ fontSize: 12, fontStyle: "italic", color: "var(--spot-text3)", marginLeft: "auto" }}>
+                  pending setup
+                </span>
+              )}
+            </div>
+          );
+        }
+        // Case 3: scope = Per Item (default) — full per-item treatment tiles
+        return (
+          <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
+            <Tile label="Auto"  active={s.prepressTreatment === "Auto"}           onClick={() => setField("prepressTreatment", "Auto")} small tint="#22c55e" data-testid="tile-prepress-auto" />
+            <Tile label="None"  active={s.prepressTreatment === "None"}           onClick={() => setField("prepressTreatment", "None")} small data-testid="tile-prepress-none" />
+            <Tile label="Line"  active={s.prepressTreatment === "Separate Line"}  onClick={() => setField("prepressTreatment", "Separate Line")} small data-testid="tile-prepress-line" />
+            <Tile label="Amort" active={s.prepressTreatment === "Amortize"}       onClick={() => setField("prepressTreatment", "Amortize")} small data-testid="tile-prepress-amort" />
+            {s.prepressTreatment === "Auto" && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-text3)", opacity: 0.5, padding: "4px 6px" }}>
+                ${s.defaultPrepressCost || "50"} embedded
+              </span>
+            )}
+            {s.prepressTreatment !== "None" && s.prepressTreatment !== "Auto" && (
+              <Num
+                value={s.prepressCost}
+                onChange={(v) => setField("prepressCost", v)}
+                step="0.01" min="0"
+                style={{ width: 58, padding: "4px 5px", fontSize: 12 }}
+                data-testid="input-prepress-cost" />
+            )}
+          </div>
+        );
+      })()}
 
       {/* Die */}
       {anyDieRoute && (
