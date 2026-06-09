@@ -121,7 +121,14 @@ export default function LoadQuoteModal({ onClose }) {
       // Pull fresh state via getQuote (cleaner audit + ensures we have full doc)
       try { const fresh = await getQuote(it.id); it = fresh; } catch {}
     }
-    replaceState(it.state || {});
+    // Merge in quote-level fields (id + status) so the toolbar Status dropdown
+    // can issue PATCH calls back to this same quote rather than creating new
+    // copies on every status change.
+    const stateWithMeta = {
+      ...(it.state || {}),
+      ...(tab === "saved" ? { quoteId: it.id, quoteStatus: it.status || "draft" } : {}),
+    };
+    replaceState(stateWithMeta);
     pushToast(`Loaded ${it.est_num || it.label || "draft"}${it.owner_id !== myUserId ? ` (view only — ${it.owner_name})` : ""}`, "ok");
     onClose();
   };
@@ -129,7 +136,7 @@ export default function LoadQuoteModal({ onClose }) {
   const onTakeOver = async (it) => {
     try {
       const updated = await takeOverQuote(it.id);
-      replaceState(updated.state || {});
+      replaceState({ ...(updated.state || {}), quoteId: updated.id, quoteStatus: updated.status || "draft" });
       pushToast(`Took over ${updated.est_num} — you are now the owner`, "ok");
       onClose();
     } catch (e) {
@@ -140,7 +147,7 @@ export default function LoadQuoteModal({ onClose }) {
   const onCopy = async (it) => {
     try {
       const copy = await copyQuote(it.id);
-      replaceState(copy.state || {});
+      replaceState({ ...(copy.state || {}), quoteId: copy.id, quoteStatus: copy.status || "draft" });
       pushToast(`Copied ${it.est_num} → new draft (${copy.est_num})`, "ok");
       onClose();
     } catch (e) {

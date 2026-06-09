@@ -2,7 +2,7 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
-import { createQuote } from "../../api/spot";
+import { createQuote, updateQuoteStatus } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
 import SpotCube from "./SpotCube";
 
@@ -10,12 +10,43 @@ import SpotCube from "./SpotCube";
  *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
 export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const { user, logout } = useAuth();
-  const { active, pushToast, convertToMultiPart, convertToSimple } = useQuote();
+  const { active, pushToast, convertToMultiPart, convertToSimple, setField } = useQuote();
   const s = active?.state || {};
   const isMP = s.quoteType === "Multi-Part";
   const itemCount = (s.bomItems || []).length;
   const [saving, setSaving] = React.useState(false);
   const fileCbRef = React.useRef(null);
+
+  // Status of the saved quote — drives the colored dropdown pill in the toolbar.
+  // `s.quoteId` is set on first save; before then the dropdown stays a hint.
+  const quoteId = s.quoteId || null;
+  const currentStatus = s.quoteStatus || "draft";
+  const [statusSaving, setStatusSaving] = React.useState(false);
+  const onStatusChange = async (newStatus) => {
+    if (newStatus === currentStatus) return;
+    if (!quoteId) {
+      // No saved quote yet — just stash locally; will be persisted on first Save
+      setField("quoteStatus", newStatus);
+      pushToast(`Status set to ${newStatus} — save the quote to persist`, "info");
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      await updateQuoteStatus(quoteId, newStatus);
+      setField("quoteStatus", newStatus);
+      pushToast(`Status → ${newStatus}`, "ok");
+    } catch (e) {
+      pushToast(`Status change failed — ${e?.response?.data?.detail || e.message}`, "err");
+    } finally { setStatusSaving(false); }
+  };
+  const statusTint = {
+    draft: { bg: "var(--spot-bg3)",       fg: "var(--spot-text3)" },
+    saved: { bg: "rgba(59,130,246,0.15)", fg: "#3b82f6" },
+    sent:  { bg: "rgba(245,158,11,0.15)", fg: "#f59e0b" },
+    won:   { bg: "rgba(34,197,94,0.15)",  fg: "#22c55e" },
+    lost:  { bg: "rgba(239,68,68,0.15)",  fg: "#ef4444" },
+    hold:  { bg: "rgba(168,85,247,0.15)", fg: "#a855f7" },
+  }[currentStatus] || { bg: "var(--spot-bg3)", fg: "var(--spot-text3)" };
 
   const onToggleMP = () => {
     if (isMP && itemCount >= 1) {
@@ -57,7 +88,14 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
         est_num: s.estNum || `DRAFT-${Date.now()}`,
         label: s.custRef || s.itemDesc || s.custName || "Untitled",
         state: s,
+        status: currentStatus,
+        customer_code: s.custCode || null,
+        customer_name: s.custName || null,
       });
+      // Stash the new quote's id + status onto local state so the status
+      // dropdown can persist changes via PATCH on subsequent edits.
+      setField("quoteId", saved.id);
+      setField("quoteStatus", saved.status || currentStatus);
       pushToast(`Saved ${saved.est_num || s.estNum || "quote"}`, "ok");
       // If "File" checkbox is checked, also download a .json snapshot
       if (fileCbRef.current?.checked) {
@@ -132,6 +170,25 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
           opacity: saving ? 0.6 : 1, cursor: saving ? "wait" : "pointer" }}>
           {saving ? "Saving…" : "Save"}
         </button>
+        <select data-testid="toolbar-status" value={currentStatus}
+          onChange={(e) => onStatusChange(e.target.value)}
+          disabled={statusSaving}
+          title={quoteId ? "Quote status — saved instantly" : "Quote status — will be saved when you Save"}
+          style={{
+            ...btn,
+            background: statusTint.bg, color: statusTint.fg,
+            border: `1px solid ${statusTint.fg}55`,
+            fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em",
+            fontSize: 10, padding: "4px 6px", cursor: statusSaving ? "wait" : "pointer",
+            appearance: "auto",
+          }}>
+          <option value="draft">Draft</option>
+          <option value="saved">Saved</option>
+          <option value="sent">Sent</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+          <option value="hold">Hold</option>
+        </select>
         <label title="Also export .json on Save"
           style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11, color: "var(--spot-text3)" }}>
           <input ref={fileCbRef} type="checkbox" data-testid="toolbar-file-checkbox" /> File

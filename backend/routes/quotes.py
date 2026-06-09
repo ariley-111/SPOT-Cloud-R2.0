@@ -275,7 +275,9 @@ async def list_quote_audit(
     Restricted to admin role for now."""
     if user.role != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
-    query: Dict[str, Any] = {}
+    # Only return entries that have a quote_id — older rate-change audits
+    # share the same collection but don't belong in the Quote Activity view.
+    query: Dict[str, Any] = {"quote_id": {"$exists": True, "$ne": None}}
     if quote_id:
         query["quote_id"] = quote_id
     cursor = db[COL_AUDIT_LOG].find(query, {"_id": 0}).sort("timestamp", -1).limit(limit)

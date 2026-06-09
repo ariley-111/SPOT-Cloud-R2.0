@@ -11,6 +11,7 @@ import {
   adminGetIntegrations, adminSetIntegration, adminResetIntegration, adminGetUsage,
   adminGetSheets, adminAddSheet, adminEditSheet, adminDisableSheet, adminEnableSheet,
   adminExportSheetsCsv, adminImportSheetsCsv,
+  listQuoteAudit,
 } from "../api/spot";
 
 const TAB_LABELS = {
@@ -297,13 +298,15 @@ function RateRow({ r, onSave, onReset, category }) {
 
 // ─── Audit log ──────────────────────────────────────────────────────────
 function AuditPanel() {
+  const [source, setSource] = useState("rates");  // "rates" | "quotes"
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [skip, setSkip] = useState(0);
   const [filter, setFilter] = useState({ category: "", key: "" });
+  const [quoteFilter, setQuoteFilter] = useState({ event: "", quoteId: "" });
   const PAGE = 100;
 
-  const load = useCallback(async () => {
+  const loadRates = useCallback(async () => {
     setLoading(true);
     try {
       const params = { limit: PAGE, skip };
@@ -313,67 +316,178 @@ function AuditPanel() {
       setRows(r.rows || []);
     } catch (e) { setRows([]); } finally { setLoading(false); }
   }, [skip, filter]);
-  useEffect(() => { load(); }, [load]);
+
+  const loadQuotes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await listQuoteAudit(quoteFilter.quoteId || null);
+      let filtered = r || [];
+      // Apply event-type filter client-side
+      if (quoteFilter.event) {
+        const want = quoteFilter.event;
+        filtered = filtered.filter((row) => {
+          if (want === "takeover") return (row.source || "").startsWith("take-over");
+          if (want === "copy") return row.source === "copy" || row.field === "copy";
+          if (want === "status") return row.field === "status";
+          return true;
+        });
+      }
+      setRows(filtered);
+    } catch (e) { setRows([]); } finally { setLoading(false); }
+  }, [quoteFilter]);
+
+  useEffect(() => {
+    if (source === "rates") loadRates(); else loadQuotes();
+  }, [source, loadRates, loadQuotes]);
 
   const fmtTs = (t) => t ? t.replace("T", " ").slice(0, 19) : "—";
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>Audit Log</span>
-        <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Append-only · retained forever</span>
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--spot-text3)" }}>
-          Filter:
+      {/* Source switcher — Rate vs Quote activity */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, borderBottom: "1px solid var(--spot-line)", paddingBottom: 10 }}>
+        <button data-testid="audit-source-rates"
+          onClick={() => { setSource("rates"); setSkip(0); }}
+          style={{
+            all: "unset", cursor: "pointer", padding: "6px 14px", borderRadius: 4,
+            fontSize: 12, fontWeight: 700,
+            background: source === "rates" ? "var(--spot-accent)" : "var(--spot-bg3)",
+            color: source === "rates" ? "#fff" : "var(--spot-text2)",
+            border: `1px solid ${source === "rates" ? "var(--spot-accent)" : "var(--spot-border)"}`,
+          }}>Rate Changes</button>
+        <button data-testid="audit-source-quotes"
+          onClick={() => { setSource("quotes"); setSkip(0); }}
+          style={{
+            all: "unset", cursor: "pointer", padding: "6px 14px", borderRadius: 4,
+            fontSize: 12, fontWeight: 700,
+            background: source === "quotes" ? "var(--spot-accent)" : "var(--spot-bg3)",
+            color: source === "quotes" ? "#fff" : "var(--spot-text2)",
+            border: `1px solid ${source === "quotes" ? "var(--spot-accent)" : "var(--spot-border)"}`,
+          }}>Quote Activity</button>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--spot-text3)", alignSelf: "center" }}>
+          Append-only · retained forever
         </span>
-        <select value={filter.category} onChange={(e) => { setSkip(0); setFilter({ ...filter, category: e.target.value }); }}
-          data-testid="admin-audit-cat-filter"
-          style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
-            border: "1px solid var(--spot-border)", borderRadius: 3 }}>
-          <option value="">All categories</option>
-          {["rate", "gm_tier", "sell_tier", "grade_adder"].map((c) => <option key={c} value={c}>{TAB_LABELS[c]}</option>)}
-        </select>
-        <input value={filter.key} onChange={(e) => { setSkip(0); setFilter({ ...filter, key: e.target.value }); }}
-          placeholder="key (e.g. incaRate)" data-testid="admin-audit-key-filter"
-          style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
-            border: "1px solid var(--spot-border)", borderRadius: 3, width: 140 }} />
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }} data-testid="admin-audit-table">
-        <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
-          <th style={th}>Timestamp (UTC)</th>
-          <th style={th}>Action</th>
-          <th style={th}>Category</th>
-          <th style={th}>Key</th>
-          <th style={th}>Before</th>
-          <th style={th}>After</th>
-          <th style={th}>Baseline</th>
-          <th style={th}>User</th>
-        </tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>Loading…</td></tr>
-          : rows.length === 0 ? <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>No history yet</td></tr>
-          : rows.map((r, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid var(--spot-line)" }}>
-                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>{fmtTs(r.timestamp)}</td>
-                <td style={td}>{actionLabel(r.type)}</td>
-                <td style={{ ...td, color: "var(--spot-text3)" }}>{r.category || "—"}</td>
-                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace" }}>{r.key || ("count=" + (r.count || ""))}</td>
-                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text3)" }}>{fmtVal(r.value_before)}</td>
-                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-warn)", fontWeight: 600 }}>{fmtVal(r.value_after)}</td>
-                <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text3)" }}>{fmtVal(r.baseline)}</td>
-                <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>{r.user || "—"}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-      <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
-        <button onClick={() => setSkip(Math.max(0, skip - PAGE))} disabled={skip === 0}
-          style={{ ...btnSmall, opacity: skip === 0 ? 0.4 : 1 }} data-testid="admin-audit-prev">← Newer</button>
-        <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-          Showing {skip + 1}–{skip + rows.length}
-        </span>
-        <button onClick={() => setSkip(skip + PAGE)} disabled={rows.length < PAGE}
-          style={{ ...btnSmall, opacity: rows.length < PAGE ? 0.4 : 1 }} data-testid="admin-audit-next">Older →</button>
-      </div>
+
+      {source === "rates" ? (
+        <>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>Rate-change Audit</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--spot-text3)" }}>Filter:</span>
+            <select value={filter.category} onChange={(e) => { setSkip(0); setFilter({ ...filter, category: e.target.value }); }}
+              data-testid="admin-audit-cat-filter"
+              style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
+                border: "1px solid var(--spot-border)", borderRadius: 3 }}>
+              <option value="">All categories</option>
+              {["rate", "gm_tier", "sell_tier", "grade_adder"].map((c) => <option key={c} value={c}>{TAB_LABELS[c]}</option>)}
+            </select>
+            <input value={filter.key} onChange={(e) => { setSkip(0); setFilter({ ...filter, key: e.target.value }); }}
+              placeholder="key (e.g. incaRate)" data-testid="admin-audit-key-filter"
+              style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
+                border: "1px solid var(--spot-border)", borderRadius: 3, width: 140 }} />
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }} data-testid="admin-audit-table">
+            <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
+              <th style={th}>Timestamp (UTC)</th>
+              <th style={th}>Action</th>
+              <th style={th}>Category</th>
+              <th style={th}>Key</th>
+              <th style={th}>Before</th>
+              <th style={th}>After</th>
+              <th style={th}>Baseline</th>
+              <th style={th}>User</th>
+            </tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>Loading…</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>No history yet</td></tr>
+              : rows.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--spot-line)" }}>
+                    <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>{fmtTs(r.timestamp)}</td>
+                    <td style={td}>{actionLabel(r.type)}</td>
+                    <td style={{ ...td, color: "var(--spot-text3)" }}>{r.category || "—"}</td>
+                    <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace" }}>{r.key || ("count=" + (r.count || ""))}</td>
+                    <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text3)" }}>{fmtVal(r.value_before)}</td>
+                    <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-warn)", fontWeight: 600 }}>{fmtVal(r.value_after)}</td>
+                    <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text3)" }}>{fmtVal(r.baseline)}</td>
+                    <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>{r.user || "—"}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={() => setSkip(Math.max(0, skip - PAGE))} disabled={skip === 0}
+              style={{ ...btnSmall, opacity: skip === 0 ? 0.4 : 1 }} data-testid="admin-audit-prev">← Newer</button>
+            <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+              Showing {skip + 1}–{skip + rows.length}
+            </span>
+            <button onClick={() => setSkip(skip + PAGE)} disabled={rows.length < PAGE}
+              style={{ ...btnSmall, opacity: rows.length < PAGE ? 0.4 : 1 }} data-testid="admin-audit-next">Older →</button>
+          </div>
+        </>
+      ) : (
+        // ─── Quote Activity log ─────────────────────────────────────
+        <>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>Quote Activity</span>
+            <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Take-overs · Copies · Status changes</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--spot-text3)" }}>Filter:</span>
+            <select value={quoteFilter.event} onChange={(e) => setQuoteFilter({ ...quoteFilter, event: e.target.value })}
+              data-testid="audit-quote-event-filter"
+              style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
+                border: "1px solid var(--spot-border)", borderRadius: 3 }}>
+              <option value="">All events</option>
+              <option value="takeover">Take Over</option>
+              <option value="copy">Copy</option>
+              <option value="status">Status change</option>
+            </select>
+            <input value={quoteFilter.quoteId}
+              onChange={(e) => setQuoteFilter({ ...quoteFilter, quoteId: e.target.value })}
+              placeholder="Quote ID (full UUID)"
+              data-testid="audit-quote-id-filter"
+              style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
+                border: "1px solid var(--spot-border)", borderRadius: 3, width: 200 }} />
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }} data-testid="audit-quote-table">
+            <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
+              <th style={th}>Timestamp (UTC)</th>
+              <th style={th}>Event</th>
+              <th style={th}>Quote ID</th>
+              <th style={th}>Field</th>
+              <th style={th}>Before</th>
+              <th style={th}>After</th>
+              <th style={th}>By User</th>
+            </tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={7} style={{ ...td, color: "var(--spot-text3)" }}>Loading…</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={7} style={{ ...td, color: "var(--spot-text3)" }}>No quote activity yet</td></tr>
+              : rows.map((r, i) => {
+                  // Pretty event label
+                  let eventLabel = r.field;
+                  let eventColor = "var(--spot-text2)";
+                  if ((r.source || "").startsWith("take-over")) { eventLabel = "Take Over"; eventColor = "#f59e0b"; }
+                  else if (r.source === "copy" || r.field === "copy") { eventLabel = "Copy"; eventColor = "#06b6d4"; }
+                  else if (r.field === "status") { eventLabel = "Status"; eventColor = "#a855f7"; }
+                  // Show owner names instead of UUIDs when we have them
+                  const before = r.field === "owner_id" ? (r.old_value_name || r.old_value) : fmtVal(r.old_value);
+                  const after = r.field === "owner_id" ? (r.user_name || r.new_value) : fmtVal(r.new_value);
+                  return (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--spot-line)" }}>
+                      <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>{fmtTs(r.timestamp)}</td>
+                      <td style={{ ...td, fontWeight: 700, color: eventColor }}>{eventLabel}</td>
+                      <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text3)", fontSize: 10 }}>
+                        {(r.quote_id || "").slice(0, 8)}…
+                      </td>
+                      <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace" }}>{r.field}</td>
+                      <td style={{ ...td, color: "var(--spot-text3)" }}>{before || "—"}</td>
+                      <td style={{ ...td, color: "var(--spot-warn)", fontWeight: 600 }}>{after || "—"}</td>
+                      <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>{r.user_name || r.user_id || "—"}</td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }
