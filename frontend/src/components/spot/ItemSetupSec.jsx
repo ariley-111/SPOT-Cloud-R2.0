@@ -631,62 +631,26 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
       }}>One-Time Costs</div>
 
       {/* Prepress */}
-      {s.printReq === "Yes" && (() => {
-        const isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
-        const pScope = s.prepressScope || "Per Item";
-        const isLot = pScope === "Per Job";
-        const isNoneScope = pScope === "None";
-        return (
-          <>
-            {/* Multi-Part: SCOPE selector — ports legacy spot_r1_5.jsx L5598-5610 */}
-            {isMP && (
-              <div data-testid="prepress-scope-row" style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
-                <Tile label="None"       active={pScope === "None"}     onClick={() => setField("prepressScope", "None")} small tint="#94a3b8" data-testid="tile-prepress-scope-none" />
-                <Tile label="Per Item"   active={pScope === "Per Item"} onClick={() => setField("prepressScope", "Per Item")} small tint="#22c55e" data-testid="tile-prepress-scope-item" />
-                <Tile label="Lot Charge" active={pScope === "Per Job"}  onClick={() => {
-                  setField("prepressScope", "Per Job");
-                  if ((s.jobPrepressTreatment || "None") === "None") setField("jobPrepressTreatment", "Separate Line");
-                }} small tint="#06b6d4" data-testid="tile-prepress-scope-lot" />
-                {isLot && (
-                  <>
-                    <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
-                    <Tile label="Line"  active={(s.jobPrepressTreatment || "Separate Line") === "Separate Line"} onClick={() => setField("jobPrepressTreatment", "Separate Line")} small tint="#22c55e" data-testid="tile-jobprepress-line" />
-                    <Tile label="Amort" active={s.jobPrepressTreatment === "Amortize"}                            onClick={() => setField("jobPrepressTreatment", "Amortize")}        small data-testid="tile-jobprepress-amort" />
-                    <Num value={s.jobPrepressCost || 0}
-                      onChange={(v) => setField("jobPrepressCost", String(v))}
-                      step="0.01" min="0"
-                      style={{ width: 70, padding: "4px 5px", fontSize: 12 }}
-                      data-testid="input-job-prepress-cost" />
-                  </>
-                )}
-              </div>
-            )}
-            {/* Per-Item TREATMENT selector — hidden when scope is None or Lot Charge */}
-            {(!isMP || pScope === "Per Item") && !isNoneScope && (
-              <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
-                {!isMP && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>}
-                {isMP && <span style={{ fontSize: 11, color: "var(--spot-text3)", width: 54, flexShrink: 0, paddingLeft: 8 }}>↳ item</span>}
-                <Tile label="Auto"  active={s.prepressTreatment === "Auto"}           onClick={() => setField("prepressTreatment", "Auto")} small tint="#22c55e" data-testid="tile-prepress-auto" />
-                <Tile label="None"  active={s.prepressTreatment === "None"}           onClick={() => setField("prepressTreatment", "None")} small data-testid="tile-prepress-none" />
-                <Tile label="Line"  active={s.prepressTreatment === "Separate Line"}  onClick={() => setField("prepressTreatment", "Separate Line")} small data-testid="tile-prepress-line" />
-                <Tile label="Amort" active={s.prepressTreatment === "Amortize"}       onClick={() => setField("prepressTreatment", "Amortize")} small data-testid="tile-prepress-amort" />
-                {s.prepressTreatment !== "None" && (
-                  <Num
-                    value={s.prepressTreatment === "Auto" ? (s.defaultPrepressCost || "50") : s.prepressCost}
-                    onChange={(v) => {
-                      if (s.prepressTreatment === "Auto") setField("defaultPrepressCost", v);
-                      else setField("prepressCost", v);
-                    }}
-                    step="0.01" min="0"
-                    style={{ width: 58, padding: "4px 5px", fontSize: 12 }}
-                    data-testid="input-prepress-cost" />
-                )}
-              </div>
-            )}
-          </>
-        );
-      })()}
+      {s.printReq === "Yes" && (
+        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Prepress</span>
+          <Tile label="Auto"  active={s.prepressTreatment === "Auto"}           onClick={() => setField("prepressTreatment", "Auto")} small tint="#22c55e" data-testid="tile-prepress-auto" />
+          <Tile label="None"  active={s.prepressTreatment === "None"}           onClick={() => setField("prepressTreatment", "None")} small data-testid="tile-prepress-none" />
+          <Tile label="Line"  active={s.prepressTreatment === "Separate Line"}  onClick={() => setField("prepressTreatment", "Separate Line")} small data-testid="tile-prepress-line" />
+          <Tile label="Amort" active={s.prepressTreatment === "Amortize"}       onClick={() => setField("prepressTreatment", "Amortize")} small data-testid="tile-prepress-amort" />
+          {s.prepressTreatment !== "None" && (
+            <Num
+              value={s.prepressTreatment === "Auto" ? (s.defaultPrepressCost || "50") : s.prepressCost}
+              onChange={(v) => {
+                if (s.prepressTreatment === "Auto") setField("defaultPrepressCost", v);
+                else setField("prepressCost", v);
+              }}
+              step="0.01" min="0"
+              style={{ width: 58, padding: "4px 5px", fontSize: 12 }}
+              data-testid="input-prepress-cost" />
+          )}
+        </div>
+      )}
 
       {/* Die */}
       {anyDieRoute && (

@@ -60,7 +60,7 @@ export default function EstimateInfoSec() {
         </F>
       </div>
 
-      {/* Quote Type + Pricing Mode row */}
+      {/* Quote Type + Pricing Mode + Prepress Scope row */}
       <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
           textTransform: "uppercase", letterSpacing: ".06em", width: 64, flexShrink: 0 }}>Quote</span>
@@ -73,6 +73,20 @@ export default function EstimateInfoSec() {
               textTransform: "uppercase", letterSpacing: ".06em", flexShrink: 0 }}>Pricing</span>
             <Tile label="Individual"  active={s.pricingMode === "Individual"}  onClick={() => setPricingMode("Individual")}  small data-testid="tile-pricing-individual" />
             <Tile label="Matched Set" active={s.pricingMode === "Matched Set"} onClick={() => setPricingMode("Matched Set")} small data-testid="tile-pricing-matched" />
+            {/* Prepress Scope — ports legacy spot_r1_5.jsx L5598-5610 (MP only, gated on print) */}
+            {s.printReq === "Yes" && (
+              <>
+                <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
+                  textTransform: "uppercase", letterSpacing: ".06em", flexShrink: 0 }}>Prepress</span>
+                <Tile label="None"       active={(s.prepressScope || "Per Item") === "None"}     onClick={() => setField("prepressScope", "None")}     small tint="#94a3b8" data-testid="tile-prepress-scope-none" />
+                <Tile label="Per Item"   active={(s.prepressScope || "Per Item") === "Per Item"} onClick={() => setField("prepressScope", "Per Item")} small tint="#22c55e" data-testid="tile-prepress-scope-item" />
+                <Tile label="Lot Charge" active={(s.prepressScope || "Per Item") === "Per Job"}  onClick={() => {
+                  setField("prepressScope", "Per Job");
+                  if ((s.jobPrepressTreatment || "None") === "None") setField("jobPrepressTreatment", "Separate Line");
+                }} small tint="#06b6d4" data-testid="tile-prepress-scope-lot" />
+              </>
+            )}
           </>
         )}
       </div>
