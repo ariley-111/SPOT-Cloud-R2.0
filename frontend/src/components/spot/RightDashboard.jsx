@@ -32,11 +32,78 @@ export default function RightDashboard() {
       display: "flex", flexDirection: "column",
       paddingBottom: 80,  // keep last row clear of the "Made with Emergent" badge
     }}>
-      <FreightPanel s={s} />
-      <RouteComparison s={s} primary={primary} />
-      <EconomicsPanel s={s} result={primary} aggregate={aggregate} isMultiPart={isMultiPart} activeItemIdx={activeItemIdx} />
-      <CostBuildup result={primary} isMultiPart={isMultiPart} aggregate={aggregate} s={s} />
-      <BoardPanel result={primary} s={s} />
+      <Collapsible id="freight" title="🚚 Freight">
+        <FreightPanel s={s} />
+      </Collapsible>
+      <Collapsible id="route" title="🛣 Route Comparison">
+        <RouteComparison s={s} primary={primary} />
+      </Collapsible>
+      <Collapsible id="economics" title="📊 Economics">
+        <EconomicsPanel s={s} result={primary} aggregate={aggregate} isMultiPart={isMultiPart} activeItemIdx={activeItemIdx} />
+      </Collapsible>
+      <Collapsible id="costbuildup" title="🧮 Cost Buildup">
+        <CostBuildup result={primary} isMultiPart={isMultiPart} aggregate={aggregate} s={s} />
+      </Collapsible>
+      <Collapsible id="board" title="📦 Board">
+        <BoardPanel result={primary} s={s} />
+      </Collapsible>
+    </div>
+  );
+}
+
+// ─── Collapsible wrapper for right-side panels ────────────────────────
+// Each panel already has its own internal header — when expanded, the
+// wrapper is invisible. When collapsed, we render a thin stub bar with a
+// chevron in place of the full panel. State is persisted per-panel-id in
+// localStorage so users get a consistent layout across reloads.
+function Collapsible({ id, title, children }) {
+  const lsKey = `spot_panel_collapsed_${id}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(lsKey) === "1";
+  });
+  const toggle = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem(lsKey, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
+  if (collapsed) {
+    return (
+      <button data-testid={`panel-collapsed-${id}`} onClick={toggle}
+        style={{
+          all: "unset", cursor: "pointer", display: "flex",
+          alignItems: "center", justifyContent: "space-between",
+          padding: "10px 14px",
+          borderBottom: "1px solid var(--spot-line)",
+          background: "var(--spot-bg2)",
+          fontSize: 12, fontWeight: 700, color: "var(--spot-text2)",
+          textTransform: "uppercase", letterSpacing: ".06em",
+        }}>
+        <span>{title}</span>
+        <span style={{ color: "var(--spot-text3)", fontSize: 11 }}>▶</span>
+      </button>
+    );
+  }
+  return (
+    <div style={{ position: "relative" }} data-testid={`panel-expanded-${id}`}>
+      {/* Tiny collapse handle in the top-right corner of the expanded panel */}
+      <button onClick={toggle}
+        data-testid={`panel-collapse-btn-${id}`}
+        title="Collapse"
+        style={{
+          all: "unset", cursor: "pointer",
+          position: "absolute", top: 8, right: 10, zIndex: 5,
+          fontSize: 11, color: "var(--spot-text3)",
+          padding: "2px 6px", borderRadius: 3,
+          background: "var(--spot-bg3)55",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--spot-line)"; e.currentTarget.style.color = "var(--spot-text)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "var(--spot-bg3)55"; e.currentTarget.style.color = "var(--spot-text3)"; }}>
+        ▼
+      </button>
+      {children}
     </div>
   );
 }
