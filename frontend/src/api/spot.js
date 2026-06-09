@@ -109,14 +109,24 @@ export const deleteDraft = (id) =>
   api.delete(`/drafts/${id}`).then((r) => r.data);
 
 // ─── Quotes ─────────────────────────────────────────────
-export const listQuotes = (limit = 50) =>
-  api.get("/quotes", { params: { limit } }).then((r) => r.data);
+export const listQuotes = (params = {}) =>
+  api.get("/quotes", { params: { limit: 100, scope: "mine", ...params } }).then((r) => r.data);
+export const listQuoteOwners = () =>
+  api.get("/quotes/_meta/owners").then((r) => r.data);
 export const createQuote = (body) =>
   api.post("/quotes", body).then((r) => r.data);
 export const getQuote = (id) =>
   api.get(`/quotes/${id}`).then((r) => r.data);
 export const updateQuote = (id, body) =>
   api.put(`/quotes/${id}`, body).then((r) => r.data);
+export const takeOverQuote = (id, reason) =>
+  api.post(`/quotes/${id}/take-over`, { reason: reason || null }).then((r) => r.data);
+export const copyQuote = (id) =>
+  api.post(`/quotes/${id}/copy`).then((r) => r.data);
+export const updateQuoteStatus = (id, status) =>
+  api.patch(`/quotes/${id}/status`, { status }).then((r) => r.data);
+export const listQuoteAudit = (quoteId) =>
+  api.get("/admin/audit/quotes", { params: quoteId ? { quote_id: quoteId } : {} }).then((r) => r.data);
 
 // ─── Freight ────────────────────────────────────────────
 export const freightQuote = (body) =>
