@@ -1167,6 +1167,8 @@ function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggle
 
 // Legacy per-component breakdown chip — kept for MP-MatchedSet mode
 function PerComponentBreakdownLegacy({ row }) {
+  // Show Allocated Freight column only when any component has it set (Per Job mode)
+  const hasAllocFreight = (row.perComponent || []).some((pc) => Number(pc.allocatedFreight) > 0);
   return (
     <div data-testid="mp-per-component" style={{
       marginTop: 8, padding: "8px 10px", background: "var(--spot-bg3)",
@@ -1185,6 +1187,7 @@ function PerComponentBreakdownLegacy({ row }) {
           <th style={{ textAlign: "right", padding: "3px 6px" }}>Cost/Pc</th>
           <th style={{ textAlign: "right", padding: "3px 6px" }}>Sell/Pc</th>
           <th style={{ textAlign: "right", padding: "3px 6px" }}>Sell</th>
+          {hasAllocFreight && <th style={{ textAlign: "right", padding: "3px 6px" }}>Freight</th>}
           <th style={{ textAlign: "right", padding: "3px 6px" }}>GM%</th>
           <th style={{ textAlign: "right", padding: "3px 6px" }}>Route</th>
         </tr></thead>
@@ -1205,6 +1208,12 @@ function PerComponentBreakdownLegacy({ row }) {
                 <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.costPc || (pc.qty > 0 ? (pc.totalMfg || 0) / pc.qty : 0), 4)}</td>
                 <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.sellPc || (pc.qty > 0 ? (pc.itemSell || 0) / pc.qty : 0), 4)}</td>
                 <td style={{ padding: "3px 6px", textAlign: "right", fontWeight: 600 }}>{fmtMoney(pc.itemSell || 0)}</td>
+                {hasAllocFreight && (
+                  <td style={{ padding: "3px 6px", textAlign: "right", color: "#06b6d4", fontWeight: 600 }}
+                    data-testid={`mp-pc-freight-${i}`}>
+                    {Number(pc.allocatedFreight) > 0 ? fmtMoney(pc.allocatedFreight) : "—"}
+                  </td>
+                )}
                 <td style={{ padding: "3px 6px", textAlign: "right",
                   color: (pc.gmPct || 0) >= 0 ? "var(--spot-green)" : "var(--spot-err)" }}>
                   {fmtPct(pc.gmPct || 0, 1)}

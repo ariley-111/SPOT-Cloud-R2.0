@@ -132,6 +132,9 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
               <div style={cmpBox}>
                 <div style={cmpLbl}>SHIP INDIVIDUALLY</div>
                 <div style={cmpAmt} data-testid="dash-per-item-total">{fmtMoney(perItemTotal)}</div>
+                <div style={cmpMarkup} data-testid="dash-per-item-total-markup">
+                  w/ markup: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(perItemTotal * (1 + markup))}</b>
+                </div>
                 <div style={cmpSub}>{cache.perItemQuotes?.length || 0} solo shipments</div>
               </div>
               {savings !== 0 && (
@@ -151,6 +154,9 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
               <div style={cmpBox}>
                 <div style={cmpLbl}>SHIP TOGETHER</div>
                 <div style={cmpAmt} data-testid="dash-per-job-total">{fmtMoney(perJobTotal)}</div>
+                <div style={cmpMarkup} data-testid="dash-per-job-total-markup">
+                  w/ markup: <b style={{ color: "var(--spot-text)" }}>{fmtMoney(perJobTotal * (1 + markup))}</b>
+                </div>
                 <div style={cmpSub}>{cache.perJobQuotes?.length || 0} combined shipment{cache.perJobQuotes?.length !== 1 ? "s" : ""}</div>
               </div>
             </div>
@@ -533,6 +539,7 @@ const cmpBox = { textAlign: "center", padding: "8px 16px" };
 const cmpLbl = { fontSize: 9, fontWeight: 700, color: "var(--spot-text3)",
                  textTransform: "uppercase", letterSpacing: ".08em" };
 const cmpAmt = { fontSize: 22, fontWeight: 800, marginTop: 4, fontFamily: "'JetBrains Mono', monospace" };
+const cmpMarkup = { fontSize: 10, color: "var(--spot-text3)", marginTop: 3 };
 const cmpSub = { fontSize: 10, color: "var(--spot-text3)", marginTop: 2 };
 const tierBox = { padding: "10px 12px", borderRadius: 4, border: "1px solid var(--spot-line)",
                   marginBottom: 10, background: "var(--spot-bg2)" };

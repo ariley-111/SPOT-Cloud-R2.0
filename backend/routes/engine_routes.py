@@ -461,6 +461,19 @@ async def calculate_multi_part(
         set_cost = (job_cost / set_qty) if set_qty > 0 else 0
         quote_sell = job_sell + line_charges
 
+        # ── Pull active component's sheet/out for matched-set quote table display ──
+        # Aggregated rows lack per-component fields (sheetW, pcsPerSheet, route, etc.)
+        # so when the user is viewing the quote table, they see "—" in those cells.
+        # Surface the ACTIVE component's values so they always see something useful;
+        # to see a different component's specs they switch the active BOM item.
+        active_idx = payload.get("activeItemIdx") or 0
+        try:
+            active_idx = int(active_idx)
+        except (TypeError, ValueError):
+            active_idx = 0
+        active_idx = max(0, min(active_idx, len(per_comp) - 1)) if per_comp else 0
+        active_pc = per_comp[active_idx] if per_comp else {}
+
         # Shape compatible with QuoteTableSec's row schema
         out_slots.append({
             "slot": slot,
@@ -481,7 +494,11 @@ async def calculate_multi_part(
             "miscLineCost": line_misc,
             "miscLineItems": agg_misc_items,
             "itemsSell": job_sell_components,
-            "route": pricing_mode,
+            "route": active_pc.get("route") or pricing_mode,
+            # Per-component aggregation can't have a single value — show active's
+            "sheetW": active_pc.get("sheetW") or "",
+            "sheetL": active_pc.get("sheetL") or "",
+            "pcsPerSheet": active_pc.get("pcsPerSheet") or "",
             "pricable": all(pc.get("pricable", True) for pc in per_comp) and job_sell > 0,
             "lineCharges": line_charges,
             "perComponent": per_comp,
