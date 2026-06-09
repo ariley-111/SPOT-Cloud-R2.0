@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SPOT — Matched Set Inline Rollup Mockup</title>
+<style>
+  :root {
+    --bg: #0e0f12;
+    --bg2: #14161b;
+    --bg3: #1c1f26;
+    --line: #2a2e38;
+    --text: #e7e9ee;
+    --text2: #a8adba;
+    --text3: #6b7280;
+    --accent: #a855f7;
+    --orange: #f59e0b;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--text2); font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .panel {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-head.bad { background: rgba(239,68,68,0.08); border-bottom-color: rgba(239,68,68,0.3); }
+  .panel-head.good { background: rgba(34,197,94,0.08); border-bottom-color: rgba(34,197,94,0.3); }
+  .pill {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    padding: 3px 8px; border-radius: 3px;
+  }
+  .pill.bad { background: var(--red); color: #fff; }
+  .pill.good { background: var(--green); color: #fff; }
+  .panel-title { font-size: 14px; font-weight: 700; }
+  .panel-body { padding: 12px; }
+
+  .mp-banner {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 6px 10px; margin-bottom: 8px; border-radius: 4px;
+    background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.27);
+  }
+  .mp-tag {
+    font-size: 10px; font-weight: 700; color: var(--orange);
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+  .mp-meta { font-size: 11px; color: var(--text2); }
+  .mp-aux { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    padding: 5px 8px; text-align: right; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--line);
+  }
+  th.left { text-align: left; }
+  th.accent { color: var(--accent); cursor: pointer; }
+  td {
+    padding: 5px 8px; text-align: right; border-bottom: 1px solid rgba(42,46,56,0.4);
+  }
+  td.left { text-align: left; }
+  tr.row-active { background: rgba(168,85,247,0.1); }
+  tr.row-active td { font-weight: 600; }
+
+  /* Inline rollup */
+  .rollup {
+    margin-top: 12px; border: 1px solid rgba(245,158,11,0.4); border-radius: 6px;
+    overflow: hidden; background: rgba(245,158,11,0.03);
+  }
+  .rollup-head {
+    padding: 7px 12px; background: rgba(245,158,11,0.1);
+    border-bottom: 1px solid rgba(245,158,11,0.27);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .rollup-title {
+    font-size: 11px; font-weight: 700; color: var(--orange);
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+  .rollup-sub { font-size: 11px; color: var(--text3); }
+  .rollup table th { color: rgba(245,158,11,0.7); }
+  .rollup tr.set-active td { background: rgba(245,158,11,0.08); font-weight: 700; color: var(--orange); }
+  .rollup .price-set { color: var(--orange); font-weight: 700; }
+
+  /* Footer breakdown */
+  .order-footer {
+    border-top: 1px solid var(--line); padding: 8px 0; margin-top: 6px;
+    display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .order-footer span { color: var(--text2); }
+  .order-footer b { color: var(--text); }
+  .total-pill {
+    font-size: 11px; font-weight: 700; color: var(--accent);
+    margin-left: auto;
+  }
+
+  .legend { margin-top: 8px; padding: 10px 12px; background: var(--bg3); border-radius: 4px; font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .legend b { color: var(--text); }
+  .key-bad { color: var(--red); }
+  .key-good { color: var(--green); }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .dot.s { background: var(--green); }
+  .annot { font-size: 11px; color: var(--text3); font-style: italic; margin-top: 4px; padding: 4px 8px; background: var(--bg3); border-left: 2px solid var(--orange); border-radius: 0 3px 3px 0; }
+  .small { font-size: 11px; color: var(--text3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Matched Set — Inline Kit Rollup Mockup</h1>
+  <div class="sub">
+    Sample RFQ: 3-component kit (Tray 1X + Tray 2X + Non-Joined) · Set qtys: 42 / 168 / 2,352 sets
+    · Selected slot: <b style="color:var(--orange)">168 sets</b>
+  </div>
+
+  <div class="grid">
+
+    <!-- ═══════════════ CURRENT (BROKEN) ═══════════════ -->
+    <div class="panel">
+      <div class="panel-head bad">
+        <span class="pill bad">Current</span>
+        <span class="panel-title">Cloud Today — only ONE set tier rendered</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="mp-banner">
+          <span class="mp-tag">Multi-Part · Matched Set</span>
+          <span class="mp-meta">3 components · per-item GM tiers aggregated</span>
+          <span class="mp-aux">Rows show <b>per-set</b> totals</span>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th class="left">Qty</th>
+              <th class="accent">Sell/Set</th>
+              <th>GM%</th>
+              <th>GM$</th>
+              <th>Total</th>
+              <th>Freight</th>
+              <th>Route</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row-active">
+              <td class="left"><span class="dot s"></span>42 sets</td>
+              <td>$34.48</td>
+              <td class="key-good">44.8%</td>
+              <td class="key-good">$649.12</td>
+              <td>$1,448.23</td>
+              <td>$170.94</td>
+              <td>Crest</td>
+            </tr>
+            <!-- 168 and 2,352 rows MISSING -->
+          </tbody>
+        </table>
+
+        <div class="annot">🐛 BUG: 168 sets and 2,352 sets tiers are not being rendered — user only sees 1 row.</div>
+
+        <div class="order-footer">
+          <span>Qty <b>42 sets</b></span>
+          <span>Item: <b>$1,448.23</b></span>
+          <span>Freight: <b>$170.94</b></span>
+          <span class="total-pill">Order Total: $1,619.17</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PROPOSED ═══════════════ -->
+    <div class="panel">
+      <div class="panel-head good">
+        <span class="pill good">Proposed</span>
+        <span class="panel-title">Legacy parity + inline Kit Rollup</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="mp-banner">
+          <span class="mp-tag">Multi-Part · Matched Set</span>
+          <span class="mp-meta">3 components · per-item GM tiers aggregated</span>
+          <span class="mp-aux">Rows show <b>per-set</b> totals at each set quantity</span>
+        </div>
+
+        <!-- ★ FIX 1: render ALL set-qty rows, not just the selected one ★ -->
+        <table>
+          <thead>
+            <tr>
+              <th class="left">Qty</th>
+              <th class="accent">Sell/Set</th>
+              <th>GM%</th>
+              <th>GM$</th>
+              <th>Total</th>
+              <th>Freight</th>
+              <th>Route</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="left"><span class="dot s"></span>42 sets</td>
+              <td>$34.48</td>
+              <td class="key-good">44.8%</td>
+              <td class="key-good">$649.12</td>
+              <td>$1,448.23</td>
+              <td>$170.94</td>
+              <td>Crest</td>
+            </tr>
+            <tr class="row-active">
+              <td class="left"><span class="dot s"></span>168 sets <span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 5px;border-radius:2px;margin-left:4px">SEL</span></td>
+              <td>$28.92</td>
+              <td class="key-good">47.1%</td>
+              <td class="key-good">$2,289.84</td>
+              <td>$4,858.56</td>
+              <td>$170.93</td>
+              <td>Crest</td>
+            </tr>
+            <tr>
+              <td class="left"><span class="dot s"></span>2,352 sets</td>
+              <td>$22.18</td>
+              <td class="key-good">52.3%</td>
+              <td class="key-good">$27,287.04</td>
+              <td>$52,167.36</td>
+              <td>$390.92</td>
+              <td>Crest</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- ★ FIX 2: inline Kit Rollup directly under the table ★ -->
+        <div class="rollup">
+          <div class="rollup-head">
+            <span class="rollup-title">Kit Rollup — 3 Components · Matched Set</span>
+            <span class="rollup-sub">Per-set breakdown · ported from legacy Cost Report</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th class="left">Set Qty</th>
+                <th>Components</th>
+                <th>Total Cost</th>
+                <th>Charges</th>
+                <th>Total Sell</th>
+                <th>GM$</th>
+                <th>GM%</th>
+                <th>Price/Set</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="left">42</td>
+                <td>3</td>
+                <td>$799.11</td>
+                <td>$170.94</td>
+                <td>$1,619.17</td>
+                <td class="key-good">$649.12</td>
+                <td class="key-good">44.8%</td>
+                <td class="price-set">$34.48</td>
+              </tr>
+              <tr class="set-active">
+                <td class="left">168</td>
+                <td>3</td>
+                <td>$2,568.72</td>
+                <td>$170.93</td>
+                <td>$5,029.49</td>
+                <td>$2,289.84</td>
+                <td>47.1%</td>
+                <td>$28.92</td>
+              </tr>
+              <tr>
+                <td class="left">2,352</td>
+                <td>3</td>
+                <td>$24,880.32</td>
+                <td>$390.92</td>
+                <td>$52,558.28</td>
+                <td class="key-good">$27,287.04</td>
+                <td class="key-good">52.3%</td>
+                <td class="price-set">$22.18</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="annot">✅ FIX 1: All 3 set-qty rows now render in the main table (legacy parity).<br>
+        ✅ FIX 2: Inline Kit Rollup gives the at-a-glance "kit" view that today lives buried in the Cost Report modal.</div>
+
+        <div class="order-footer">
+          <span>Qty <b>168 sets</b></span>
+          <span>Item: <b>$4,858.56</b></span>
+          <span>Freight: <b>$170.93</b></span>
+          <span class="total-pill">Order Total: $5,029.49</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <b>What changes:</b><br>
+    <b>1.</b> The main quote table footer no longer renders a single set-totals row — it renders <b>one per set-qty slot</b>, just like legacy R1.6.5.1.<br>
+    <b>2.</b> Below the main table, a new <span style="color:var(--orange)">Kit Rollup</span> mini-grid surfaces the per-set-qty totals that legacy hides inside the Cost Report. Same columns as legacy's Kit Rollup table (Set Qty / Components / Total Cost / Charges / Total Sell / GM$ / GM% / Price/Set).<br>
+    <b>3.</b> <b>Math is unchanged.</b> Same <code>setTotals</code> aggregation legacy uses. Pricing parity preserved.<br>
+    <b>4.</b> The "Sell/Ea → Sell/M → Sell/Set" header click-cycle behavior stays exactly as legacy does it — but since this is Matched Set mode and the header is showing Sell/Set, every component's row shows the kit price (which is by design — set totals are component-agnostic).
+  </div>
+
+  <div style="margin-top:20px;text-align:center;color:var(--text3);font-size:11px">
+    Mockup · static demo · no live data
+  </div>
+
+</div>
+</body>
+</html>
