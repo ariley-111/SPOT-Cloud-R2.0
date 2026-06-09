@@ -7,8 +7,9 @@ import { searchCustomers } from "../../api/spot";
 import { generateEstNum } from "../../lib/format";
 
 export default function EstimateInfoSec() {
-  const { active, sec, toggleSec, setField, setManyFields, initials } = useQuote();
+  const { active, sec, toggleSec, setField, setManyFields, setPricingMode, initials } = useQuote();
   const s = active?.state || {};
+
   const headerLabel = (
     <>
       <span>Estimate Info</span>
@@ -70,8 +71,8 @@ export default function EstimateInfoSec() {
             <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
               textTransform: "uppercase", letterSpacing: ".06em", flexShrink: 0 }}>Pricing</span>
-            <Tile label="Individual"  active={s.pricingMode === "Individual"}  onClick={() => setField("pricingMode", "Individual")}  small data-testid="tile-pricing-individual" />
-            <Tile label="Matched Set" active={s.pricingMode === "Matched Set"} onClick={() => setField("pricingMode", "Matched Set")} small data-testid="tile-pricing-matched" />
+            <Tile label="Individual"  active={s.pricingMode === "Individual"}  onClick={() => setPricingMode("Individual")}  small data-testid="tile-pricing-individual" />
+            <Tile label="Matched Set" active={s.pricingMode === "Matched Set"} onClick={() => setPricingMode("Matched Set")} small data-testid="tile-pricing-matched" />
           </>
         )}
       </div>

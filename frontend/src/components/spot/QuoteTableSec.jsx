@@ -36,6 +36,7 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
   const isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
   const pricingMode = s.pricingMode || "Matched Set";
   const setOverride = !!s.setMarginOverride;
+  const [kitMatrixOpen, setKitMatrixOpen] = useState(false);
   // Per-component grouped view is only used in MP-Individual mode where each
   // component has its own qty tier(s). Matched Set keeps the aggregate layout.
   const useComponentLayout = isMP && pricingMode === "Individual"
@@ -161,16 +162,27 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
         />
       )}
 
-      {/* MP Matched Set: collapsible Kit Rollup grid (default closed) — surfaces the
-          per-set-qty totals (price/set, GM%, GM$, freight, etc.) that legacy hides
-          inside the Cost Report modal. Pure additive UI; no math change. */}
+      {/* MP Matched Set: "View Kit Matrix" button — opens per-component × per-set-qty
+          matrix modal (3 components × N set qtys, with kit totals). */}
       {isMP && pricingMode === "Matched Set" && rows.length > 0 && (
-        <KitRollup
+        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+          <button data-testid="open-kit-matrix"
+            onClick={() => setKitMatrixOpen(true)}
+            style={{
+              all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 700,
+              padding: "7px 14px", borderRadius: 4,
+              background: "rgba(245,158,11,0.1)", color: "#f59e0b",
+              border: "1px solid rgba(245,158,11,0.4)",
+            }}>
+            View Kit Matrix — {(s.bomItems || []).length} components × {rows.length} set qt{rows.length === 1 ? "y" : "ys"}
+          </button>
+        </div>
+      )}
+      {isMP && pricingMode === "Matched Set" && kitMatrixOpen && (
+        <KitMatrixModal
           rows={rows}
           bomItems={s.bomItems || []}
-          selSlot={selSlot}
-          selectRow={selectRow}
-          isExcluded={isExcluded}
+          onClose={() => setKitMatrixOpen(false)}
         />
       )}
 
@@ -350,120 +362,203 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
   );
 }
 
-// ─── KitRollup (MP-Matched Set only) ────────────────────────────────────
-// Collapsible mini-grid that surfaces per-set-qty totals for every slot.
-// Mirrors the legacy "Kit Rollup" table that lives inside the Cost Report.
-// Default state: collapsed. Click a row to select that slot.
-function KitRollup({ rows, bomItems, selSlot, selectRow, isExcluded }) {
-  const [open, setOpen] = useState(false);
-  const componentsCount = bomItems.length;
-  // Filter out error rows so totals reflect only computable slots
+// ─── KitMatrixModal (MP-Matched Set only) ──────────────────────────────
+// Modal: per-component × per-set-qty matrix.
+//   Rows = each BOM component (Component 1, 2, ...)
+//   Cols = each set qty (42, 168, 2,352)
+//   Cells = sell/set for that component at that set qty
+//   Footer = kit-total per set qty (Sell/Set, GM%, GM$, Job Total)
+function KitMatrixModal({ rows, bomItems, onClose }) {
+  // Filter rows that actually computed (skip errors)
   const validRows = rows.filter((r) => !r.error);
   if (validRows.length === 0) return null;
+  // Close on Escape
+  useEffect(() => {
+    const h = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
   return (
-    <div data-testid="kit-rollup" style={{
-      marginTop: 10, border: "1px solid rgba(245,158,11,0.4)", borderRadius: 6,
-      overflow: "hidden", background: "rgba(245,158,11,0.03)",
-    }}>
-      <button data-testid="kit-rollup-toggle"
-        onClick={() => setOpen((v) => !v)}
+    <div data-testid="kit-matrix-modal"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+        zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24,
+      }}>
+      <div onClick={(e) => e.stopPropagation()}
         style={{
-          all: "unset", cursor: "pointer", width: "100%",
-          padding: "7px 12px", background: "rgba(245,158,11,0.1)",
-          borderBottom: open ? "1px solid rgba(245,158,11,0.27)" : "none",
+          background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
+          borderRadius: 8, width: "min(1200px, 96vw)", maxHeight: "92vh",
+          overflow: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+        }}>
+        {/* Header */}
+        <div style={{
+          padding: "12px 20px", borderBottom: "1px solid var(--spot-line)",
           display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "rgba(245,158,11,0.08)",
         }}>
-        <span style={{
-          fontSize: 11, fontWeight: 700, color: "#f59e0b",
-          textTransform: "uppercase", letterSpacing: ".08em",
-        }}>
-          <span style={{ display: "inline-block", width: 12, textAlign: "center", marginRight: 4 }}>
-            {open ? "▼" : "▶"}
-          </span>
-          Kit Rollup — {componentsCount} Component{componentsCount !== 1 ? "s" : ""} · Matched Set
-        </span>
-        <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-          {open ? "Click row to select · click header to collapse" : `Per-set breakdown across ${validRows.length} qty tier${validRows.length !== 1 ? "s" : ""}`}
-        </span>
-      </button>
-      {open && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: "var(--spot-bg3)" }}>
-              <th style={kitH}>Set Qty</th>
-              <th style={kitH}>Components</th>
-              <th style={kitH}>Total Cost</th>
-              <th style={kitH}>Charges</th>
-              <th style={kitH}>Total Sell</th>
-              <th style={kitH}>GM$</th>
-              <th style={kitH}>GM%</th>
-              <th style={{ ...kitH, color: "#f59e0b" }}>Price/Set</th>
-            </tr>
-          </thead>
-          <tbody>
-            {validRows.map((r) => {
-              const slot = r.slot ?? rows.indexOf(r);
-              const isSel = slot === selSlot;
-              const excl = isExcluded(slot);
-              const setQty = r.setQty ?? r.qty ?? 0;
-              const totalCost = Number(r.totalMfg || r.jobCost || 0);
-              const totalSell = Number(r.sellTotal || r.itemSell || 0);
-              const baseSell = Number(r.itemSell || r.jobSell || 0);
-              const charges = Math.max(0, totalSell - baseSell);
-              const gmDol = Number(r.gmDollar || (baseSell - totalCost) || 0);
-              const gmPct = baseSell > 0 ? gmDol / baseSell : 0;
-              const pricePerSet = setQty > 0 ? baseSell / setQty : 0;
-              return (
-                <tr key={slot}
-                  data-testid={`kit-rollup-row-${slot}`}
-                  onClick={() => selectRow(slot)}
-                  style={{
-                    cursor: "pointer",
-                    background: isSel ? "rgba(245,158,11,0.08)" : "transparent",
-                    opacity: excl ? 0.45 : 1,
-                    borderBottom: "1px solid rgba(42,46,56,0.4)",
-                  }}>
-                  <td style={{ ...kitTd, fontWeight: isSel ? 700 : 600, color: isSel ? "#f59e0b" : "var(--spot-text)" }}>
-                    {fmtInt(setQty)}
-                    {isSel && (
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#f59e0b" }}>
+              Kit Matrix — Matched Set
+            </div>
+            <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 2 }}>
+              {bomItems.length} components × {validRows.length} set qt{validRows.length === 1 ? "y" : "ys"}
+              {" · "}Per-component breakdown across each set quantity tier
+            </div>
+          </div>
+          <button data-testid="kit-matrix-close" onClick={onClose}
+            style={{
+              all: "unset", cursor: "pointer", fontSize: 18, padding: "4px 12px",
+              color: "var(--spot-text2)", borderRadius: 3,
+            }}>✕</button>
+        </div>
+
+        {/* Matrix */}
+        <div style={{ padding: 20, overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: "var(--spot-bg3)" }}>
+                <th style={mxH("left", true)}>Component</th>
+                {validRows.map((r, i) => (
+                  <th key={i} style={{ ...mxH("right"), background: "rgba(245,158,11,0.06)" }}>
+                    <div style={{ color: "#f59e0b" }}>{fmtInt(r.setQty ?? r.qty)} sets</div>
+                    <div style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 400, marginTop: 2 }}>
+                      Sell/Set
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bomItems.map((bi, compIdx) => {
+                return (
+                  <tr key={compIdx} style={{ borderBottom: "1px solid rgba(42,46,56,0.4)" }}>
+                    <td style={{ ...mxTd("left"), fontWeight: 600 }}>
+                      <span style={{ fontSize: 11, color: "var(--spot-text3)", marginRight: 6 }}>
+                        {compIdx + 1}.
+                      </span>
+                      {bi.desc || bi.itemDesc || bi.custIdent || `Component ${compIdx + 1}`}
                       <span style={{
-                        marginLeft: 4, fontSize: 9, fontWeight: 700, padding: "1px 4px",
-                        borderRadius: 2, background: "#f59e0b", color: "#fff",
-                      }}>SEL</span>
-                    )}
-                  </td>
-                  <td style={kitTd}>{componentsCount}</td>
-                  <td style={kitTd}>{fmtMoney(totalCost)}</td>
-                  <td style={{ ...kitTd, color: charges > 0 ? "#f59e0b" : "var(--spot-text3)" }}>
-                    {charges > 0 ? fmtMoney(charges) : "—"}
-                  </td>
-                  <td style={{ ...kitTd, fontWeight: 600 }}>{fmtMoney(totalSell)}</td>
-                  <td style={{ ...kitTd, color: gmDol >= 0 ? "var(--spot-green)" : "var(--spot-err)" }}>
-                    {fmtMoney(gmDol)}
-                  </td>
-                  <td style={{ ...kitTd, color: gmPct >= 0 ? "var(--spot-green)" : "var(--spot-err)", fontWeight: 600 }}>
-                    {fmtPct(gmPct, 1)}
-                  </td>
-                  <td style={{ ...kitTd, fontWeight: 700, color: "#f59e0b" }}>
-                    {fmtMoney(pricePerSet)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+                        marginLeft: 6, fontSize: 10, color: "var(--spot-text3)",
+                        fontWeight: 400,
+                      }}>
+                        × {bi.pcsPerSet || 1} pcs/set
+                      </span>
+                    </td>
+                    {validRows.map((r, i) => {
+                      const setQty = r.setQty ?? r.qty ?? 0;
+                      // perComponent is an array of per-component results for this slot
+                      const comp = Array.isArray(r.perComponent) ? r.perComponent[compIdx] : null;
+                      const compSell = Number(comp?.itemSell || 0);
+                      const sellPerSet = setQty > 0 ? compSell / setQty : 0;
+                      return (
+                        <td key={i} style={mxTd("right")}>
+                          {sellPerSet > 0 ? (
+                            <>
+                              <div style={{ fontWeight: 600 }}>{fmtMoney(sellPerSet)}</div>
+                              <div style={{ fontSize: 10, color: "var(--spot-text3)" }}>
+                                {fmtMoney(compSell)} total
+                              </div>
+                            </>
+                          ) : (
+                            <span style={{ color: "var(--spot-text3)" }}>—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              {/* Kit Total — Sell/Set */}
+              <tr style={{ background: "rgba(245,158,11,0.08)", borderTop: "2px solid rgba(245,158,11,0.4)" }}>
+                <td style={{ ...mxTd("left"), fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", fontSize: 11, letterSpacing: ".06em" }}>
+                  Kit Sell/Set
+                </td>
+                {validRows.map((r, i) => {
+                  const setQty = r.setQty ?? r.qty ?? 0;
+                  const sell = Number(r.itemSell || 0);
+                  const perSet = setQty > 0 ? sell / setQty : 0;
+                  return (
+                    <td key={i} style={{ ...mxTd("right"), fontWeight: 700, color: "#f59e0b", fontSize: 13 }}>
+                      {fmtMoney(perSet)}
+                    </td>
+                  );
+                })}
+              </tr>
+              {/* GM% */}
+              <tr style={{ background: "rgba(245,158,11,0.04)" }}>
+                <td style={{ ...mxTd("left"), fontWeight: 600, color: "var(--spot-text2)", fontSize: 11 }}>GM%</td>
+                {validRows.map((r, i) => {
+                  const gmPct = Number(r.gmPct || 0);
+                  return (
+                    <td key={i} style={{
+                      ...mxTd("right"), fontWeight: 600,
+                      color: gmPct >= 0.30 ? "var(--spot-green)" : gmPct >= 0.15 ? "#f59e0b" : "var(--spot-err)",
+                    }}>{fmtPct(gmPct, 1)}</td>
+                  );
+                })}
+              </tr>
+              {/* GM$ */}
+              <tr style={{ background: "rgba(245,158,11,0.04)" }}>
+                <td style={{ ...mxTd("left"), fontWeight: 600, color: "var(--spot-text2)", fontSize: 11 }}>GM$</td>
+                {validRows.map((r, i) => {
+                  const gmDol = Number(r.gmDollar || 0);
+                  return (
+                    <td key={i} style={{
+                      ...mxTd("right"), fontWeight: 600,
+                      color: gmDol >= 0 ? "var(--spot-green)" : "var(--spot-err)",
+                    }}>{fmtMoney(gmDol)}</td>
+                  );
+                })}
+              </tr>
+              {/* Job Total (includes freight + line charges) */}
+              <tr style={{ background: "rgba(245,158,11,0.1)", borderTop: "1px solid rgba(245,158,11,0.27)" }}>
+                <td style={{ ...mxTd("left"), fontWeight: 700, color: "var(--spot-text)" }}>
+                  Job Total
+                  <span style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 400, marginLeft: 6 }}>
+                    (incl. freight + charges)
+                  </span>
+                </td>
+                {validRows.map((r, i) => {
+                  const total = Number(r.sellTotal || r.itemSell || 0);
+                  return (
+                    <td key={i} style={{ ...mxTd("right"), fontWeight: 700, fontSize: 13 }}>
+                      {fmtMoney(total)}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div style={{
+          padding: "10px 20px", borderTop: "1px solid var(--spot-line)",
+          fontSize: 11, color: "var(--spot-text3)", textAlign: "right",
+        }}>
+          Press <kbd style={kbdStyle}>Esc</kbd> to close
+        </div>
+      </div>
     </div>
   );
 }
-const kitH = {
-  padding: "5px 8px", textAlign: "right", fontSize: 11, fontWeight: 700,
+const mxH = (align = "right", first = false) => ({
+  padding: "8px 10px", textAlign: align, fontSize: 11, fontWeight: 700,
   textTransform: "uppercase", letterSpacing: ".06em",
-  color: "rgba(245,158,11,0.75)",
-  borderBottom: "1px solid rgba(245,158,11,0.27)",
-};
-const kitTd = {
-  padding: "5px 8px", textAlign: "right",
+  color: "var(--spot-text3)",
+  borderBottom: "1px solid var(--spot-line)",
+  position: "sticky", top: 0, background: "var(--spot-bg3)",
+  ...(first ? { minWidth: 220 } : {}),
+});
+const mxTd = (align = "right") => ({
+  padding: "8px 10px", textAlign: align, color: "var(--spot-text)",
+});
+const kbdStyle = {
+  padding: "1px 5px", borderRadius: 3, background: "var(--spot-bg3)",
+  border: "1px solid var(--spot-border)", fontFamily: "monospace", fontSize: 10,
 };
 
 // ─── ComponentLayout (MP-Individual) ──────────────────────────────────

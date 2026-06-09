@@ -126,6 +126,64 @@ export function QuoteProvider({ children }) {
     ));
   }, [activeId]);
 
+  // ─── Pricing-mode toggle with smart qty handling ─────────────
+  // Individual → Matched Set: gather union of all unique component qtys,
+  //   sort ascending, write to top-level qtys. Snapshot prior state.
+  // Matched Set → Individual: restore the snapshot if present.
+  const setPricingMode = useCallback((next) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const s = t.state || {};
+      const curMode = s.pricingMode || "Matched Set";
+      if (curMode === next) return t;
+      if (next === "Matched Set") {
+        const snapshot = {
+          qtys: Array.isArray(s.qtys) ? [...s.qtys] : ["", "", "", "", ""],
+          bomQtys: (s.bomItems || []).map((bi) => Array.isArray(bi.qtys) ? [...bi.qtys] : []),
+        };
+        const seen = new Set();
+        (s.bomItems || []).forEach((bi) => {
+          (bi.qtys || []).forEach((q) => {
+            const n = Number(q);
+            if (n > 0 && Number.isFinite(n)) seen.add(n);
+          });
+        });
+        const unioned = Array.from(seen).sort((a, b) => a - b).map((n) => String(n));
+        const padded = [...unioned, ...Array(Math.max(0, 5 - unioned.length)).fill("")];
+        return {
+          ...t,
+          state: {
+            ...s,
+            pricingMode: "Matched Set",
+            qtys: unioned.length > 0 ? padded : snapshot.qtys,
+            _individualSnapshot: snapshot,
+          },
+          updatedAt: Date.now(),
+        };
+      }
+      // Restore individual
+      const snap = s._individualSnapshot;
+      if (snap && Array.isArray(snap.bomQtys) && snap.bomQtys.length === (s.bomItems || []).length) {
+        const restoredBom = (s.bomItems || []).map((bi, i) => ({
+          ...bi,
+          qtys: snap.bomQtys[i] || bi.qtys || [],
+        }));
+        return {
+          ...t,
+          state: {
+            ...s,
+            pricingMode: "Individual",
+            qtys: snap.qtys || s.qtys,
+            bomItems: restoredBom,
+            _individualSnapshot: null,
+          },
+          updatedAt: Date.now(),
+        };
+      }
+      return { ...t, state: { ...s, pricingMode: "Individual" }, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
   /** Reset-first state apply: replace the active tab's state completely. */
   const replaceState = useCallback((nextState) => {
     setTabs((cur) => cur.map((t) =>
@@ -503,7 +561,7 @@ export function QuoteProvider({ children }) {
   const value = {
     tabs, activeId, active,
     setActiveId, newTab, closeTab, duplicateTab,
-    setField, setManyFields, replaceState,
+    setField, setManyFields, replaceState, setPricingMode,
     // Multi-Part actions
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
     reorderBomItem, updateBomItem, convertToMultiPart, convertToSimple,

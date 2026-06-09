@@ -9,7 +9,7 @@ import Tile, { Num } from "./Tile";
  *  Contains: Pricing Mode (Multi-Part) · Tier Targets (GM% / $/MSF) ·
  *            Force Sell/Pc · Fulfillment/Purchased GM (when applicable) */
 export function PricingStrategySec() {
-  const { active, sec, toggleSec, setField, setManyFields } = useQuote();
+  const { active, sec, toggleSec, setField, setManyFields, setPricingMode } = useQuote();
   const s = active?.state || {};
   const isMP = s.quoteType === "Multi-Part";
   const isMatchedSet = isMP && s.pricingMode === "Matched Set";
@@ -45,8 +45,8 @@ export function PricingStrategySec() {
             <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b",
               textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Pricing Mode</div>
             <div style={{ display: "flex", gap: 2 }}>
-              <Tile label="Individual"  active={s.pricingMode === "Individual"}  onClick={() => setField("pricingMode", "Individual")}  small tint="#f59e0b" />
-              <Tile label="Matched Set" active={s.pricingMode === "Matched Set"} onClick={() => setField("pricingMode", "Matched Set")} small tint="#f59e0b" />
+              <Tile label="Individual"  active={s.pricingMode === "Individual"}  onClick={() => setPricingMode("Individual")}  small tint="#f59e0b" />
+              <Tile label="Matched Set" active={s.pricingMode === "Matched Set"} onClick={() => setPricingMode("Matched Set")} small tint="#f59e0b" />
             </div>
             {isMatchedSet && (
               <div style={{ marginTop: 4, display: "flex", gap: 4, alignItems: "center" }}>
