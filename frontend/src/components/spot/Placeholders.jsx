@@ -171,7 +171,7 @@ export function PricingStrategySec() {
 function JobLevelAllocPanel({ s, setField }) {
   const items = s.bomItems || [];
   const fScope = s.freightScope || "None";
-  const pScope = s.prepressScope || "None";
+  const pScope = s.prepressScope || "Per Item";
   const allocMethod = s.freightAllocMethod || "By MSF";
   return (
     <div style={{
@@ -236,10 +236,14 @@ function JobLevelAllocPanel({ s, setField }) {
 
         <span style={{ color: "var(--spot-text3)" }}>Prepress scope</span>
         <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-          <Tile label="Per Item" active={pScope === "None"} onClick={() => setField("prepressScope", "None")}
-            small tint="#94a3b8" data-testid="tile-prepress-scope-item" />
-          <Tile label="Per Job"  active={pScope === "Per Job"} onClick={() => setField("prepressScope", "Per Job")}
-            small tint="#06b6d4" data-testid="tile-prepress-scope-job" />
+          <Tile label="None" active={pScope === "None"} onClick={() => setField("prepressScope", "None")}
+            small tint="#94a3b8" data-testid="tile-prepress-scope-none" />
+          <Tile label="Per Item" active={pScope === "Per Item"} onClick={() => setField("prepressScope", "Per Item")}
+            small tint="#22c55e" data-testid="tile-prepress-scope-item" />
+          <Tile label="Lot Charge" active={pScope === "Per Job"} onClick={() => {
+            setField("prepressScope", "Per Job");
+            if ((s.jobPrepressTreatment || "None") === "None") setField("jobPrepressTreatment", "Separate Line");
+          }} small tint="#06b6d4" data-testid="tile-prepress-scope-lot" />
           <span style={{ width: 6 }} />
           {pScope === "Per Job" ? (
             <>
@@ -250,7 +254,7 @@ function JobLevelAllocPanel({ s, setField }) {
                 onClick={() => setField("jobPrepressTreatment", "Amortize")}
                 small data-testid="tile-jobprepress-amort" />
             </>
-          ) : (
+          ) : pScope === "Per Item" ? (
             <>
               <Tile label="Line" active={(s.prepressTreatment || "Separate Line") === "Separate Line"}
                 onClick={() => setField("prepressTreatment", "Separate Line")}
@@ -259,7 +263,7 @@ function JobLevelAllocPanel({ s, setField }) {
                 onClick={() => setField("prepressTreatment", "Amortize")}
                 small data-testid="tile-itemprepress-amort" />
             </>
-          )}
+          ) : null}
         </div>
         <span style={{ color: "var(--spot-text3)" }}>Job prepress $</span>
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>

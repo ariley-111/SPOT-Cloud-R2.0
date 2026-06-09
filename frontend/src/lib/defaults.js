@@ -90,7 +90,7 @@ export const DEFAULT_STATE = Object.freeze({
   // ─── One-Time Costs ───────────────────────────────────────────
   prepressTreatment: "Auto",           // Auto | None | Separate Line | Amortize
   prepressCost: "50",
-  prepressScope: "None",               // None | Per Item | Per Job
+  prepressScope: "Per Item",           // None | Per Item | Per Job (Lot Charge)
   jobPrepressTreatment: "Separate Line",
   jobPrepressCost: "0",
   defaultPrepressCost: "50",

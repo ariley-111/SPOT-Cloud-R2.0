@@ -137,16 +137,28 @@ export function QuoteProvider({ children }) {
       const curMode = s.pricingMode || "Matched Set";
       if (curMode === next) return t;
       if (next === "Matched Set") {
+        // Snapshot current active item's edits FIRST so they don't get lost
+        const activeIdx = s.activeItemIdx ?? 0;
+        const currSnap = (s.bomItems || []).length > 0 ? gatherItemState(s) : null;
+        const items = (s.bomItems || []).map((bi, i) => i === activeIdx && currSnap
+          ? { ...bi, state: currSnap, desc: currSnap.itemDesc || bi.desc || "", custIdent: currSnap.custIdent || bi.custIdent || "" }
+          : bi);
         const snapshot = {
           qtys: Array.isArray(s.qtys) ? [...s.qtys] : ["", "", "", "", ""],
-          bomQtys: (s.bomItems || []).map((bi) => Array.isArray(bi.qtys) ? [...bi.qtys] : []),
+          bomQtys: items.map((bi) => Array.isArray(bi.state?.qtys) ? [...bi.state.qtys] : []),
         };
+        // Union of all unique numeric qtys across all components' state.qtys, sorted ascending
         const seen = new Set();
-        (s.bomItems || []).forEach((bi) => {
-          (bi.qtys || []).forEach((q) => {
+        items.forEach((bi) => {
+          (bi.state?.qtys || []).forEach((q) => {
             const n = Number(q);
             if (n > 0 && Number.isFinite(n)) seen.add(n);
           });
+        });
+        // Also include any top-level qtys that are already populated
+        (s.qtys || []).forEach((q) => {
+          const n = Number(q);
+          if (n > 0 && Number.isFinite(n)) seen.add(n);
         });
         const unioned = Array.from(seen).sort((a, b) => a - b).map((n) => String(n));
         const padded = [...unioned, ...Array(Math.max(0, 5 - unioned.length)).fill("")];
@@ -154,6 +166,7 @@ export function QuoteProvider({ children }) {
           ...t,
           state: {
             ...s,
+            bomItems: items,
             pricingMode: "Matched Set",
             qtys: unioned.length > 0 ? padded : snapshot.qtys,
             _individualSnapshot: snapshot,
@@ -166,14 +179,17 @@ export function QuoteProvider({ children }) {
       if (snap && Array.isArray(snap.bomQtys) && snap.bomQtys.length === (s.bomItems || []).length) {
         const restoredBom = (s.bomItems || []).map((bi, i) => ({
           ...bi,
-          qtys: snap.bomQtys[i] || bi.qtys || [],
+          state: { ...(bi.state || {}), qtys: snap.bomQtys[i] || bi.state?.qtys || ["", "", "", "", ""] },
         }));
+        // Also restore the active item's TOP-LEVEL qtys from its restored state
+        const activeIdx = s.activeItemIdx ?? 0;
+        const activeQtys = restoredBom[activeIdx]?.state?.qtys || snap.qtys;
         return {
           ...t,
           state: {
             ...s,
             pricingMode: "Individual",
-            qtys: snap.qtys || s.qtys,
+            qtys: activeQtys,
             bomItems: restoredBom,
             _individualSnapshot: null,
           },
@@ -287,7 +303,13 @@ export function QuoteProvider({ children }) {
   //   slice into bomItems[oldIdx].state and load target.state at top-level.
   //   See /app/frontend/src/lib/mpSchema.js for field segregation.
 
-  /** Switch which BOM item is active (snapshots current, loads target). */
+  /** Switch which BOM item is active (snapshots current, loads target).
+   *
+   *  Bug fix (2026-02): when user edits `itemDesc` / `custIdent` they're
+   *  written to TOP-LEVEL state only — never to the per-BOM-item
+   *  `bi.desc` / `bi.custIdent` fields. On switch-away we now also sync
+   *  those fields so the BOM tab labels stay accurate AND so a future
+   *  switch-back doesn't fall through to stale `bi.desc`. */
   const switchBomItem = useCallback((newIdx) => {
     setTabs((cur) => cur.map((t) => {
       if (t.id !== activeId) return t;
@@ -297,13 +319,22 @@ export function QuoteProvider({ children }) {
       // Snapshot current top-level item-level fields into the outgoing item
       const snap = gatherItemState(t.state);
       const target = items[newIdx];
-      const itemsSaved = items.map((it, i) => (i === oldIdx ? { ...it, state: snap } : it));
-      // Apply target.state at top-level (reset-first), also mirror desc/custIdent
+      const itemsSaved = items.map((it, i) => (i === oldIdx ? {
+        ...it,
+        state: snap,
+        // Keep the BOM-item-level desc/custIdent in sync with the user's edits
+        // so they don't clobber state on switch-back.
+        desc: snap.itemDesc || it.desc || "",
+        custIdent: snap.custIdent || it.custIdent || "",
+      } : it));
+      // Apply target.state at top-level (reset-first), also mirror desc/custIdent.
+      // Prefer the saved state values over the BOM-item-level labels — the state
+      // is the user's latest input; the BOM label is just a cached display value.
       const next = applyItemStateTo(t.state, target.state || freshItemState());
       next.bomItems = itemsSaved;
       next.activeItemIdx = newIdx;
-      next.itemDesc = target.desc || target.state?.itemDesc || "";
-      next.custIdent = target.custIdent || target.state?.custIdent || "";
+      next.itemDesc = target.state?.itemDesc || target.desc || "";
+      next.custIdent = target.state?.custIdent || target.custIdent || "";
       return { ...t, state: next, updatedAt: Date.now() };
     }));
   }, [activeId]);
@@ -314,9 +345,16 @@ export function QuoteProvider({ children }) {
       if (t.id !== activeId) return t;
       const items = t.state.bomItems || [];
       const oldIdx = t.state.activeItemIdx ?? 0;
-      // Snapshot current item-level fields into the outgoing item (if any)
+      // Snapshot current item-level fields into the outgoing item (if any) and
+      // sync the BOM-item-level desc/custIdent so tab labels stay accurate.
+      const snap = items.length > 0 ? gatherItemState(t.state) : null;
       const itemsSaved = items.length > 0
-        ? items.map((it, i) => (i === oldIdx ? { ...it, state: gatherItemState(t.state) } : it))
+        ? items.map((it, i) => (i === oldIdx ? {
+            ...it,
+            state: snap,
+            desc: snap.itemDesc || it.desc || "",
+            custIdent: snap.custIdent || it.custIdent || "",
+          } : it))
         : items;
       const desc = opts.desc || `Item ${itemsSaved.length + 1}`;
       const fresh = freshItemState({ itemDesc: desc });
@@ -339,8 +377,14 @@ export function QuoteProvider({ children }) {
       const items = t.state.bomItems || [];
       const oldIdx = t.state.activeItemIdx ?? 0;
       if (!items[oldIdx]) return t;
-      // Snapshot current first
-      const itemsSaved = items.map((it, i) => (i === oldIdx ? { ...it, state: gatherItemState(t.state) } : it));
+      // Snapshot current first — also sync BOM-item-level desc/custIdent.
+      const snap = gatherItemState(t.state);
+      const itemsSaved = items.map((it, i) => (i === oldIdx ? {
+        ...it,
+        state: snap,
+        desc: snap.itemDesc || it.desc || "",
+        custIdent: snap.custIdent || it.custIdent || "",
+      } : it));
       const src = itemsSaved[oldIdx];
       const copy = makeBomItem({
         desc: `${src.desc} (copy)`, type: src.type, pcsPerSet: src.pcsPerSet,
@@ -374,8 +418,9 @@ export function QuoteProvider({ children }) {
       const next = applyItemStateTo(t.state, target.state || freshItemState());
       next.bomItems = newItems;
       next.activeItemIdx = newIdx;
-      next.itemDesc = target.desc || target.state?.itemDesc || "";
-      next.custIdent = target.custIdent || target.state?.custIdent || "";
+      // Prefer the saved state values over BOM-item labels (which can be stale)
+      next.itemDesc = target.state?.itemDesc || target.desc || "";
+      next.custIdent = target.state?.custIdent || target.custIdent || "";
       return { ...t, state: next, updatedAt: Date.now() };
     }));
   }, [activeId]);
@@ -388,9 +433,15 @@ export function QuoteProvider({ children }) {
       const items = (t.state.bomItems || []).slice();
       if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return t;
       const oldIdx = t.state.activeItemIdx ?? 0;
-      // Snapshot current active first (so we don't lose unsaved edits)
+      // Snapshot current active first (so we don't lose unsaved edits) — also
+      // sync desc/custIdent at the BOM-item level so tab labels stay accurate.
       const snap = gatherItemState(t.state);
-      items[oldIdx] = { ...items[oldIdx], state: snap };
+      items[oldIdx] = {
+        ...items[oldIdx],
+        state: snap,
+        desc: snap.itemDesc || items[oldIdx].desc || "",
+        custIdent: snap.custIdent || items[oldIdx].custIdent || "",
+      };
       const [moved] = items.splice(from, 1);
       items.splice(to, 0, moved);
       // Translate activeItemIdx
