@@ -582,6 +582,8 @@ function FreightPanel({ s }) {
             <Tile label="Will-Call" active={s.quoteFOB === "Origin"}
               onClick={() => {
                 // Will-Call: NO freight at all. Clear job-level + per-component freight.
+                // Do NOT reset freightMarkup — preserve the user's prior setting
+                // (especially 0% for Local Delivery scenarios).
                 const patch = {
                   quoteFOB: "Origin",
                   localDeliveryZone: null,
@@ -592,7 +594,6 @@ function FreightPanel({ s }) {
                   freightTreatment: "None",
                   freightCarrier: "",
                   freightTransit: "",
-                  freightMarkup: "0.15",  // preserve legacy default
                 };
                 // Clear each component's freight in MP mode
                 if (Array.isArray(s.bomItems) && s.bomItems.length > 0) {
@@ -611,9 +612,11 @@ function FreightPanel({ s }) {
             <Tile label="Ship"      active={s.quoteFOB === "Destination"}
               onClick={() => {
                 // Ship: Per Item / Line defaults (legacy). Clear LocalDelivery zone.
+                // Do NOT reset freightMarkup on FOB switch — preserve the user's
+                // prior choice. Auto-set happens in updateFreight() once a quote
+                // is fetched, based on the carrier (SPC Local Delivery → 0%).
                 const patch = {
                   quoteFOB: "Destination",
-                  freightMarkup: "0.15",   // legacy default — always restore on Ship
                   localDeliveryZone: null,
                   jobFreightCost: "",
                   jobFreightTreatment: "Separate Line",
