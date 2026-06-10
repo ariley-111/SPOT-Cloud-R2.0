@@ -294,6 +294,31 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - None mode in MP shows a clean "No freight" indicator
 - Per Item mode (MP default) keeps the existing per-item Ship-To/ZIP/markup UI
 
+### 2026-06-10 — Production-Reported Bugs (User Round 2) ✅
+- **Bug 1 fixed**: Customer IDENT now persists per-component when switching
+  between BOM tabs in Multi-Part Individual mode.
+  - `custIdent` moved from `JOB_LEVEL_KEYS` to ITEM-LEVEL in
+    `/app/frontend/src/lib/mpSchema.js` (legacy parity, spot_r1_5.jsx L2675-76).
+  - Added explicit defensive safety net in `gatherItemState` +
+    `applyItemStateTo` that handles `custIdent` regardless of the
+    schema-driven ITEM_LEVEL_KEYS list.
+- **Bug 2 fixed**: BOM component name in the BOM strip is now display-only
+  (`<span>`, not `<input>`). Name editing only happens in the BOM Builder
+  modal or via the Item Description field. `/app/frontend/src/components/spot/Placeholders.jsx`.
+- **Bug 3a fixed**: Selecting Multi-Part on a fresh quote auto-opens the BOM
+  Builder modal (legacy parity, spot_r1_5.jsx L5142). Only fires on the
+  Simple→Multi-Part transition. `/app/frontend/src/components/spot/EstimateInfoSec.jsx`.
+- **Bug 3b fixed**: BOM Builder header restructured:
+  - Row 1: `BOM Builder · {n} items · Templates/Manual · ×`.
+  - Row 2 (separate section): `PROJECT NAME` label + full-width centered
+    input with placeholder "Overall project name...".
+- **Pricing parity audit**: Reverted the 2026-06-01 "PARITY FIX" in Crest
+  stock-candidate ranking (`evaluate_routes` lines 458-463). Cloud now uses
+  `boardSpec` (original spec grade) for stock-candidate cost — matches
+  legacy spot_r1_5.jsx L701. Same root cause as the Buy Min bug fixed
+  earlier today.
+- All 6 pytests pass; testing agent iter 16 reports 100% pass on all 4 items.
+
 ### 2026-06-10 — D-070 Inline Board Card Warnings & Buy Min Logic ✅
 - **Legacy parity**: 1:1 port of `spot_r1_5.jsx` L5894-5995 (Board status bar)
   and L6992-6995 (Economics substitution banner).
