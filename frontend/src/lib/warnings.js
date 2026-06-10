@@ -33,27 +33,6 @@ export function deriveWarnings(state, result) {
   if (state.outsideLiner === "Bleached White" && state.printReq !== "Yes") {
     out.push(W("bleached-no-print", "info", "Bleached White, no print", "Bleached liner adds cost — confirm it's needed without print."));
   }
-  // Flute / wall-type sanity (ports legacy gate that hid mismatched grades).
-  // Now that doublewall grades are visible, an estimator could pick e.g. "200 DW"
-  // while flute is still "B" — that won't price. Warn loudly.
-  {
-    const isDwGrade = (g) => /\bDW\b/.test(g || "") ||
-      ["ECT 42","ECT 48","ECT 51","ECT 61","ECT 71","ECT 82"].includes(g || "");
-    const fluteIsDw = state.flute === "B/C";
-    const gradeIsDw = isDwGrade(state.boardGrade);
-    if (fluteIsDw && state.boardGrade && !gradeIsDw) {
-      out.push(W("flute-dw-grade-sw", "err", "B/C flute + singlewall grade",
-        `Flute B/C requires a doublewall grade (e.g. 275 DW, ECT 51). Selected grade '${state.boardGrade}' will not price.`));
-    }
-    if (!fluteIsDw && gradeIsDw) {
-      out.push(W("flute-sw-grade-dw", "err", "Singlewall flute + DW grade",
-        `Doublewall grade '${state.boardGrade}' requires flute B/C. Change one or the other to price.`));
-    }
-    if (fluteIsDw && state.flute) {
-      out.push(W("flute-bc-info", "info", "B/C doublewall selected",
-        "B/C flute is doublewall construction — verify the customer specified doublewall before sending."));
-    }
-  }
 
   // ─── 4. Route ───────────────────────────────────────────────
   const route = result?.route || result?._pipeline?.routeAuto;
@@ -77,37 +56,13 @@ export function deriveWarnings(state, result) {
   if (result?._pipeline?.buyMinActive) {
     out.push(W("buy-min", "warn", "Buy-min triggered", `Below mill minimum — ordering ${result._pipeline.buyMinSheets} sheets to meet min (Rule D-067 bypass for Stock).`));
   }
-  // Mill-min + custom order: more explicit warn when the engine had to scale
-  // (i.e. customer order is less than the mill's minimum board run).
-  if (result?._pipeline?.isMillMinScaled) {
-    out.push(W("mill-min-scaled", "warn", "Mill minimum scaled",
-      `Order is below the mill minimum (${result._pipeline.minSqFt || 25000} sq ft). ` +
-      `Buying ${result._pipeline.minBuySheets || result._pipeline.buyMinSheets || ""} sheets and scaling cost back to the actual order.`));
-  }
-  // Engine flagged the board as un-pricable even at mill min (no viable run).
-  if (result && result.pricable === false && !result?._pipeline?.stockMode) {
-    out.push(W("not-pricable", "err", "Board not pricable",
-      "Engine could not find a pricable board option — check grade/flute/liner combo and dimensions."));
-  }
   if (result?._pipeline?.gradeFallback) {
     out.push(W("grade-fallback", "info", "Grade fallback", `Requested grade fell back to ${result._pipeline.gradeFallback} (Rule 4: ECT→Mullen, transparent to customer).`));
   }
-  // Medium fallback — distinguish heavier (meets spec, info) vs lighter (verify, warn).
-  // Backend ships either a string or {medium, isHigher} object — handle both.
   if (result?._pipeline?.mediumFallback) {
     const mf = result._pipeline.mediumFallback;
-    const isObj = typeof mf === "object" && mf !== null;
-    const medName = isObj ? mf.medium : mf;
-    const isHigher = isObj ? !!mf.isHigher : null;
-    if (isHigher === true) {
-      out.push(W("med-fallback-higher", "info", "Medium upgraded",
-        `Stock has a heavier medium (${medName}) than requested — meets spec, no risk.`));
-    } else if (isHigher === false) {
-      out.push(W("med-fallback-lighter", "warn", "Medium downgraded — verify",
-        `Stock medium (${medName}) is LIGHTER than what was requested. Confirm acceptable with customer.`));
-    } else {
-      out.push(W("med-fallback", "info", "Medium fallback", `Medium fell back to ${medName} (closest pool match).`));
-    }
+    const medName = (typeof mf === "object" && mf !== null) ? mf.medium : mf;
+    out.push(W("med-fallback", "info", "Medium fallback", `Medium fell back to ${medName} (closest pool match).`));
   }
   if (result?._pipeline?.mullenUpgrade) {
     out.push(W("mullen-upgrade", "info", "Mullen upgrade", "Grade upgraded to Mullen-equivalent (no ECT match in mill schedule)."));
