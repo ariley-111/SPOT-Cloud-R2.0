@@ -313,6 +313,9 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
               Enter dimensions and quantities
             </td></tr>
           ) : rows.map((r, i) => {
+            // D-070 Below Min row: pricable=false but bc.hasPrice true, Buy Min OFF.
+            // Render qty + "Below Min" red cells where money would appear.
+            const isBelowMin = !r.error && r._pipeline?.belowMin === true;
             if (r.error) {
               return (
                 <tr key={i} data-testid={`qt-row-${i}`} style={{ borderBottom: "1px solid var(--spot-line)" }}>
@@ -321,6 +324,55 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                   <td colSpan={totalCols - 2} style={{ padding: "4px 6px", color: "var(--spot-warn)", fontSize: 11 }}>
                     {r.error}
                   </td>
+                </tr>
+              );
+            }
+            if (isBelowMin) {
+              const isSel = i === selSlot;
+              const bmExcl = isExcluded(i);
+              const redCell = { padding: "4px 6px", textAlign: "right", color: "#ef4444", fontWeight: 700, fontSize: 11 };
+              return (
+                <tr key={i} data-testid={`qt-row-${i}`}
+                  onClick={() => selectRow(i)}
+                  style={{
+                    cursor: "pointer", borderBottom: "1px solid var(--spot-line)",
+                    background: isSel ? "var(--spot-accent-soft)" : "#f59e0b14",
+                    opacity: bmExcl ? 0.45 : 1,
+                  }}>
+                  <td style={{ padding: "4px 3px", textAlign: "center" }}
+                    onClick={(e) => { e.stopPropagation(); toggleExclude(i); }}>
+                    <span data-testid={`qt-act-${i}`}
+                      style={{
+                        display: "inline-block", width: 14, height: 14, borderRadius: 3,
+                        border: `2px solid ${bmExcl ? "var(--spot-text3)" : "var(--spot-accent)"}`,
+                        background: bmExcl ? "transparent" : "var(--spot-accent)",
+                        color: "#fff", fontSize: 11, lineHeight: "10px", textAlign: "center",
+                        cursor: "pointer", userSelect: "none",
+                      }}>{bmExcl ? "" : "✓"}</span>
+                  </td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: isSel ? 700 : 600 }}>
+                    <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, background: "#f59e0b", marginRight: 4 }} />
+                    {fmtInt(r.qty)}
+                    {isSel && (
+                      <span style={{
+                        marginLeft: 4, fontSize: 9, fontWeight: 700, padding: "1px 4px",
+                        borderRadius: 2, background: "var(--spot-accent)", color: "#fff",
+                      }}>SEL</span>
+                    )}
+                  </td>
+                  <td data-testid={`qt-sell-${i}`} style={redCell}>Below Min</td>
+                  <td style={redCell}>—</td>
+                  <td style={redCell}>—</td>
+                  <td style={redCell}>Below Min</td>
+                  <td style={redCell}>—</td>
+                  <td style={redCell}>—</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11 }}>—</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: "var(--spot-text2)" }}>
+                    {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
+                  </td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: "var(--spot-text3)" }}>—</td>
+                  <td style={{ padding: "4px 4px", textAlign: "center" }} />
                 </tr>
               );
             }

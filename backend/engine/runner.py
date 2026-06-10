@@ -240,6 +240,48 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
                   "buyMinSheets": bm_min_sheets, "actualSheets": sheets_req}
 
     if not bc or not bc["pricable"]:
+        # D-070 Below-Min path: if bc has a price but doesn't meet mill minimum and
+        # the user has explicitly turned Buy Min OFF (buyMinBoard==="No"), surface
+        # a "Below Min" row instead of a hard error so the Quote Table can render
+        # red "Below Min" cells (legacy spot_r1_5.jsx L1111, L5945, L8366 parity).
+        is_below_min = bool(bc and bc.get("hasPrice") and not bc.get("meetMin") and not bc.get("pricable"))
+        if is_below_min and buy_min_board == "No":
+            return {
+                "_pipeline": {
+                    "belowMin": True,
+                    "stockMode": bool(best.get("stockMode") or bc.get("stockMode")),
+                    "customOrder": bool(best.get("customOrder")),
+                    "gradeFallback": best.get("gradeFallback"),
+                    "mediumFallback": best.get("mediumFallback"),
+                    "buyMinActive": False,
+                    "minSqFt": bc.get("minSqFt") or 25000,
+                    "corrFlipped": corr_flipped,
+                },
+                "belowMin": True,
+                "pricable": False,
+                "status": "Below Min",
+                "uw": uw, "ul": ul, "qty": qty,
+                "boardGrade": board_spec["boardGrade"], "flute": board_spec["flute"],
+                "outsideLiner": board_spec["outsideLiner"], "insideLiner": board_spec["insideLiner"],
+                "medium": board_spec["medium"],
+                "sheetW": sh_w, "sheetL": sh_l,
+                "pcsPerSheet": layout["pcsPerSheet"],
+                "sheetsReq": sheets_req,
+                "wastePct": layout["wastePct"],
+                "gradeFallback": best.get("gradeFallback"),
+                "mediumFallback": best.get("mediumFallback"),
+                "stockMode": bool(best.get("stockMode") or bc.get("stockMode")),
+                "customOrder": bool(best.get("customOrder")),
+                "boardHasPrice": True,
+                "boardMeetMin": False,
+                "route": (routing or {}).get("route") or "",
+                "cadHrs": 0,
+                # Money fields zeroed; UI will swap for "Below Min" red text
+                "itemSell": 0, "sellTotal": 0, "sellPc": 0, "sellMSF": 0,
+                "costPc": 0, "costMSF": 0, "totalMfg": 0,
+                "gmDollar": 0, "gmPct": 0, "gmMSF": 0,
+                "freightLine": 0, "freightEmbed": 0,
+            }
         return {
             "error": (bc and ("Below minimum (all fallbacks exhausted)" if bc["hasPrice"] else "No price for grade/tier")) or "No board calc",
             "uw": uw, "ul": ul, "qty": qty,
@@ -294,6 +336,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             "corrFlipped": corr_flipped,
             "buyMinActive": bool(bc.get("buyMin")),
             "buyMinSheets": bc.get("buyMinSheets"),
+            "belowMin": False,
             "isMillMinScaled": bool(best.get("isMillMinScaled") or bc.get("isMillMinScaled")),
             "minBuySheets": best.get("minBuySheets") or bc.get("stockMinBuy"),
             "minSqFt": bc.get("minSqFt") or 25000,

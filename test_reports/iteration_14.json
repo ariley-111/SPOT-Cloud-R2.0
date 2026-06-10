@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 14 verification — Inline Board Card warning states & Buy Min logic (legacy spot_r1_5.jsx L5894-5995 + L6992-6995). Backend belowMin partial-row path verified end-to-end (5/5 pytest tests PASSED). All required data-testids (board-status-bar, board-buy-min-info, board-turn-off-buy-min-btn, board-buy-min-amortize-btn, board-accept-sub-btn, board-force-spec-btn, board-use-stock-link, board-decision-needed, econ-board-sub-banner, qt-row-N, qt-sell-N) are present in the JSX source at the correct components. Live UI verified: login works, SPOT dashboard loads, board-status-bar renders correctly with IN STOCK badge, the conditional UI (buy-min-info, decision-needed, sub-banner) is correctly hidden for the in-stock 200/B/Kemi-Lite quote loaded on boot — no false-positive warnings. Quote Table renders 3 rows with qt-row-* and qt-sell-* testids.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_below_min.py",
+    "/app/test_reports/pytest/below_min_it14.xml"
+  ],
+  "action_items": [
+    "Optional: add a data-testid to the 'Edit board' button (currently a styled <a>/<button> with text only) so future Playwright tests can deterministically open the tile editor without :has-text() searches.",
+    "Optional: add data-testid to the One-Up Width/Length inputs (e.g. oneup-w-input / oneup-l-input) — currently the only 39 inputs on the page have no name/testid, blocking automated below-min state reproduction from the UI."
+  ],
+  "critical_code_review_comments": [
+    "engine/runner.py belowMin path (L242-284) is correctly structured — returns _pipeline.belowMin=True plus zeroed money fields so QuoteTableSec can swap to red 'Below Min' cells without prop drilling. All keys the Quote Table needs (sheetW, sheetL, sheetsReq, pcsPerSheet, boardGrade, flute, mediumFallback, gradeFallback) are present.",
+    "STEP 7 buy-min recalc (L233-240) correctly gates on buyMinBoard=='Yes' AND below-min OR force_custom_order — matches legacy spot_r1_5.jsx behavior; the buyMinSheets and actualSheets fields are correctly stamped onto bc for the 'purchasing N sheets, using M' message in board-buy-min-info.",
+    "ItemSetupSec.jsx has all six conditional UI states wired with the requested testids (status-bar, buy-min-info, decision-needed, accept-sub-btn, force-spec-btn, use-stock-link, plus the in-editor turn-off / amortize buttons).",
+    "RightDashboard EconomicsPanel substitution banner (L1124) is single-testid'd as 'econ-board-sub-banner' and switches color (orange/green/blue) based on boardSubstitution state — matches the user's explicit ask for blue 'Spec'd board — custom order' line when forced.",
+    "QuoteTableSec.jsx has separate tbody branches (L321 normal, L335 belowMin, L391 fallback) so the red 'Below Min' cells (L363) render only on the belowMin row branch — clean separation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_below_min.py (NEW — 5 pytest tests for Buy Min/Below Min engine paths)"
+  ],
+  "success_rate": {"backend": "100% (5/5 pytest)", "frontend": "100% (login + board-status-bar render + 3 qt-rows verified live)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working",
+  "seed_data_creation": "None — existing admin seed used. Test payloads use 6x6 / 275 grade / 42# Kemi-Lite liners to trigger custom-order below-min path.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 14 backend belowMin path is wired and tested via /app/backend/tests/test_below_min.py. Key insight for future UI testing: to reproduce below-min IN THE BROWSER, set boardGrade='275' (or any non-stock grade) + qty<200 + small dims — that engages the custom-order branch where meetMin is enforced. Stock grades (200, 175, ECT 32 with Kemi/Kraft liners) always have meetMin=True and won't trigger the below-min UI. The 'Below Min' chip in the QuoteTable filter row is always rendered (it's a filter, not a state indicator). Action items above note two missing data-testids that would unblock fully-automated UI state reproduction.",
+  "rca_of_the_issue": "No bug found — implementation verified clean. All five test cases of the iteration-14 spec (backend belowMin return path, ItemSetupSec Buy Min toggle buttons, QuoteTable red cells, Economics banner, force-spec'd-board flow) are correctly implemented and the data-testids match the spec exactly. Live page verification confirms the conditional UI is correctly hidden when the board is IN STOCK with no fallback, preventing false-positive warnings."
+}

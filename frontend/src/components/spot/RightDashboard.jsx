@@ -1082,6 +1082,24 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
   const itemType = activeItem?.type || "Manufactured";
   const isMatchedSet = isMultiPart && (s.pricingMode === "Matched Set");
   const setMarginOverride = !!s.setMarginOverride;
+  // ── D-070 Board substitution banner (verbatim legacy spot_r1_5.jsx L6992-6995) ──
+  // Shows when the engine selected a fallback (gradeFallback or mediumFallback).
+  // States: needs-decision (orange) / accepted (green) / forced (blue).
+  // Forced = "Spec'd board — custom order" per user spec ("i Spec'd board - custom order in blue").
+  const hasBoardFb = !!(r?.gradeFallback || r?.mediumFallback);
+  const boardSub = s.boardSubstitution;
+  const subBgColor = boardSub === "accepted" ? "#22c55e18"
+    : boardSub === "forced" ? "#3b82f618" : "#f59e0b18";
+  const subBorderColor = boardSub === "accepted" ? "#22c55e33"
+    : boardSub === "forced" ? "#3b82f633" : "#f59e0b33";
+  const subTextColor = boardSub === "accepted" ? "#22c55e"
+    : boardSub === "forced" ? "#3b82f6" : "#f59e0b";
+  const subLabel = boardSub === "accepted" ? "✓ Stock substitution approved"
+    : boardSub === "forced" ? "ℹ Spec'd board — custom order"
+    : "⚠ Board substitution — decision needed";
+  const subSuffix = (r?.gradeFallback && !boardSub)
+    ? ` — ${r.gradeFallback}# meets ${s.boardGrade} spec`
+    : "";
   // Aggregate row carries the Matched Set / job-level totals when present.
   const hasMatchedSetTotals = isMatchedSet && agg && !agg.error
     && (agg.setSell != null || agg.jobSell != null);
@@ -1101,6 +1119,18 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
         <span>Economics{r.qty ? ` · QTY ${fmtInt(r.qty)}` : ""}</span>
       </div>
       <div style={{ padding: "8px 10px" }}>
+        {/* D-070 Board substitution banner (legacy spot_r1_5.jsx L6992-6995) */}
+        {hasBoardFb && (
+          <div data-testid="econ-board-sub-banner"
+            style={{
+              padding: "4px 8px", marginBottom: 6, borderRadius: 4,
+              background: subBgColor, border: `1px solid ${subBorderColor}`,
+              fontSize: 11, fontWeight: 700, color: subTextColor,
+              textAlign: "center",
+            }}>
+            {subLabel}{subSuffix}
+          </div>
+        )}
         {!result || result.error ? (
           <div style={{ color: "var(--spot-text3)", fontSize: 12 }}>
             {result?.error || "Enter dimensions, board, and at least one quantity."}

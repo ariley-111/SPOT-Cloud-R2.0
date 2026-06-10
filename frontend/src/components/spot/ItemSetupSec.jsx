@@ -603,6 +603,29 @@ function BoardStatusBar({ s, r, setField }) {
               <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
               <Tile label="Off" active={!s.fscEnabled}  onClick={() => setField("fscEnabled", false)} small data-testid="tile-fsc-off" />
               <Tile label="FSC" active={s.fscEnabled}    onClick={() => setField("fscEnabled", true)}  small data-testid="tile-fsc-on" />
+              {/* D-070 Buy Min toggle buttons (legacy spot_r1_5.jsx L5994-5995) */}
+              {belowMin && s.buyMinBoard !== "Yes" && (
+                <button onClick={() => setField("buyMinBoard", "Yes")}
+                  data-testid="board-buy-min-amortize-btn"
+                  style={{
+                    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    padding: "5px 12px", borderRadius: 4, marginLeft: 6,
+                    color: "#f59e0b", background: "#f59e0b22", border: "1px solid #f59e0b44",
+                  }}>
+                  Buy Min — amortize
+                </button>
+              )}
+              {buyMinActive && (
+                <button onClick={() => setField("buyMinBoard", "No")}
+                  data-testid="board-turn-off-buy-min-btn"
+                  style={{
+                    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    padding: "5px 10px", borderRadius: 4, marginLeft: 6,
+                    color: "#ef4444", background: "#ef444418", border: "1px solid #ef444444",
+                  }}>
+                  × Turn off Buy Min
+                </button>
+              )}
             </div>
           </F>
         </div>
