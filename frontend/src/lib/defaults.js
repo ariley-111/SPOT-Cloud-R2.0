@@ -134,8 +134,26 @@ export function applyState(patch) {
 // ─── Lookup tables ──────────────────────────────────────────────
 export const BOX_STYLES   = ["RSC", "FOL", "D/C Tray", "Mailer", "5PF"];
 export const FLUTES       = ["B", "C", "E", "B/C"];
-export const GRADES       = ["125","150","175","200","250","275","350",
+
+// ─── Board grade lists — legacy parity (spot_r1_5.jsx L100-130) ───
+// Singlewall: B/C/E flutes pull from this list.
+export const GRADES_SINGLEWALL = ["125","150","175","200","250","275","350",
   "ECT 23","ECT 26","ECT 29","ECT 32","ECT 40","ECT 44","ECT 55","NT"];
+// Doublewall: B/C flute pulls from this list. (Backend base_matrix["doublewall"]
+// already has these; legacy gates the UI list via getGradesForFlute().)
+export const GRADES_DOUBLEWALL = ["200 DW","275 DW","350 DW","400 DW","450 DW","500 DW","600 DW",
+  "ECT 42","ECT 48","ECT 51","ECT 61","ECT 71","ECT 82","NT DW"];
+// Combined list — kept for places that need every supported grade (admin, validation).
+export const GRADES = [...GRADES_SINGLEWALL, ...GRADES_DOUBLEWALL];
+
+// Map flute → wall_type (matches backend `core.py` flute_rules)
+export const wallTypeForFlute = (flute) => (flute === "B/C" ? "doublewall" : "singlewall");
+
+// Return the grade list appropriate for the chosen flute. Used to filter the
+// grade tile picker so DW-only grades hide behind singlewall flutes and vice
+// versa — ports legacy `getGradesForFlute(f)` (spot_r1_5.jsx L263).
+export const getGradesForFlute = (flute) =>
+  wallTypeForFlute(flute) === "doublewall" ? GRADES_DOUBLEWALL : GRADES_SINGLEWALL;
 export const LINERS       = [
   "None","42# Kemi-Lite","42# Kla-White","42# Bleached White","33# Kla-White","56# Kla-White",
 ];

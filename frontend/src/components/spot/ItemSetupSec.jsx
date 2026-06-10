@@ -4,7 +4,7 @@ import { useQuote } from "../../context/QuoteContext";
 import Sec, { F } from "./Sec";
 import Tile, { Num } from "./Tile";
 import {
-  BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS, allowed_liners,
+  BOX_STYLES, FLUTES, GRADES, getGradesForFlute, wallTypeForFlute, LINERS, MEDIUMS, allowed_liners,
 } from "../../lib/defaults";
 import { sheetAvailability, gradeAvailability } from "../../api/spot";
 import { fmtMoney, fmtInt, fmtNum, fmtPct } from "../../lib/format";
@@ -514,7 +514,7 @@ function BoardStatusBar({ s, r, setField }) {
           <F l="Grade" inline fw={60}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-                {GRADES.map((g) => {
+                {getGradesForFlute(s.flute).map((g) => {
                   const directStock = gradeAvail.stocked.has(g);
                   const viaFallback = gradeAvail.viaFallback.has(g);
                   const stockColor = directStock ? "var(--spot-green)"
