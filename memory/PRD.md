@@ -294,6 +294,30 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - None mode in MP shows a clean "No freight" indicator
 - Per Item mode (MP default) keeps the existing per-item Ship-To/ZIP/markup UI
 
+### 2026-06-10 — Storage Bin v3 Parity Audit (Iter 17) ✅
+- **Backend**: `runner.py` now surfaces `routing.warning` as top-level
+  `routeWarning` field in the engine response (legacy spot_r1_5.jsx L811-814).
+  When `auto_route` falls back to Saber+D/C because no Crest/Bobst route is
+  viable AND CAD hours exceed the gate, the warning string
+  "Too many CAD hours and no Crest/Bobst route viable — falling back to
+  Saber + die cut" reaches the frontend instead of being silently dropped.
+- **Frontend `QuoteTableSec.jsx`**: New orange banner above the qty rows
+  renders any unique `routeWarning` strings from the row results
+  (`data-testid='qt-route-warning-{i}'`). Dedupes across multi-tier rows
+  and across component pricing in matched-set mode.
+- **Frontend `RightDashboard.jsx` Cost Buildup detail**: SubRow now uses
+  `r.cutterBasis` prefixed with `r.route` (e.g. "Saber + D/C 569 in/pc x 1
+  out x 1.15 = 655 in/sh"), falling back to the difficulty label when
+  cutterBasis is empty.
+- **Frontend `ItemSetupSec.jsx` auto-flip useEffect**: When the engine
+  reports `_pipeline.corrFlipped=true`, the frontend now mirrors that into
+  UI state — swaps `oneUpW`/`oneUpL` and sets `state.corrFlipped=true` so
+  the "⇄ Flip Corr" button turns red as "⇄ CORR FLIPPED". A ref-based
+  guard prevents a re-flip loop when the user manually un-flips.
+- **Tests**: New `/app/backend/tests/test_route_warning.py` (3/3 PASS) +
+  6/6 below_min regression PASS. Testing agent iter17 verified CORR
+  FLIPPED end-to-end in the live UI.
+
 ### 2026-06-10 — Production-Reported Bugs (User Round 2) ✅
 - **Bug 1 fixed**: Customer IDENT now persists per-component when switching
   between BOM tabs in Multi-Part Individual mode.
