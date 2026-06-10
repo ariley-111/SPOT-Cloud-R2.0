@@ -65,7 +65,17 @@ export default function EstimateInfoSec() {
         <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
           textTransform: "uppercase", letterSpacing: ".06em", width: 64, flexShrink: 0 }}>Quote</span>
         <Tile label="Simple"     active={s.quoteType === "Simple"}     onClick={() => setField("quoteType", "Simple")}     small data-testid="tile-quote-simple" />
-        <Tile label="Multi-Part" active={s.quoteType === "Multi-Part"} onClick={() => setField("quoteType", "Multi-Part")} small data-testid="tile-quote-multipart" />
+        <Tile label="Multi-Part" active={s.quoteType === "Multi-Part"} onClick={() => {
+          const wasSimple = s.quoteType !== "Multi-Part";
+          setField("quoteType", "Multi-Part");
+          // Legacy parity (spot_r1_5.jsx L5142): the BOM Builder pops automatically
+          // the first time the user enters Multi-Part so they can pick a template
+          // or build the BOM from scratch.
+          if (wasSimple) {
+            // defer one tick so the quoteType state lands before the modal mounts
+            setTimeout(() => window.dispatchEvent(new CustomEvent("spot:open-bom-builder")), 0);
+          }
+        }} small data-testid="tile-quote-multipart" />
         {s.quoteType === "Multi-Part" && (
           <>
             <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />

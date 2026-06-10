@@ -26,7 +26,9 @@ import { DEFAULT_STATE } from "./defaults";
 export const JOB_LEVEL_KEYS = new Set([
   // identity
   "estNum", "estInitials", "estNumAuto",
-  "custName", "custCode", "custRef", "custIdent", "customerRecord",
+  "custName", "custCode", "custRef", "customerRecord",
+  // NOTE: `custIdent` is ITEM-LEVEL per legacy spot_r1_5.jsx L2675 — each component
+  // has its own customer SKU / part # in a Multi-Part Individual quote.
   "spinOffOrigin",
   // mode
   "quoteType", "pricingMode",

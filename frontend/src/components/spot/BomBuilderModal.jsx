@@ -251,19 +251,12 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
         borderRadius: 8, width: 1040, maxWidth: "100%", maxHeight: "92vh",
         display: "flex", flexDirection: "column", boxShadow: "0 8px 28px rgba(0,0,0,0.4)",
       }}>
-        {/* ─── Header ─────────────────────────────────────────────── */}
+        {/* ─── Header: BOM Builder · item count · Templates/Manual · × ──────── */}
         <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--spot-border)",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)", flexShrink: 0 }}>BOM Builder</span>
-            <input data-testid="bom-project-name" value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              placeholder="Project name (e.g. Holiday End-Caps)"
-              style={{
-                flex: 1, maxWidth: 360, background: "var(--spot-bg2)", color: "var(--spot-text)",
-                border: "1px solid var(--spot-border)", borderRadius: 3, padding: "4px 8px", fontSize: 12,
-              }} />
-            <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+            <span style={{ fontSize: 12, color: "var(--spot-text3)", fontWeight: 500 }}>
               {draft.length} item{draft.length !== 1 ? "s" : ""}
               {activeRows.length !== draft.length && ` (${activeRows.length} active)`}
             </span>
@@ -276,6 +269,21 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
           </div>
           <button onClick={onClose} data-testid="bom-close"
             style={{ all: "unset", cursor: "pointer", fontSize: 22, color: "var(--spot-text3)", padding: "0 4px" }}>×</button>
+        </div>
+
+        {/* ─── Project Name (separate section, full width) ─── */}
+        <div style={{ padding: "12px 18px 10px", borderBottom: "1px solid var(--spot-border)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-text3)",
+            textTransform: "uppercase", letterSpacing: ".08em" }}>Project Name</span>
+          <input data-testid="bom-project-name" value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            placeholder="Overall project name..."
+            style={{
+              width: "100%", maxWidth: 520, background: "var(--spot-bg2)", color: "var(--spot-text)",
+              border: "1px solid var(--spot-border)", borderRadius: 4,
+              padding: "8px 12px", fontSize: 13, textAlign: "center",
+            }} />
         </div>
 
         {/* ─── Templates view ─────────────────────────────────────── */}

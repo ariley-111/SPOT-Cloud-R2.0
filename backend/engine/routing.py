@@ -324,7 +324,7 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
                 "capacityError": f"Blank size {req_w}x{req_l} (with trim) is too large for any machine. Cannot manufacture."}
 
     fallback_candidates = []
-    def try_oversize_fallback(w: float, l: float, label: str) -> Optional[Dict[str, Any]]:
+    def try_oversize_fallback(w: float, l: float, label: str) -> Optional[Dict[str, Any]]:  # noqa: E741
         bi = {**board_spec, "widthIn": w, "lengthIn": l}
         bc = calc_board(bi, total_qty)
         if not bc["hasPrice"]:
@@ -454,13 +454,12 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
                 continue
             req = math.ceil(total_qty / ly["pcsPerSheet"])
             used_fallback = sh["g"] != board_spec["boardGrade"]
-            # PARITY FIX: swap to running grade for base lookup when fallback fires.
-            if used_fallback:
-                fb_adder = GRADE_ADDER_DEFAULTS.get(fb_grade, 0)
-                bi = {**board_spec, "boardGrade": fb_grade, "gradeAdder": fb_adder,
-                      "widthIn": sh["w"], "lengthIn": sh["l"]}
-            else:
-                bi = {**board_spec, "widthIn": sh["w"], "lengthIn": sh["l"]}
+            # PARITY (legacy spot_r1_5.jsx L701): cost the stock candidate using
+            # boardSpec — NOT the fallback running grade. The Crest competition
+            # ranks candidates on apples-to-apples spec-grade pricing, mirroring
+            # legacy. The 2026-06-01 "use running grade" diff was a regression
+            # (same root cause as the Buy Min recalc bug fixed 2026-06-10).
+            bi = {**board_spec, "widthIn": sh["w"], "lengthIn": sh["l"]}
             bc = calc_board(bi, req, is_stock=True)
             if bc["pricable"]:
                 candidates.append({

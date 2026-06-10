@@ -1,0 +1,30 @@
+{
+  "summary": "Iter 15 — verified 3 bugs + Crest parity + regression. Bug 2 (BOM desc=SPAN), Bug 3a (auto-open + no re-open on re-click), Bug 3b (header restructure with Project Name section + 'Overall project name...' placeholder) ALL PASS. Bug 1 (custIdent per-item persistence) FAILS — value still leaks across all BOM tabs. Crest parity fix engine returns 200 with structured result (no exception). All 6 prior pytest tests in test_below_min.py PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Multi-Part Individual / Customer IDENT", "issue": "custIdent does NOT persist per BOM item — typing CUST-BBB on item-1 overwrites item-0's value. After switching back to item-0 it shows 'CUST-BBB' (expected 'CUST-AAA'). All round-trips show whichever value was typed LAST, on both items. The field is still effectively job-level despite the JOB_LEVEL_KEYS removal.", "selector": "[data-testid='input-cust-ident'] + [data-testid='bom-item-0/1']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_below_min.py", "/app/test_reports/pytest/below_min_it15.xml"],
+  "action_items": [
+    "FIX Bug 1 RCA: removing `custIdent` from JOB_LEVEL_KEYS in /app/frontend/src/lib/mpSchema.js is necessary but NOT sufficient. ITEM_LEVEL_KEYS is derived from `Object.keys(DEFAULT_STATE).filter(k => !JOB_LEVEL_KEYS.has(k))`. If `custIdent` is not a key in DEFAULT_STATE (/app/frontend/src/lib/defaults.js), it lands in NEITHER set — gatherItemState() won't snapshot it and applyItemStateTo() won't restore it, so it lives statelessly at the top level (job-level by default). FIX: add `custIdent: ''` to DEFAULT_STATE so it becomes a genuine item-level key. Verify switchBomItem in QuoteContext also copies custIdent from bomItems[i].custIdent into top-level state on switch (the bomItems[i].custIdent field already exists per makeBomItem in mpSchema.js)."
+  ],
+  "critical_code_review_comments": [
+    "mpSchema.js ITEM_LEVEL_KEYS computation is schema-driven from DEFAULT_STATE — comment-level removal from JOB_LEVEL_KEYS is necessary but the key must also exist in DEFAULT_STATE. Recommend an explicit assertion or unit test that `custIdent` ∈ ITEM_LEVEL_KEYS.",
+    "BomBuilderModal.jsx: header restructure clean — labels, item count, Templates/Manual tabs, close × all in single flex row; Project Name field on its own centered section below. data-testid='bom-project-name' present with correct placeholder.",
+    "Placeholders.jsx BomSec component name correctly uses <span data-testid='bom-item-desc-{i}'> not <input>. Click bubbles to parent div which calls switchBomItem(i). select dropdowns for type/pcs stop propagation.",
+    "EstimateInfoSec.jsx tile-quote-multipart onClick dispatches 'spot:open-bom-builder' ONLY when transitioning from Simple → Multi-Part (wasSimple guard). Re-clicking when already MP correctly no-ops the dispatch.",
+    "routing.py evaluate_routes Crest stock candidates now use boardSpec (not fb_grade) for calc_board — matches legacy L701; engine smoke test returns 200 with structured response."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (6/6 pytest)", "frontend": "75% (3 of 4 bug fixes verified, Bug 1 fails)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified",
+  "seed_data_creation": "None — used existing quote tabs",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bugs 2, 3a, 3b verified PASS via live UI on preview URL. Bug 1 still broken — custIdent leaks across BOM tabs. Fix likely needs `custIdent: ''` in /app/frontend/src/lib/defaults.js DEFAULT_STATE so the schema-driven ITEM_LEVEL_KEYS set picks it up; verify QuoteContext.switchBomItem snapshots/restores it via bomItems[i].custIdent.",
+  "rca_of_the_issue": "Bug 1 RCA — JOB_LEVEL_KEYS removal of custIdent (mpSchema.js L30) is correct per legacy parity but incomplete: ITEM_LEVEL_KEYS = Object.keys(DEFAULT_STATE) − JOB_LEVEL_KEYS, so unless `custIdent` is a key in DEFAULT_STATE (/app/frontend/src/lib/defaults.js), gatherItemState/applyItemStateTo skip it entirely and the top-level value lingers across tab switches. Reproduction: login → tile-quote-multipart (modal auto-opens) → Save BOM with 2+ rows → tile-pricing-individual → type 'CUST-AAA' in input-cust-ident on item-0 → click bom-item-1 → type 'CUST-BBB' → click bom-item-0 → input shows 'CUST-BBB' (expected 'CUST-AAA'). Mitigation: add `custIdent: ''` to DEFAULT_STATE; ensure makeBomItem default state includes custIdent and switchBomItem mirrors bomItems[i].custIdent into top-level state. Also: BomBuilderModal already collects per-row custIdent in convertToMultiPart, so the data flow into bomItems[].custIdent is intact — the gap is only in the gather/apply layer."
+}

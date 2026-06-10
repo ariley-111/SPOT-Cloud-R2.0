@@ -520,13 +520,17 @@ export function BomSec() {
                   opacity: dragIdx === i ? 0.45 : 1,
                 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: tint }} />
-                <input value={it.desc || ""}
-                  onChange={(e) => updateBomItem(i, { desc: e.target.value })}
-                  onClick={(e) => e.stopPropagation()}
-                  data-testid={`bom-item-desc-${i}`}
-                  placeholder={`Item ${i + 1}`}
-                  style={{ background: "transparent", border: "none", color: "inherit",
-                    fontSize: 11, outline: "none", width: 110, fontFamily: "inherit" }} />
+                {/* Name is DISPLAY-ONLY in the BOM strip — edit in the BOM Builder
+                 *  modal or via the Item Description field at the top of Item Setup
+                 *  (per legacy parity + user request 2026-06-10). */}
+                <span data-testid={`bom-item-desc-${i}`}
+                  title="Click to select; edit name in BOM Builder or Item Description"
+                  style={{ fontSize: 11, fontWeight: isActive ? 700 : 500,
+                    color: "inherit", maxWidth: 160, overflow: "hidden",
+                    textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    fontFamily: "inherit", userSelect: "none" }}>
+                  {it.desc || `Item ${i + 1}`}
+                </span>
                 <select value={it.type || "Manufactured"}
                   onChange={(e) => updateBomItem(i, { type: e.target.value })}
                   onClick={(e) => e.stopPropagation()}
