@@ -1,0 +1,24 @@
+{
+  "summary": "Iter 16 — RETEST of Bug 1 (custIdent per-item persistence): PASS. The defensive safety nets added to gatherItemState (L60) and applyItemStateTo (L93) in /app/frontend/src/lib/mpSchema.js correctly persist custIdent per BOM component across switches. All 3 round-trips on bom-item-0 ↔ bom-item-1 returned the expected values (CUST-AAA on item-0, CUST-BBB on item-1).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ROOT CAUSE OF ITER 15 FALSE-FAIL: clicking [data-testid='bom-item-1'] with playwright force=True landed on the inner <select data-testid='bom-item-type-1'> (Manufactured/Purchased/Fulfillment) which has onClick={(e)=>e.stopPropagation()}. switchBomItem was therefore NEVER called — the BOM strip never actually switched. The 'leak' observed in iter 15 was the input simply still showing the value the user just typed because no switch happened. Confirmed via console.log instrumentation: with [data-testid='bom-item-desc-i'] click the DBG logs fire and custIdent transitions correctly between '' / CUST-AAA / CUST-BBB. With [data-testid='bom-item-i'] direct click the logs never fire.",
+    "Functional correctness: the safety nets in mpSchema.js (explicit custIdent in gatherItemState + applyItemStateTo) AND the per-item bomItems[i].custIdent sync in QuoteContext.switchBomItem L327-337 work together correctly — the fix is sound.",
+    "MINOR UX SUGGESTION: in Placeholders.jsx BomSec, consider widening the click target hot zone — currently the type <select> and pcs <input> stop propagation, so a real user clicking those won't switch items (intentional). But for keyboard/test reliability the data-testid='bom-item-i' parent could intercept clicks via mousedown instead of onClick to be robust against children with stopPropagation. NOT a blocker."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only retest)", "frontend": "100% (1/1 — Bug 1 PASS)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — verified working",
+  "seed_data_creation": "Created a fresh quote tab with 2 BOM components A and B in Multi-Part Individual mode for the test. No backend seed data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "When testing BOM-item-switching, ALWAYS click [data-testid='bom-item-desc-{i}'] (the inner span) NOT [data-testid='bom-item-{i}'] (the outer div). The outer div center is occupied by a <select> with stopPropagation, so playwright force-click lands on the select and does not trigger switchBomItem. This was the cause of iter 15's reported failure — the actual functionality was already working. All 3 prior bugs (BOM desc=SPAN, auto-open BOM Builder, header restructure) plus this Bug 1 are now verified PASS.",
+  "rca_of_the_issue": "Iter 15 reported FAIL but the failure was a test-methodology artifact, not a product bug. Repro: clicking [data-testid='bom-item-1'] (outer div) with playwright force=True at the bounding-box center lands on the inner <select data-testid='bom-item-type-1'>. The <select> has onClick={(e) => e.stopPropagation()}, so the parent div's onClick={() => switchBomItem(i)} never fires. The customer-ident input therefore continues to show the most recently typed value because the active item never actually changed. Mitigation in this iter: clicked [data-testid='bom-item-desc-{i}'] instead — switchBomItem fires correctly, gatherItemState snapshots custIdent into bomItems[oldIdx].state.custIdent, applyItemStateTo clears + restores custIdent from bomItems[newIdx].state.custIdent. Confirmed via temporary console.log instrumentation (now removed): topCustIdent / snapCustIdent / targetStateCust / nextCustIdent all transition exactly as expected for 3 round-trips."
+}
