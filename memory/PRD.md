@@ -294,6 +294,33 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - None mode in MP shows a clean "No freight" indicator
 - Per Item mode (MP default) keeps the existing per-item Ship-To/ZIP/markup UI
 
+### 2026-06-10 — D-070 Inline Board Card Warnings & Buy Min Logic ✅
+- **Legacy parity**: 1:1 port of `spot_r1_5.jsx` L5894-5995 (Board status bar)
+  and L6992-6995 (Economics substitution banner).
+- **Backend `runner.py`**:
+  - Added `_pipeline.belowMin` flag on all engine results.
+  - When `buyMinBoard==="No"` and below mill min, runner now returns a
+    partial-row result (no error) carrying `belowMin: true`, zeroed money
+    fields, plus layout/sheet/grade so the Quote Table can render red
+    "Below Min" cells (legacy spot_r1_5.jsx L1111, L8366 parity).
+- **Frontend `ItemSetupSec.jsx`** Board tile editor footer:
+  - Added `Buy Min — amortize` button (`board-buy-min-amortize-btn`) when
+    below min and Buy Min not yet on.
+  - Added `× Turn off Buy Min` button (`board-turn-off-buy-min-btn`) when
+    Buy Min is active.
+- **Frontend `QuoteTableSec.jsx`**:
+  - New tbody branch for `r._pipeline.belowMin === true`: orange row tint
+    with red "Below Min" text in Sell/Pc and Job Total cells; other money
+    cells show `—`.
+- **Frontend `RightDashboard.jsx` EconomicsPanel**:
+  - Added board-substitution banner at top (`econ-board-sub-banner`):
+    orange `⚠ Board substitution — decision needed`, green
+    `✓ Stock substitution approved`, or blue
+    `ℹ Spec'd board — custom order` based on `boardSubstitution` state
+    (per user explicit ask "Spec'd board - custom order in blue").
+- **Tests**: 5/5 pytest pass in `/app/backend/tests/test_below_min.py`.
+- **No external/separate warning panel** — strict legacy parity preserved.
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅
