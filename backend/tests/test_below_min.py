@@ -139,3 +139,36 @@ def test_calculate_all_propagates_below_min(client):
     first = rows[0]
     assert first.get("belowMin") is True or (first.get("_pipeline") or {}).get("belowMin") is True, \
         f"Expected belowMin=True on first row, got: {first}"
+
+
+# REGRESSION (2026-06-10 Massillon Container quote): Force-spec'd-board on a
+# substituted grade (125 -> 200# Mullen upgrade) must compute Buy Min cost at
+# the SPEC grade rate (125#), not the substituted running grade (200#).
+# Legacy spot_r1_5.jsx L3617 always uses boardSpec for the Buy Min recalc.
+# Material cost should be ~$2,889 (legacy parity) — NOT ~$3,784 (cloud bug).
+def test_force_spec_uses_spec_grade_for_buy_min_cost(client):
+    payload = {
+        "itemDesc": "RegressionMassillon", "oneUpW": 9, "oneUpL": 9,
+        "qtys": [500, 0, 0, 0, 0],
+        "flute": "C", "boardGrade": "125",
+        "outsideLiner": "42# Kemi-Lite", "insideLiner": "42# Kraft", "medium": "None",
+        "printReq": "Yes", "printMode": "Satin", "printSides": "1-Sided",
+        "buyMinBoard": "Yes", "boardSubstitution": "forced",
+        "productMats": "RSC", "handGluing": "Yes", "jointsPerPiece": 1,
+        "prepressTreatment": "Auto", "pricingBasis": "Gross Margin %",
+        "gmByTier": {"25-49": 0.248},
+    }
+    r = client.post(f"{BASE_URL}/api/engine/calculate?slot_index=0", json=payload, timeout=20)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "error" not in d, d
+    pipe = d.get("_pipeline") or {}
+    # Force custom order must surface as ORDER, not STOCK
+    assert pipe.get("stockMode") is False, f"forced spec must report stockMode=False; got {pipe}"
+    assert pipe.get("customOrder") is True, f"forced spec must report customOrder=True; got {pipe}"
+    # Material must be at 125# rate (~$2,889) NOT 200# substituted rate (~$3,784).
+    mat = d.get("matTotal") or 0
+    assert 2700 < mat < 3100, (
+        f"Material {mat:.2f} indicates Buy Min recalc used wrong grade. "
+        f"Legacy 125# rate ≈ $2,889; substituted 200# rate ≈ $3,784."
+    )

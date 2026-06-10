@@ -195,16 +195,13 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     sh_w = (use_sheet.get("sheet") or {}).get("w") or use_sheet.get("w") or 0
     sh_l = (use_sheet.get("sheet") or {}).get("l") or use_sheet.get("l") or 0
 
-    # PARITY FIX (2026-06-01): if a grade fallback fired, use the RUNNING grade
-    # for any downstream calc_board re-calls (saber recalc, Buy Min recalc).
-    # Without this, those paths look up the SPEC grade's base rate, contradicting
-    # the running grade used at sheet selection.
-    _fb_grade = best.get("gradeFallback") or (use_sheet.get("gradeFallback"))
-    if _fb_grade:
-        _fb_adder = GRADE_ADDER_DEFAULTS.get(_fb_grade, 0)
-        board_spec_running = {**board_spec, "boardGrade": _fb_grade, "gradeAdder": _fb_adder}
-    else:
-        board_spec_running = board_spec
+    # PARITY (legacy spot_r1_5.jsx L3608, L3617): downstream calc_board re-calls
+    # (Saber, Buy Min) use the ORIGINAL boardSpec — NOT a substituted running
+    # grade. Buy Min is always a CUSTOM mill order at the user's SPEC grade,
+    # regardless of any stock-substitution that happened during auto-select.
+    # The 2026-06-01 "use running grade" diff was a regression vs legacy
+    # (proven by Massillon Container quote 2026-06-10).
+    board_spec_running = board_spec
 
     # STEP 5: Saber yield recalc
     saber_on = json.get("saber", "No") == "Yes"
@@ -331,6 +328,12 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
                          board_spec["outsideLiner"], board_spec["insideLiner"], board_spec["medium"],
                          wf.get("shippedMSF") or wf["oMSF"], eff_w, eff_l, qty)
 
+    # When force_custom_order, the board IS a custom mill order regardless of
+    # the underlying auto-selected stock sheet's flag. Override the surface
+    # flags so the Board panel shows "ORDER" (not "STOCK") — legacy parity.
+    _stock_mode_eff = bool(best.get("stockMode") or bc.get("stockMode")) and not force_custom_order
+    _custom_order_eff = bool(best.get("customOrder")) or force_custom_order
+
     return {
         "_pipeline": {
             "corrFlipped": corr_flipped,
@@ -343,8 +346,8 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             "gradeFallback": best.get("gradeFallback"),
             "mediumFallback": best.get("mediumFallback"),
             "mullenUpgrade": bool(best.get("mullenUpgrade")),
-            "stockMode": bool(best.get("stockMode") or bc.get("stockMode")),
-            "customOrder": bool(best.get("customOrder")),
+            "stockMode": _stock_mode_eff,
+            "customOrder": _custom_order_eff,
             "exceedsSheetLibrary": bool(best.get("exceedsSheetLibrary")),
             "routeAuto": auto_r["route"],
             "routeForced": routing.get("forced", False),
@@ -365,8 +368,8 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "gradeFallback": best.get("gradeFallback"),
         "mediumFallback": best.get("mediumFallback"),
         "mullenUpgrade": bool(best.get("mullenUpgrade")),
-        "stockMode": bool(best.get("stockMode") or bc.get("stockMode")),
-        "customOrder": bool(best.get("customOrder")),
+        "stockMode": _stock_mode_eff,
+        "customOrder": _custom_order_eff,
         "exceedsSheetLibrary": bool(best.get("exceedsSheetLibrary")),
         "exceedsMachineCapacity": bool(best.get("exceedsMachineCapacity")),
         "overrideActive": bool(override_active),
