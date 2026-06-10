@@ -394,6 +394,10 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "jointsPerPiece": json.get("jointsPerPiece"),
         "gluingComplexity": json.get("gluingComplexity"),
         "route": routing.get("route") or wf["route"], "cadHrs": wf["cadHrs"],
+        # Route fallback warning (legacy spot_r1_5.jsx L811-814 + Quote Table banner).
+        # Surfaces "Too many CAD hours and no Crest/Bobst route viable — falling back
+        # to Saber + die cut" so the frontend can render it as an orange banner.
+        "routeWarning": routing.get("warning"),
         "matTotal": wf["matTotal"], "matMakeready": wf["matMakeready"],
         "pressCost": wf["pressCost"], "inkCost": wf["inkCost"], "whiteCost": wf["whiteCost"],
         "side2Cost": wf["side2Cost"], "printDirect": wf["printDirect"],

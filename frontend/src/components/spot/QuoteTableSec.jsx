@@ -105,6 +105,28 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
         : (total > 0 ? `${activeCount}/${total}` : null)}
       data-testid="sec-quote-table">
 
+      {/* D-070 Route fallback warning (legacy spot_r1_5.jsx L811-814):
+          surfaces "Too many CAD hours and no Crest/Bobst route viable —
+          falling back to Saber + die cut" as an orange banner above the table. */}
+      {(() => {
+        const warnings = useComponentLayout
+          ? Array.from(new Set((componentPricing || [])
+              .flatMap(c => (c.rows || []).map(r => r.routeWarning))
+              .filter(Boolean)))
+          : Array.from(new Set((rows || []).map(r => r.routeWarning).filter(Boolean)));
+        if (!warnings.length) return null;
+        return warnings.map((msg, i) => (
+          <div key={i} data-testid={`qt-route-warning-${i}`}
+            style={{
+              padding: "6px 10px", marginBottom: 8, borderRadius: 4,
+              background: "#f59e0b18", border: "1px solid #f59e0b44",
+              fontSize: 11, fontWeight: 700, color: "#f59e0b",
+            }}>
+            ⚠ {msg}
+          </div>
+        ));
+      })()}
+
       {/* Multi-Part indicator banner */}
       {isMP && (
         <div data-testid="mp-banner" style={{

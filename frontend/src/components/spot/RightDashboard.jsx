@@ -1351,7 +1351,8 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         )}
         <Row label="Print"    value={fmtMoney(r.printDirect)} />
         {detail && r.cutterDirect > 0 && (
-          <SubRow label={`${r.route} ${labelize(r.cadDifficulty || "Standard")}`} value={fmtMoney(r.cutterDirect)} />
+          <SubRow label={r.cutterBasis ? `${r.route} ${r.cutterBasis}` : `${r.route} ${labelize(r.cadDifficulty || "Standard")}`}
+            value={fmtMoney(r.cutterDirect)} />
         )}
         <Row label={`Cutting ${r.route}`} value={fmtMoney(r.cutterDirect)} />
         {detail && r.assemblyCost > 0 && (
