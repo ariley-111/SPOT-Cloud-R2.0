@@ -99,26 +99,31 @@ export default function ItemSetupSec({ result }) {
   }, [anyDieRoute, anyBobst, isFulfillment, route, itemKey]);
 
   // ─── Auto-flip corrugation (legacy spot_r1_5.jsx L3941-3957) ──────────
-  // When the engine reports it had to flip W/L internally (corr_flipped) to
-  // find a viable sheet, mirror that into the UI state so:
-  //   1) The "⇄ Flip Corr" button turns red → "⇄ CORR FLIPPED"
-  //   2) The dims displayed match the dims used for the selected sheet.
-  // Guard: store the dims at which we auto-flipped so the user can manually
-  // un-flip without an immediate re-flip loop.
+  // Engine reports `_pipeline.exceedsSheetLibrary` when the current oneUpW/L
+  // doesn't fit any approved sheet (forced to CUSTOM-OVERSIZE) — legacy uses
+  // this as the trigger to TRY a flipped orientation. We swap state and let
+  // the next engine call validate; if the swap doesn't help, the user can
+  // manually un-flip via the Flip Corr button.
+  // Guards: ref-tracked W/L pair so manual un-flip doesn't immediately re-flip.
   const autoFlipRef = useRef({ flippedAtW: null, flippedAtL: null });
   useEffect(() => {
-    if (corrFlipped) return;  // already flipped — nothing to do
-    const enginCorr = !!(r?._pipeline?.corrFlipped);
-    if (!enginCorr) return;
+    if (corrFlipped) return;  // already flipped — don't override
+    const hasIssue = !!(r && (
+      r._pipeline?.exceedsSheetLibrary ||
+      (r.boardHasPrice && !r.boardMeetMin && !buyMinActive)
+    ));
+    if (!hasIssue) return;
     const w = String(s.oneUpW || "");
     const l = String(s.oneUpL || "");
-    // Don't re-flip back to a state we just un-flipped from.
-    if (autoFlipRef.current.flippedAtW === l && autoFlipRef.current.flippedAtL === w) return;
+    if (!w || !l || w === "0" || l === "0") return;
+    // If state.W/L matches what we LAST auto-flipped FROM, the user just
+    // manually un-flipped — respect that decision and don't re-flip.
+    if (autoFlipRef.current.flippedAtW === w && autoFlipRef.current.flippedAtL === l) return;
     autoFlipRef.current = { flippedAtW: w, flippedAtL: l };
     setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: true });
     pushToast && pushToast("Corr direction auto-flipped — piece fits stock sheets. Verify with customer.", "ok");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r?._pipeline?.corrFlipped, s.oneUpW, s.oneUpL, corrFlipped]);
+  }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, buyMinActive, corrFlipped]);
 
   // Reset the auto-flip memory when board spec changes (so a new pair of W/L
   // can be auto-flipped again).

@@ -126,6 +126,48 @@ def test_force_spec_board_triggers_buy_min_recalc(client):
         assert data.get("itemSell", 0) >= 0
 
 
+# REGRESSION (2026-06-10 Massillon Container Storage Bin v3): The engine MUST
+# NOT auto-flip oneUpW/L internally — that's a frontend responsibility per
+# legacy spot_r1_5.jsx L3941-3957. With 200#B Kraft/Kraft (None/None liners) +
+# 72.125 x 46.625 + Complex difficulty, the engine must produce:
+#   - sheet 74.125 x 48.625 (CUSTOM-OVERSIZE, exceedsSheetLibrary=True)
+#   - route "Saber + D/C" with the "Too many CAD hours..." warning
+#   - buyMinSheets = 600 (15,000 sqft Kraft min ÷ 25.03 sqft/sheet)
+#   - matTotal ≈ $1,977.42, cutterDirect ≈ $4,650.60, totalMfg ≈ $6,628.02
+def test_storage_bin_v3_legacy_parity(client):
+    payload = {
+        "itemDesc": "Storage Bin v3", "oneUpW": 72.125, "oneUpL": 46.625,
+        "qtys": [500, 0, 0, 0, 0],
+        "flute": "B", "boardGrade": "200",
+        "outsideLiner": "None", "insideLiner": "None", "medium": "None",
+        "fscEnabled": False, "printReq": "Off",
+        "productMats": "RSC", "prepressTreatment": "Auto",
+        "cadDifficulty": "Complex",
+        "pricingBasis": "Gross Margin %", "gmByTier": {"10-24": 0.25},
+    }
+    r = client.post(f"{BASE_URL}/api/engine/calculate?slot_index=0", json=payload, timeout=20)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    p = d.get("_pipeline") or {}
+    # Engine MUST keep original (un-flipped) dims
+    assert p.get("corrFlipped") is False, f"Engine must not auto-flip; got {p}"
+    assert p.get("exceedsSheetLibrary") is True, f"Expected exceedsSheetLibrary=True; got {p}"
+    # Sheet must be CUSTOM-OVERSIZE
+    assert abs(d.get("sheetW") - 74.125) < 0.01, f"sheetW={d.get('sheetW')}"
+    assert abs(d.get("sheetL") - 48.625) < 0.01, f"sheetL={d.get('sheetL')}"
+    # Route + warning
+    assert d.get("route") == "Saber + D/C", f"route={d.get('route')}"
+    assert d.get("routeWarning") and "Crest" in d["routeWarning"] and "Saber" in d["routeWarning"], \
+        f"routeWarning={d.get('routeWarning')}"
+    # Buy Min must match legacy (600 sheets)
+    assert d.get("buyMinActive") is True, "Buy Min must auto-fire"
+    assert d.get("buyMinSheets") == 600, f"buyMinSheets={d.get('buyMinSheets')} (legacy=600)"
+    # Material cost must match legacy ($1,977.42 ± $1)
+    assert abs(d.get("matTotal") - 1977.42) < 1.0, f"matTotal={d.get('matTotal')} (legacy=1977.42)"
+    # Total manufacturing cost match legacy ($6,628.02 ± $5)
+    assert abs(d.get("totalMfg") - 6628.02) < 5.0, f"totalMfg={d.get('totalMfg')} (legacy=6628.02)"
+
+
 # Calculate-all returns one row per qty slot, belowMin flag preserved
 def test_calculate_all_propagates_below_min(client):
     payload = _below_min_payload(buy_min="No", qty=200)

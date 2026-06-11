@@ -151,32 +151,23 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     if not best:
         best = auto_select_sheet(uw, ul, board_spec, qty, asmp)
 
-    # STEP 2: Auto-flip corrugation — skip if user explicitly overrode the sheet
+    # ─── Legacy parity (spot_r1_5.jsx) ──────────────────────────────────
+    # The engine does NOT auto-flip corrugation internally. Legacy keeps the
+    # user's (oneUpW, oneUpL) as the source of truth and lets the FRONTEND
+    # auto-flip useEffect (L3941-3957) decide whether to swap state and set
+    # corrFlipped. Doing it here AND in the frontend caused a double-flip
+    # divergence (Storage Bin v3 regression 2026-06-10).
     corr_flipped = False
-    if not override_active and best and (best.get("exceedsSheetLibrary") or
-                 (best.get("bc") and not best["bc"]["pricable"] and best["bc"]["hasPrice"] and not best["bc"]["meetMin"])):
-        flipped_sel = auto_select_sheet(ul, uw, board_spec, qty, asmp)
-        if flipped_sel and flipped_sel.get("bc") and (flipped_sel["bc"]["pricable"] or (flipped_sel["bc"]["hasPrice"] and flipped_sel.get("stockMode"))):
-            best = flipped_sel
-            corr_flipped = True
 
     if not best:
-        flipped_last = auto_select_sheet(ul, uw, board_spec, qty, asmp)
-        if flipped_last:
-            best = flipped_last
-            corr_flipped = True
-        else:
-            return {"error": "No sheet found", "uw": uw, "ul": ul, "qty": qty,
-                    "boardGrade": board_spec["boardGrade"], "flute": board_spec["flute"]}
+        return {"error": "No sheet found", "uw": uw, "ul": ul, "qty": qty,
+                "boardGrade": board_spec["boardGrade"], "flute": board_spec["flute"]}
 
     # STEP 3: Auto-route. Legacy parity (spot_r1_5.jsx L3578): route comparison
     # ALWAYS runs even when the user overrode the sheet — the override only pins
     # the CAD-side sheet; Crest and Bobst still evaluate with their own sheet
-    # picks. The previous override→CAD short-circuit broke parity by forcing CAD
-    # whenever an override was active, even when Crest/Bobst were cheaper.
-    eff_w_for_route = ul if corr_flipped else uw
-    eff_l_for_route = uw if corr_flipped else ul
-    auto_r = auto_route(best.get("cadHrs", 0), best, eff_w_for_route, eff_l_for_route, board_spec, qty, asmp)
+    # picks.
+    auto_r = auto_route(best.get("cadHrs", 0), best, uw, ul, board_spec, qty, asmp)
 
     route_override = json.get("routeOverride") or None
     if route_override and route_override != "Auto":
