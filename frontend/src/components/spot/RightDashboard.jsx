@@ -12,7 +12,7 @@ import FreightDashModal from "./FreightDashModal";
 export default function RightDashboard() {
   const { active } = useQuote();
   const s = active?.state || {};
-  const { results, perComponent, isMultiPart } = useEngine(s);
+  const { results, perComponent, componentPricing, isMultiPart } = useEngine(s);
   const selSlot = s.selSlot || 0;
   const activeItemIdx = s.activeItemIdx ?? 0;
   const aggregate = results[selSlot] || results[0];
@@ -23,7 +23,28 @@ export default function RightDashboard() {
   const itemResult = isMultiPart
     ? ((perComponent.find((p) => p.slot === selSlot) || perComponent[0])?.items?.[activeItemIdx] || null)
     : null;
-  const primary = isMultiPart ? (itemResult || aggregate) : aggregate;
+  // Merge the active component's per-qty-row line-charges (from componentPricing)
+  // onto the per-component result so r.freightLine reflects the Per-Job
+  // allocated SHARE (not 0, which is what run_estimate returns when freightCost
+  // was zeroed by buildMpPayload's Per-Job branch). Same for die/prepress/misc.
+  const itemResultWithLines = (() => {
+    if (!isMultiPart || !itemResult) return itemResult;
+    const cp = (componentPricing || [])[activeItemIdx];
+    if (!cp) return itemResult;
+    const row = (cp.rows || []).find((rw) => rw.slotIdx === selSlot) || (cp.rows || [])[0];
+    if (!row) return itemResult;
+    return {
+      ...itemResult,
+      freightLine: row.freightLine || itemResult.freightLine || 0,
+      freightEmbed: row.freightEmbed || itemResult.freightEmbed || 0,
+      dieLineCost: row.dieLineCost || itemResult.dieLineCost || 0,
+      prepressLineCost: row.prepressLineCost || itemResult.prepressLineCost || 0,
+      miscLineCost: row.miscLineCost || itemResult.miscLineCost || 0,
+      sellTotal: row.sellTotal || itemResult.sellTotal || 0,
+      miscLineItems: row.miscLineItems || itemResult.miscLineItems || [],
+    };
+  })();
+  const primary = isMultiPart ? (itemResultWithLines || aggregate) : aggregate;
 
   return (
     <div data-testid="right-dashboard" style={{
