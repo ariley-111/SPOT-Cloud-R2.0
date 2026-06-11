@@ -78,6 +78,13 @@ export const adminImportSheetsCsv = (file, reason) => {
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 
+// Full Board Engine reference data — base matrix, liner/medium upgrades, flute
+// rules, dim adders, fixed charges, approved sheet specs. Drives the Board
+// Engine viewer panel (Placeholders.jsx → BoardEngineSec). Matches the data
+// shape legacy spot_r1_5.jsx L6606-6758 renders from its ENGINE constant.
+export const engineManifest = () =>
+  api.get("/engine/manifest").then((r) => r.data);
+
 // Returns {outside: [liner names], inside: [liner names]} that have approved
 // stock sheets for the given board grade/flute/medium. Used by liner-tile
 // stock-availability dots (legacy spot_r1_5.jsx L5983).

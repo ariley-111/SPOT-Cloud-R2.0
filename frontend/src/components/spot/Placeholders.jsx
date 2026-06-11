@@ -402,71 +402,250 @@ function RatePanel({ title, color, rows, dataTestId }) {
 }
 
 /** ─── Board Engine ──────────────────────────────────────────────────
- *  Ported from legacy spot_r1_5.jsx lines 6606-6758.
- *  Contains: Sheet library viewer · Route eligibility · Buy Min behavior */
+ *  1:1 cloud port of legacy spot_r1_5.jsx L6606-6758. Fetches the live
+ *  engine manifest from /api/engine/manifest so the panel reflects the
+ *  ACTUAL pricing data the backend uses — not a hardcoded summary.
+ *
+ *  Renders:
+ *    • MSF Tiers pills
+ *    • Singlewall Base Rates table (Grade × all 6 tiers)
+ *    • Doublewall Base Rates table (Grade × all 6 tiers)  ← includes 275 DW etc.
+ *    • Liner Upgrades + Medium Upgrades two-column
+ *    • Flute Rules + Dim Adders + Fixed Charges three-column
+ *    • Approved Sheets summary chips (spec → count) */
 export function BoardEngineSec() {
-  const { active, sec, toggleSec } = useQuote();
-  const s = active?.state || {};
+  const { sec, toggleSec } = useQuote();
+  const [manifest, setManifest] = React.useState(null);
+  const [err, setErr] = React.useState(null);
+
+  React.useEffect(() => {
+    import("../../api/spot").then(({ engineManifest }) =>
+      engineManifest().then(setManifest).catch((e) => setErr(e?.message || String(e)))
+    );
+  }, []);
+
+  // Number formatter matching legacy `fn`
+  const fn2 = (n, mx = 2, mn = 2) =>
+    Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: mx, minimumFractionDigits: mn });
+
+  const HEAD = { padding: "4px 6px", fontSize: 11, fontWeight: 700, color: "var(--spot-text3)",
+    borderBottom: "1px solid var(--spot-border)" };
+  const SUBHEAD = { fontSize: 11, fontWeight: 700, color: "var(--spot-text3)",
+    textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 };
+  const PILL = { fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 4,
+    background: "var(--spot-bg2)", color: "var(--spot-text2)", border: "1px solid var(--spot-border)" };
+  const CHIP = { fontSize: 11, fontWeight: 500, padding: "2px 6px", borderRadius: 3,
+    background: "var(--spot-bg2)", color: "var(--spot-text2)", border: "1px solid var(--spot-border)" };
+  const LIST_ROW = { display: "flex", justifyContent: "space-between", padding: "2px 0",
+    fontSize: 11, borderBottom: "1px solid var(--spot-border)33" };
+
+  const renderMatrix = (label, rows, tiers, testid) => (
+    <div style={{ marginBottom: 8 }} data-testid={testid}>
+      <div style={SUBHEAD}>{label}</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+          <thead><tr style={{ background: "var(--spot-bg3)" }}>
+            <th style={{ ...HEAD, textAlign: "left" }}>Grade</th>
+            {tiers.map((tier) => (
+              <th key={tier.name} style={{ ...HEAD, textAlign: "right" }}>{tier.name}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {Object.entries(rows).map(([grade, byTier], i) => (
+              <tr key={grade} style={{ background: i % 2 ? "var(--spot-bg2)" : "transparent",
+                borderBottom: "1px solid var(--spot-border)22" }}
+                data-testid={`board-matrix-row-${grade.replace(/\s+/g, "")}`}>
+                <td style={{ padding: "3px 6px", fontWeight: 600, color: "var(--spot-text)", whiteSpace: "nowrap" }}>
+                  {grade}
+                </td>
+                {tiers.map((tier) => {
+                  const v = byTier[tier.name];
+                  return (
+                    <td key={tier.name} style={{ padding: "3px 4px", textAlign: "right",
+                      color: v != null ? "var(--spot-text2)" : "var(--spot-text3)",
+                      fontFamily: "'JetBrains Mono', monospace" }}>
+                      {v != null ? fn2(v) : "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   return (
     <Sec label="Board Engine" hue="#4b5563" open={sec.engine} onToggle={() => toggleSec("engine")}
       data-testid="sec-board-engine">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-
-        <RatePanel
-          title="Singlewall Flutes / Grades" color="#4b5563"
-          rows={[
-            ["Flutes",  "B  ·  C  ·  E"],
-            ["Grades",  "200  ·  ECT 32  ·  ECT 44  ·  ECT 48  ·  ECT 55  ·  ECT 61  ·  ECT 71  ·  ECT 82  ·  NT"],
-            ["Liners (outside/inside)", "None (kraft)  ·  42# Kla-White  ·  42# Kemi-Lite  ·  42# Bleached White  ·  33# Kla-White  ·  56# Kla-White"],
-            ["Mediums", "None  ·  26#  ·  33#  ·  35HPL#  ·  40#  ·  42# Bl"],
-          ]}
-          dataTestId="board-singlewall"
-        />
-
-        <RatePanel
-          title="Liner Upgrade Rules" color="#06b6d4"
-          rows={[
-            ["33# Kla-White",   "allowed on 175 / ECT 32 only"],
-            ["56# Kla-White",   "allowed on 250 only"],
-            ["42# Bleached White", "+$17.50/MSF surcharge"],
-          ]}
-          dataTestId="board-liner-upgrades"
-        />
-
-        <RatePanel
-          title="Route Eligibility (D-121 / D-124)" color="#22c55e"
-          rows={[
-            ["CAD (rotary die)",      "All flutes  ·  All library sheets  ·  ALWAYS eligible"],
-            ["Crest (flat-bed die)",  "All flutes  ·  Sheet ≤ 60×120  ·  Requires steel die"],
-            ["Bobst (high-speed)",    "E or F flute ONLY  ·  Sheet 13.78×15.75 → 41.75×29.125  ·  0.060″ caliper limit"],
-            ["Auto-route preference", "Cost-winner — lowest viable route wins (D-124, R1.6.1)"],
-            ["B/C flute → Bobst",     "HARD-BLOCKED — never emitted as route hint"],
-          ]}
-          dataTestId="board-route-elig"
-        />
-
-        <RatePanel
-          title="Buy Min Behavior (D-067)" color="#f59e0b"
-          rows={[
-            ["Stock sheets",  "BYPASS mill minimums  ·  Engine pulls from library directly"],
-            ["Custom sheets", "Trigger mill Buy Min  ·  Engine orders enough sheets to satisfy"],
-            ["Current quote", s.boardSubstitution ? `Board substitution: ${s.boardSubstitution}` : "No substitution active"],
-          ]}
-          dataTestId="board-buy-min"
-        />
-
-        <div style={{ background: "var(--spot-warn-bg)", border: "1px dashed var(--spot-warn)",
-          borderRadius: 4, padding: "8px 12px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)",
-            textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>
-            Sheet Library Editor — admin only
+        {err && (
+          <div style={{ fontSize: 11, color: "var(--spot-err)" }} data-testid="board-engine-err">
+            Failed to load Board Engine manifest: {err}
           </div>
-          <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-            The approved sheet library lives in `/app/backend/engine/routing.py` (singlewall + doublewall
-            tables). Phase 4 will expose sheet add/edit/disable via a Board Engine admin console with audit log.
+        )}
+        {!manifest && !err && (
+          <div style={{ fontSize: 11, color: "var(--spot-text3)" }} data-testid="board-engine-loading">
+            Loading live engine manifest…
           </div>
-        </div>
+        )}
+        {manifest && (
+          <>
+            {/* MSF Tiers */}
+            <div style={{ marginBottom: 4 }} data-testid="board-msf-tiers">
+              <div style={SUBHEAD}>MSF Tiers</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {manifest.msf_tiers.map((tier) => (
+                  <span key={tier.name} style={PILL}>
+                    {tier.name}{" "}
+                    <span style={{ color: "var(--spot-text3)" }}>
+                      ({tier.min}
+                      {tier.maxExclusive !== null && tier.maxExclusive !== undefined
+                        ? "\u2013" + (tier.maxExclusive - 1)
+                        : "+"})
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Singlewall + Doublewall Base Rates */}
+            {renderMatrix(
+              `Singlewall Base Rates ($/MSF) — ${Object.keys(manifest.base_matrix.singlewall).length} grades`,
+              manifest.base_matrix.singlewall, manifest.msf_tiers, "board-sw-matrix"
+            )}
+            {renderMatrix(
+              `Doublewall Base Rates ($/MSF) — ${Object.keys(manifest.base_matrix.doublewall).length} grades`,
+              manifest.base_matrix.doublewall, manifest.msf_tiers, "board-dw-matrix"
+            )}
+
+            {/* Liner + Medium Upgrades */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div data-testid="board-liner-upgrades-list">
+                <div style={SUBHEAD}>Liner Upgrades</div>
+                {Object.entries(manifest.liner_upgrades).map(([name, r]) => {
+                  const isKemi = name === "42# Kemi-Lite";
+                  const amt = isKemi ? (r.base_amount_per_msf || 0) : (r.amount_per_msf || 0);
+                  return (
+                    <div key={name} style={LIST_ROW}>
+                      <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
+                        {name === "None" ? "None (Kraft)" : name}
+                        {r.enforce && r.allowed_board_grades && (
+                          <span style={{ marginLeft: 6, fontSize: 10, color: "var(--spot-text3)" }}>
+                            ({r.allowed_board_grades.join(", ")} only)
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ color: "var(--spot-text2)", fontWeight: 600,
+                        fontFamily: "'JetBrains Mono', monospace" }}>
+                        {fn2(amt, 1, 1)}{isKemi ? "+T" : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div data-testid="board-medium-upgrades-list">
+                <div style={SUBHEAD}>Medium Upgrades</div>
+                {Object.entries(manifest.medium_upgrades).map(([name, r]) => (
+                  <div key={name} style={LIST_ROW}>
+                    <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
+                      {name}
+                    </span>
+                    <span style={{ color: "var(--spot-text2)", fontWeight: 600,
+                      fontFamily: "'JetBrains Mono', monospace" }}>
+                      {fn2(r.amount_per_msf || 0, 1, 1)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Flute Rules + Dim Adders + Fixed Charges */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div data-testid="board-flute-rules-list">
+                <div style={SUBHEAD}>Flute Rules</div>
+                {Object.entries(manifest.flute_rules).map(([f, r]) => (
+                  <div key={f} style={LIST_ROW}>
+                    <span style={{ color: "var(--spot-text)", fontWeight: 600 }}>{f}</span>
+                    <span style={{ color: "var(--spot-text2)" }}>
+                      {r.wall_type === "doublewall" ? "DW" : "SW"}
+                      {r.flute_upcharge_per_msf > 0 ? " +" + fn2(r.flute_upcharge_per_msf, 1, 1) : ""}
+                      <span style={{ marginLeft: 6, color: "var(--spot-text3)",
+                        fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>
+                        caliper {fn2(manifest.constants?.FLUTE_CALIPERS?.[f] || 0, 4, 4)}″
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div data-testid="board-dim-adders-list">
+                <div style={SUBHEAD}>Dim Adders</div>
+                <div style={{ fontSize: 11, color: "var(--spot-text2)", marginBottom: 2 }}>
+                  Width:{" "}
+                  {(manifest.dimensional_adders.width || []).map((r) =>
+                    `${fn2(r.min, 3, 0)}\u2013${fn2(r.max, 1, 0)}" +$${fn2(r.amount_per_msf, 1, 1)}`
+                  ).join(", ")}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--spot-text2)" }}>
+                  Length:{" "}
+                  {(manifest.dimensional_adders.length || []).map((r) =>
+                    `${fn2(r.min, 1, 0)}\u2013${fn2(r.max, 1, 0)}" +$${fn2(r.amount_per_msf, 1, 1)}`
+                  ).join(", ")}
+                </div>
+              </div>
+              <div data-testid="board-fixed-charges-list">
+                <div style={SUBHEAD}>Fixed Charges</div>
+                <div style={{ fontSize: 11, color: "var(--spot-text2)" }}>
+                  Under {manifest.fixed_charges?.under_5_msf_setup_fee?.trigger_order_msf_lt} MSF:{" "}
+                  ${fn2(manifest.fixed_charges?.under_5_msf_setup_fee?.amount || 0)}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--spot-text2)" }}>
+                  Pallet Prep: ${fn2(manifest.fixed_charges?.pallet_prep_fee?.amount || 0)}/MSF
+                </div>
+              </div>
+            </div>
+
+            {/* Route Eligibility (constants from manifest) */}
+            <div style={{ marginBottom: 8 }} data-testid="board-route-eligibility">
+              <div style={SUBHEAD}>Route Eligibility</div>
+              <div style={{ fontSize: 11, color: "var(--spot-text2)", lineHeight: 1.5 }}>
+                <div>• CAD (rotary die): All flutes · All library sheets · ALWAYS eligible</div>
+                <div>
+                  • Crest (flat-bed): All flutes · Sheet ≤ {manifest.constants?.CREST_MAX_W}
+                  ×{manifest.constants?.CREST_MAX_L} · Requires steel die
+                </div>
+                <div>
+                  • Bobst (high-speed): {(manifest.constants?.BOBST_FLUTES || []).join(" or ")} flute ONLY ·
+                  Sheet {manifest.constants?.BOBST_MIN_W}×{manifest.constants?.BOBST_MIN_L} →{" "}
+                  {manifest.constants?.BOBST_MAX_W}×{manifest.constants?.BOBST_MAX_L}
+                </div>
+                <div>• Mullen upgrade chain: {Object.entries(manifest.constants?.MULLEN_UPGRADE || {})
+                  .map(([k, v]) => `${k}→${v}`).join(" · ")}</div>
+              </div>
+            </div>
+
+            {/* Approved Sheets summary */}
+            <div style={{ marginBottom: 4 }} data-testid="board-approved-sheets-summary">
+              <div style={SUBHEAD}>Approved Sheets ({manifest.approved_sheets_total})</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {(manifest.approved_specs || []).map((spec) => (
+                  <span key={`${spec.grade}-${spec.flute}`} style={CHIP}
+                    data-testid={`board-sheet-chip-${spec.grade.replace(/\s+/g, "")}-${spec.flute.replace("/", "")}`}>
+                    {spec.grade} {spec.flute}{" "}
+                    <span style={{ fontWeight: 700, color: "var(--spot-text3)" }}>({spec.count})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 10, color: "var(--spot-text3)", fontStyle: "italic",
+              borderTop: "1px solid var(--spot-border)", paddingTop: 6, marginTop: 4 }}>
+              Live snapshot from <code>/api/engine/manifest</code> — matches the math
+              the backend pricing pipeline runs. Any board grade visible here can be quoted.
+            </div>
+          </>
+        )}
       </div>
     </Sec>
   );
