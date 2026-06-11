@@ -20,7 +20,11 @@ export default function ItemSetupSec({ result }) {
   const { active, sec, toggleSec, setField, setManyFields, pushToast } = useQuote();
   const s = active?.state || {};
   const r = result || {};
-  const route = r.route || "—";
+  // Legacy parity (spot_r1_5.jsx L5876, L6084, L4149): when the engine returns
+  // route="Saber + D/C" but the user hasn't manually enabled Saber, the badges
+  // and Quote Table show "CAD" instead. Cost Buildup keeps the raw "Saber + D/C"
+  // label so production knows the actual cutter path.
+  const route = ((r.route === "Saber + D/C" && s.saber !== "Yes") ? "CAD" : (r.route || "—"));
   const fullyResolved = !!(r && !r.error && r.sheetW);
   const corrFlipped = !!s.corrFlipped;
 

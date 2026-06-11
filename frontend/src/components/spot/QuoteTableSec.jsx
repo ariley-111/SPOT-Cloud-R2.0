@@ -9,6 +9,14 @@ import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 //   Matched Set:  Sell/Ea → Sell/M → Sell/Set → Sell/Ea  (ports legacy L6202)
 //   Otherwise:    Sell/Ea ↔ Sell/M
 const sellLabel = (mode) => mode === "set" ? "Sell/Set" : mode === "msf" ? "Sell/M" : "Sell/Ea";
+
+// Legacy parity (spot_r1_5.jsx L5876, L4149, L6084): when engine returns
+// route="Saber + D/C" but the user hasn't manually enabled Saber, the
+// Production Specs badge, Item Setup badge, and Quote Table ROUTE column
+// all display "CAD" instead. Cost Buildup keeps the raw route.
+const effRoute = (r, s) => (
+  r && r.route === "Saber + D/C" && (s?.saber !== "Yes") ? "CAD" : ((r && r.route) || "")
+);
 const makeCols = (sellMode) => [
   { k: "act",     lbl: "Act",      align: "center", w: 24 },
   { k: "qty",     lbl: "Qty",      align: "right" },
@@ -61,6 +69,10 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
   // component has its own qty tier(s). Matched Set keeps the aggregate layout.
   const useComponentLayout = isMP && pricingMode === "Individual"
     && Array.isArray(componentPricing) && componentPricing.length > 0;
+
+  // Legacy parity helper (spot_r1_5.jsx L5876, L4149): when engine route is
+  // "Saber + D/C" but the user hasn't manually enabled Saber, the Route column
+  // shows "CAD". Cost Buildup keeps the raw route.
 
   const onPreview = () => window.dispatchEvent(new CustomEvent("spot:open-preview"));
   const onExport  = () => window.dispatchEvent(new CustomEvent("spot:export-csv"));
@@ -292,6 +304,8 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
 
 // ─── FlatLayout (SP and MP-Matched Set) ─────────────────────────────────
 function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyRow, cols, sellMode, cycleSellMode }) {
+  const { active } = useQuote();
+  const s = active?.state || {};
   const totalCols = cols.length;
   // Per legacy spot_r1_5.jsx L6223:
   //   ea  → itemSell / qty
@@ -407,8 +421,8 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                             r._pipeline?.customOrder ? "#3b82f610" :
                             r._pipeline?.belowMin ? "#f59e0b14" : "transparent";
             const cadLabel = Number(r.cadHrs) > 0 && r.route
-              ? `${r.route} ${Number(r.cadHrs).toFixed(1)}h`
-              : (r.route || "—");
+              ? `${effRoute(r, s)} ${Number(r.cadHrs).toFixed(1)}h`
+              : (effRoute(r, s) || "—");
             return (
               <tr key={i} data-testid={`qt-row-${i}`}
                 onClick={() => selectRow(i)}
@@ -458,7 +472,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                   {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
                 </td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
-                <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: routeColor(r.route), fontWeight: 600 }}>
+                <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: routeColor(effRoute(r, s)), fontWeight: 600 }}>
                   {cadLabel}
                 </td>
                 <td style={{ padding: "4px 4px", textAlign: "center" }}
@@ -1127,6 +1141,8 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
 }
 
 function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggleRowExclude, freightDisplayMode }) {
+  const { active } = useQuote();
+  const s = active?.state || {};
   const rows = comp.rows || [];
   // Sub-table column set matches the user's requested legacy order:
   // Act, Qty, Sell/Ea, GM%, GM$, Total, $/MSF, Cost/MSF, Freight, Sheet Size, #Out, Route
@@ -1171,8 +1187,8 @@ function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggle
             const excl = isRowExcluded(comp.itemId, r.slotIdx);
             const isSelRow = i === selRowIdx;
             const cadLabel = Number(r.cadHrs) > 0 && r.route
-              ? `${r.route} ${Number(r.cadHrs).toFixed(1)}h`
-              : (r.route || "—");
+              ? `${effRoute(r)} ${Number(r.cadHrs).toFixed(1)}h`
+              : (effRoute(r) || "—");
             const cellBase = { padding: "3px 6px" };
             return (
               <tr key={i} data-testid={`qt-comp-${comp.itemIndex}-row-${i}`}
@@ -1229,7 +1245,7 @@ function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggle
                   {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
                 </td>
                 <td style={{ ...cellBase, textAlign: "right", fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
-                <td style={{ ...cellBase, textAlign: "right", color: routeColor(r.route), fontWeight: 600 }}>{cadLabel}</td>
+                <td style={{ ...cellBase, textAlign: "right", color: routeColor(effRoute(r, s)), fontWeight: 600 }}>{cadLabel}</td>
               </tr>
             );
           })}
