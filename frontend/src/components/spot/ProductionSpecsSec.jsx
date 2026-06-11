@@ -8,7 +8,10 @@ import { PRINT_MODES, DIFFICULTY, STRIP_COMP, GLUE_COMP } from "../../lib/defaul
 export default function ProductionSpecsSec({ result }) {
   const { active, sec, toggleSec, setField, setManyFields } = useQuote();
   const s = active?.state || {};
-  const route = result?.route;
+  const rawRoute = result?.route;
+  // Legacy parity (spot_r1_5.jsx L5876, L4149): when engine returns
+  // route="Saber + D/C" but Saber is OFF, the badge displays "CAD" instead.
+  const route = (rawRoute === "Saber + D/C" && s.saber !== "Yes") ? "CAD" : rawRoute;
   const ovr = s.routeOverride;
   const hasPrint = s.printReq === "Yes";
 
