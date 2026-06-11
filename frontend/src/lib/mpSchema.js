@@ -52,21 +52,26 @@ export const ITEM_LEVEL_KEYS = Object.freeze(
 );
 
 /** Snapshot the item-level slice of `state` — used when user switches active BOM item.
- *  Always includes `custIdent` (item-level per legacy spot_r1_5.jsx L2675-2676) even
- *  if the schema-driven ITEM_LEVEL_KEYS list misses it during module bootstrap. */
+ *  Always includes `custIdent` + `miscCharges` (item-level per legacy spot_r1_5.jsx
+ *  L2675-2683) even if the schema-driven ITEM_LEVEL_KEYS list misses them during
+ *  module bootstrap. */
 export function gatherItemState(state) {
   const out = {};
   for (const k of ITEM_LEVEL_KEYS) out[k] = state[k];
   out.custIdent = state.custIdent || "";
+  // Defensive: copy the array (don't share refs across items), use fresh array
+  // when state has no value yet.
+  out.miscCharges = Array.isArray(state.miscCharges) ? [...state.miscCharges] : [];
   return out;
 }
 
 /** Build a blank item-level state (reset to DEFAULT_STATE defaults for item-level keys only).
- *  Always seeds `custIdent` to "" (item-level per legacy parity). */
+ *  Always seeds `custIdent`/`miscCharges` to a fresh value (item-level per legacy parity). */
 export function freshItemState(overrides = {}) {
   const out = {};
   for (const k of ITEM_LEVEL_KEYS) out[k] = DEFAULT_STATE[k];
   out.custIdent = "";
+  out.miscCharges = [];  // Fresh array — never share refs with DEFAULT_STATE
   return { ...out, ...overrides };
 }
 
@@ -86,13 +91,15 @@ export function makeBomItem(opts = {}) {
 /** Apply an item's saved state into the top-level state.
  *  Reset-first semantics: item-level keys are first set to DEFAULT_STATE values
  *  so leftover fields from the previous active item don't leak.
- *  Always clears + applies `custIdent` (item-level per legacy parity). */
+ *  Always clears + applies `custIdent`/`miscCharges` (item-level per legacy parity). */
 export function applyItemStateTo(currentState, itemState) {
   const cleared = {};
   for (const k of ITEM_LEVEL_KEYS) cleared[k] = DEFAULT_STATE[k];
   cleared.custIdent = "";  // Explicit safety net
+  cleared.miscCharges = [];  // Fresh empty array — don't leak previous item's misc charges
   const it = itemState || {};
-  // Ensure custIdent from itemState (or default "") always lands at top level.
   const finalCust = ("custIdent" in it) ? it.custIdent : "";
-  return { ...currentState, ...cleared, ...it, custIdent: finalCust };
+  // miscCharges: deep-copy the array so subsequent mutations don't bleed across items
+  const finalMisc = Array.isArray(it.miscCharges) ? [...it.miscCharges] : [];
+  return { ...currentState, ...cleared, ...it, custIdent: finalCust, miscCharges: finalMisc };
 }
