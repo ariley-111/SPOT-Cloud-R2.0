@@ -781,10 +781,12 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         );
       })()}
 
-      {/* Die — only when route requires it (Crest/Bobst), per legacy L6055.
-          For CAD / Saber+D/C, users add a misc charge labeled "Die" via + Charge. */}
-      {anyDieRoute && (
-        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+      {/* Die — visible when (a) the route requires it (Crest/Bobst per legacy
+          L6055), OR (b) the active component already has a die cost / treatment
+          set, so the user can ALWAYS see/edit/delete an existing $ value
+          (legacy hides it but loses access — D-130). */}
+      {(anyDieRoute || s.dieTreatment !== "None" || Number(s.cuttingDieCost || 0) > 0) && (
+        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }} data-testid="one-time-die-row">
           <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Die</span>
           <Tile label="None"  active={s.dieTreatment === "None"}          onClick={() => setField("dieTreatment", "None")} small data-testid="tile-die-none" />
           <Tile label="Line"  active={s.dieTreatment === "Separate Line"} onClick={() => setField("dieTreatment", "Separate Line")} small data-testid="tile-die-line" />
