@@ -119,13 +119,12 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
 
       {/* D-070 Route fallback warning (legacy spot_r1_5.jsx L811-814):
           surfaces "Too many CAD hours and no Crest/Bobst route viable —
-          falling back to Saber + die cut" as an orange banner above the table. */}
-      {(() => {
-        const warnings = useComponentLayout
-          ? Array.from(new Set((componentPricing || [])
-              .flatMap(c => (c.rows || []).map(r => r.routeWarning))
-              .filter(Boolean)))
-          : Array.from(new Set((rows || []).map(r => r.routeWarning).filter(Boolean)));
+          falling back to Saber + die cut" as an orange banner.
+          • Non-MP / Matched-Set: single global banner above the table.
+          • MP-Individual: per-component banner attached to the affected
+            component's card (rendered inside ComponentLayout). */}
+      {!useComponentLayout && (() => {
+        const warnings = Array.from(new Set((rows || []).map(r => r.routeWarning).filter(Boolean)));
         if (!warnings.length) return null;
         return warnings.map((msg, i) => (
           <div key={i} data-testid={`qt-route-warning-${i}`}
@@ -927,6 +926,26 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
                 )}
               </div>
             </div>
+
+            {/* D-070 per-component route fallback warning — only shows for the
+                component(s) whose rows carry the warning, attributed by name. */}
+            {(() => {
+              const compWarnings = Array.from(new Set(
+                compRows.map(r => r.routeWarning).filter(Boolean)
+              ));
+              if (!compWarnings.length) return null;
+              return compWarnings.map((msg, i) => (
+                <div key={`w-${i}`} data-testid={`qt-comp-${c.itemIndex}-route-warning-${i}`}
+                  style={{
+                    margin: "0 10px 8px",
+                    padding: "5px 9px", borderRadius: 3,
+                    background: "#f59e0b18", border: "1px solid #f59e0b44",
+                    fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                  }}>
+                  ⚠ {msg}
+                </div>
+              ));
+            })()}
 
             {open && (
               <ComponentSubTable
