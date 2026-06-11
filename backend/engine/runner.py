@@ -74,6 +74,26 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
         else:
             freight_cost = json.get("freightCost", "0")
 
+    # ─── Auto-Die (legacy spot_r1_5.jsx L3866-3883 parity) ─────────────────
+    # When the resolved route is Crest or Bobst, legacy auto-fills the die
+    # cost ($1200 Crest / $1800 Bobst) if the estimator didn't supply one.
+    # We do this in the engine (not the React useEffect) so multi-part quotes
+    # get auto-die for every component — not just the active tab.
+    resolved_route = route_result.get("route") or ""
+    any_die_route = resolved_route in ("Crest", "Bobst")
+    die_cost_in = pn(json.get("cuttingDieCost", "0"))
+    die_treat_in = json.get("dieTreatment", "None")
+    die_cost_eff: Any = json.get("cuttingDieCost", "0")
+    die_treat_eff = die_treat_in
+    die_auto_applied = False
+    if any_die_route and die_cost_in <= 0 and die_treat_in != "Amortize":
+        default_cost = asmp.get("bobstDieCost") if resolved_route == "Bobst" else asmp.get("crestDieCost")
+        if default_cost is None:
+            default_cost = 1800 if resolved_route == "Bobst" else 1200
+        die_cost_eff = str(default_cost)
+        die_treat_eff = "Separate Line"
+        die_auto_applied = True
+
     return {
         "printRequired": json.get("printReq") or json.get("printRequired") or "Yes",
         "printMode": json.get("printMode", "Satin"),
@@ -103,10 +123,11 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
         "freightCost": freight_cost,
         "freightTreatment": "None" if fob_origin else json.get("freightTreatment", "Separate Line"),
         "freightMarkup": json.get("freightMarkup", "0.15"),
-        "cuttingDieCost": json.get("cuttingDieCost", "0"),
-        "dieTreatment": json.get("dieTreatment", "None"),
+        "cuttingDieCost": die_cost_eff,
+        "dieTreatment": die_treat_eff,
         "dieMarkup": json.get("dieMarkup", "0.15"),
         "dieAmortMethod": json.get("dieAmortMethod", "Markup"),
+        "_dieAutoApplied": die_auto_applied,
         "miscCharges": json.get("miscCharges", []),
         "miscChargeMarkup": json.get("miscChargeMarkup", "0.15"),
         "prepressCost": prepress_cost,
@@ -411,6 +432,9 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "side2Cost": wf["side2Cost"], "printDirect": wf["printDirect"],
         "saberCost": wf["saberCost"], "cutterDirect": wf["cutterDirect"],
         "dieEmbedded": wf["dieEmbedded"], "dieLineCost": wf["dieLineCost"],
+        "dieAutoApplied": bool(prod_inputs.get("_dieAutoApplied")),
+        "dieBase": wf.get("dieBase") or 0,
+        "dieTreatmentEffective": prod_inputs.get("dieTreatment"),
         "stripCost": wf["stripCost"], "assemblyCost": wf["assemblyCost"],
         "freightLine": wf["freightLine"], "freightEmbed": wf["freightEmbed"],
         "prepressLineCost": wf["prepressLineCost"], "prepressEmbedded": wf["prepressEmbedded"],

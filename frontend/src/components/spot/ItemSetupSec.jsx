@@ -792,22 +792,21 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         );
       })()}
 
-      {/* Die — show on every route so estimators can override (legacy parity:
-           legacy never hid the die row by route, only auto-added defaults). */}
-      <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Die</span>
-        <Tile label="None"  active={s.dieTreatment === "None"}          onClick={() => setField("dieTreatment", "None")} small data-testid="tile-die-none" />
-        <Tile label="Line"  active={s.dieTreatment === "Separate Line"} onClick={() => setField("dieTreatment", "Separate Line")} small data-testid="tile-die-line" />
-        <Tile label="Amort" active={s.dieTreatment === "Amortize"}      onClick={() => setField("dieTreatment", "Amortize")} small data-testid="tile-die-amort" />
-        {s.dieTreatment !== "None" && (
-          <Num value={s.cuttingDieCost} onChange={(v) => setField("cuttingDieCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-die-cost" />
-        )}
-        {!anyDieRoute && s.dieTreatment !== "None" && (
-          <span style={{ fontSize: 10, color: "var(--spot-text3)", fontStyle: "italic", marginLeft: 4 }}>
-            (CAD route — die optional override)
-          </span>
-        )}
-      </div>
+      {/* Die — only show row when route requires steel die (legacy spot_r1_5.jsx L6055).
+           Backend auto-injects default die cost ($1200 Crest / $1800 Bobst) for ALL
+           components in Multi-Part quotes via runner.build_prod_inputs() so the
+           estimator never has to enter dies manually on Crest/Bobst routes. */}
+      {anyDieRoute && (
+        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Die</span>
+          <Tile label="None"  active={s.dieTreatment === "None"}          onClick={() => setField("dieTreatment", "None")} small data-testid="tile-die-none" />
+          <Tile label="Line"  active={s.dieTreatment === "Separate Line"} onClick={() => setField("dieTreatment", "Separate Line")} small data-testid="tile-die-line" />
+          <Tile label="Amort" active={s.dieTreatment === "Amortize"}      onClick={() => setField("dieTreatment", "Amortize")} small data-testid="tile-die-amort" />
+          {s.dieTreatment !== "None" && (
+            <Num value={s.cuttingDieCost} onChange={(v) => setField("cuttingDieCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-die-cost" />
+          )}
+        </div>
+      )}
 
       {/* Misc charges */}
       {(s.miscCharges || []).map((mc, mi) => (

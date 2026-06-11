@@ -459,16 +459,20 @@ async def calculate_multi_part(
                        if _safe_float(pc.get("dieLineCost")) > 0)
         # Aggregate die base (pre-markup) so the cost buildup can render
         # "$X + Y% markup" exactly like legacy in Multi-Part mode.
+        # Use engine result (which includes auto-applied dies from
+        # build_prod_inputs) so all components — not just the active tab —
+        # contribute correctly.
         die_base_total = 0.0
         die_markup_amts = []
-        for bi in (payload.get("bomItems") or []):
-            st = (bi.get("state") or {})
-            if st.get("dieTreatment") in ("Separate Line", "Amortize") and _safe_float(st.get("cuttingDieCost")) > 0:
-                die_base_total += _safe_float(st.get("cuttingDieCost"))
-                # Fall back to engine default (0.15) when state.dieMarkup unset on
-                # legacy drafts created before defaults.dieMarkup was added.
-                mk = st.get("dieMarkup")
-                die_markup_amts.append(_safe_float(mk) if mk not in (None, "") else 0.15)
+        bom_items_payload = payload.get("bomItems") or []
+        for idx, pc in enumerate(per_comp):
+            if _safe_float(pc.get("dieLineCost")) <= 0 and _safe_float(pc.get("dieEmbedded")) <= 0:
+                continue
+            die_base_total += _safe_float(pc.get("dieBase"))
+            # Markup rides with the item state — fall back to engine default.
+            st = (bom_items_payload[idx].get("state") if idx < len(bom_items_payload) else None) or {}
+            mk = st.get("dieMarkup")
+            die_markup_amts.append(_safe_float(mk) if mk not in (None, "") else 0.15)
         die_markup_avg = (sum(die_markup_amts) / len(die_markup_amts)) if die_markup_amts else 0.0
         line_prepress = sum(_safe_float(pc.get("prepressLineCost")) for pc in per_comp
                             if _safe_float(pc.get("prepressLineCost")) > 0)
@@ -660,6 +664,10 @@ async def calculate_multi_part(
                 "freightLine": float(r.get("freightLine") or 0),
                 "freightEmbed": float(r.get("freightEmbed") or 0),
                 "dieLineCost": float(r.get("dieLineCost") or 0),
+                "dieEmbedded": float(r.get("dieEmbedded") or 0),
+                "dieBase": float(r.get("dieBase") or 0),
+                "dieAutoApplied": bool(r.get("dieAutoApplied")),
+                "stripCost": float(r.get("stripCost") or 0),
                 "prepressLineCost": float(r.get("prepressLineCost") or 0),
                 "miscLineCost": float(r.get("miscLineCost") or 0),
                 "sellTotal": sell_total

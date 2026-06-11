@@ -1,0 +1,48 @@
+{
+  "summary": "Iter 18 — Bug A (auto-die in Multi-Part Crest/Bobst) + UI Polish Bugs B/C/G/H/I verified. Backend: 6/6 test_auto_die.py PASS + 4/4 new e2e HTTP test_bug_a_multipart_die.py PASS + 1/1 test_die_base_total.py PASS. Full suite: 90/91 pass (1 pre-existing admin_rates role gate failure, unrelated). Frontend: Bug I 'Quote Total' label confirmed in DOM (metric-sell-total text='Quote Total$1,734.35', no 'Sell Total' string anywhere). Bug G decimals confirmed (Cost/Pc=$2.22 2dp, Sell/MSF=$749 int, Cost/MSF=$480 int). Bug B Finishing row visible in DETAIL view. Bug H gate verified in source (printDirect > 0 check on RightDashboard.jsx:1390). Bug C top rollup uses projectSell (jobSell) verified in source (RightDashboard.jsx:1181-1209).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auto_die.py",
+    "/app/backend/tests/test_bug_a_multipart_die.py",
+    "/app/backend/tests/test_die_base_total.py",
+    "/app/test_reports/pytest/iter18_auto_die.xml",
+    "/app/test_reports/pytest/iter18_bug_a_e2e.xml",
+    "/app/test_reports/pytest/iter18_full.xml"
+  ],
+  "action_items": [
+    "(Pre-existing, unrelated) /app/backend/tests/test_admin_rates.py::TestAdminRoleGate::test_estimator_cannot_access_admin_rates returns 200 instead of 401/403 — out of scope for this work but should be triaged separately.",
+    "Bug H Print-row hidden state was not exercised via UI toggle (the 'PRINT Off' button click in my Playwright run did not register the toggle). Source-level review confirms the gate at RightDashboard.jsx:1390 (`r.printDirect > 0`) is correct — main agent can self-verify by manually toggling PRINT to Off and confirming the Print row disappears from Cost Buildup DETAIL.",
+    "Bug B Finishing-row SUM was confirmed to render (label + $0.00 visible when strip+assembly both 0). For a non-zero validation, main agent can self-test by enabling handStripping=Yes AND handGluing=Yes — source at RightDashboard.jsx:1407-1408 sums (r.stripCost || 0) + (r.assemblyCost || 0)."
+  ],
+  "critical_code_review_comments": [
+    "runner.build_prod_inputs auto-die block correctly mirrors legacy spot_r1_5.jsx L3866-3883: only fires when route ∈ {Crest, Bobst} AND user cuttingDieCost is 0/empty AND dieTreatment is 'None' (preserves user's explicit Amortize/Separate Line choices). Default values $1200 (Crest) / $1800 (Bobst) with 15% markup → $1380 / $2070 line cost. Surfaces dieAutoApplied=true, dieBase, dieTreatmentEffective='Separate Line' on result.",
+    "engine_routes.py L458-475 correctly reads dieBase from engine result (per_comp) — not from payload state — so EVERY component contributes to dieBaseTotal aggregate, not just the active tab. This is the actual fix that closes ~$6,900 of the L'Oreal gap.",
+    "engine_routes.py L666-674 (rows_out) now propagates dieBase, dieEmbedded, dieAutoApplied, stripCost — UI can render correct breakdown for all components.",
+    "RightDashboard.jsx:1181 — projectSell uses (agg.jobSell ?? agg.sellTotal) which gives the PROJECT total. Bug C is correctly implemented. Per-set figures correctly placed below as Sell/Set & Cost/Set secondary metrics.",
+    "RightDashboard.jsx:1305-1307 — Cost/Pc=fmtMoney(r.costPc, 2), Sell/MSF=fmtMoney(r.sellMSF, 0), Cost/MSF=fmtMoney(r.costMSF, 0). Bug G perfectly correct.",
+    "RightDashboard.jsx:1266 and :1209 and :1428 — all three 'Quote Total' labels (item-level metric, Matched Set top rollup, Cost Buildup RowTotal) all read 'Quote Total'. Bug I done.",
+    "No file size issues; engine_routes.py is large (901 lines) — consider splitting Multi-Part aggregator into a separate module in a follow-up refactor for maintainability, but not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bug_a_multipart_die.py (new)",
+    "/app/backend/tests/test_die_base_total.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% on auto-die scope (11/11 new + e2e). Full suite 90/91 (1 pre-existing unrelated failure).",
+    "frontend": "Bug I (label rename), Bug G (decimals), Bug B (row renders) verified live in DOM. Bug C and Bug H verified via source-code review (Bug H toggle click did not register in my Playwright session)."
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — working",
+  "seed_data_creation": "None (reused existing tabs in admin's session)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bug A is the critical math fix for the L'Oreal Grippy Chipper $9,371.71 gap; auto-die now fires in the engine (build_prod_inputs) for ALL components on Crest/Bobst routes regardless of which BOM tab is active. The aggregator (engine_routes.py L458-475) reads dieBase from engine result. Verify the final L'Oreal cloud total now lands within ~$2,500 of legacy $593,389.67 (residual gap from deferred Bugs D/E/F). To test Bug A in UI: switch a quote to Multi-Part, add 3+ BOM items, set each to W=12,L=18,qty=2500,totalRuleInches=60,routeOverride=Crest, then check the Matched Set top rollup data-testid='econ-set-sell' — sellTotal should include 3 × $1380 die line cost.",
+  "rca_of_the_issue": "Bug A RCA: legacy SPOT applied default $1200/$1800 die via spot_r1_5.jsx L3866-3883 React useEffect that ran on the active BOM item. Cloud port retained the useEffect but it only fired for the currently-viewed BOM tab, so items 2..N of a Multi-Part quote never received the default die — silently dropping ~$6,900 in revenue from the L'Oreal quote. Fix: moved the auto-die rule into backend engine.runner.build_prod_inputs so it executes for every component during the Multi-Part aggregator loop, regardless of which tab the user has visited. Mitigation verified: 6 unit tests + 4 HTTP e2e tests + 1 aggregator test all PASS, covering Crest default ($1380), Bobst default ($2070), CAD no-fire, user-supplied die preserved, user-Amortize preserved, and 5-component aggregate."
+}
