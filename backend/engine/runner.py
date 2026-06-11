@@ -151,6 +151,21 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     if not best:
         best = auto_select_sheet(uw, ul, board_spec, qty, asmp)
 
+    # ─── Legacy parity: pre-compute "flipWouldHelp" for the FE auto-flip gate ──
+    # Legacy spot_r1_5.jsx L3949-3953 calls autoSelectSheet(L, W, ...) inside
+    # the auto-flip useEffect and only flips when the flipped result is
+    # pricable OR (hasPrice AND stockMode). We surface the same boolean here
+    # so the frontend can mirror legacy 1:1 without a second engine round-trip.
+    flip_would_help = False
+    if uw > 0 and ul > 0:
+        flipped_sel = auto_select_sheet(ul, uw, board_spec, qty, asmp)
+        if flipped_sel:
+            fbc = flipped_sel.get("bc") or {}
+            flip_would_help = bool(
+                fbc.get("pricable")
+                or (fbc.get("hasPrice") and flipped_sel.get("stockMode"))
+            )
+
     # ─── Legacy parity (spot_r1_5.jsx) ──────────────────────────────────
     # The engine does NOT auto-flip corrugation internally. Legacy keeps the
     # user's (oneUpW, oneUpL) as the source of truth and lets the FRONTEND
@@ -244,6 +259,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
                     "buyMinActive": False,
                     "minSqFt": bc.get("minSqFt") or 25000,
                     "corrFlipped": corr_flipped,
+                    "flipWouldHelp": flip_would_help,
                 },
                 "belowMin": True,
                 "pricable": False,
@@ -343,6 +359,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             "routeAuto": auto_r["route"],
             "routeForced": routing.get("forced", False),
             "overrideActive": bool(override_active),
+            "flipWouldHelp": flip_would_help,
         },
         "oneUpW": eff_w, "oneUpL": eff_l, "qty": qty,
         "flute": board_spec["flute"], "boardGrade": board_spec["boardGrade"],

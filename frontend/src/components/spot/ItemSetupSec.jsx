@@ -102,60 +102,43 @@ export default function ItemSetupSec({ result }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anyDieRoute, anyBobst, isFulfillment, route, itemKey]);
 
-  // ─── Auto-flip corrugation (legacy spot_r1_5.jsx L3941-3957) ──────────
-  // Engine reports `_pipeline.exceedsSheetLibrary` when the current oneUpW/L
-  // doesn't fit any approved sheet (forced to CUSTOM-OVERSIZE) — legacy uses
-  // this as the trigger to TRY a flipped orientation. We swap state and let
-  // the next engine call validate; if the swap doesn't help, the user can
-  // manually un-flip via the Flip Corr button.
-  // Guards:
-  //  - autoFlipRef remembers the W/L pair we last flipped FROM, so a manual
-  //    un-flip isn't immediately reversed.
-  //  - substrateRef skips the very next auto-flip after the user changes
-  //    substrate (boardGrade/flute/liners/medium). A substrate switch is an
-  //    explicit user decision; we MUST NOT flip their corrugate as a side
-  //    effect (legacy parity intent — auto-flip is a W/L-driven action).
-  const autoFlipRef = useRef({ flippedAtW: null, flippedAtL: null });
-  const substrateRef = useRef({
-    sig: `${s.boardGrade}|${s.flute}|${s.outsideLiner}|${s.insideLiner}|${s.medium}`,
-    suppressUntilNextWL: false,
-  });
-  // Detect substrate change → arm the suppress flag (one-shot).
+  // ─── Auto-flip corrugation — 1:1 LEGACY PARITY ────────────────────────
+  // Legacy spot_r1_5.jsx L3941-3957:
+  //   useEffect(() => {
+  //     if (corrFlipped) return;
+  //     const w = pn(oneUpW), l = pn(oneUpL);
+  //     if (w <= 0 || l <= 0) return;
+  //     const hasIssue = sel && (sel.exceedsSheetLibrary
+  //                              || (sel.bc && !sel.bc.pricable && sel.bc.hasPrice && !sel.bc.meetMin));
+  //     if (!hasIssue) return;
+  //     const flippedSel = autoSelectSheet(l, w, boardSpec, qtys[0], asmp);
+  //     if (!flippedSel) return;
+  //     const flippedBetter = flippedSel.bc && (flippedSel.bc.pricable
+  //                          || (flippedSel.bc.hasPrice && flippedSel.stockMode));
+  //     if (flippedBetter) { swap W/L; setCorrFlipped(true); toast }
+  //   }, [sel?.exceedsSheetLibrary, sel?.bc?.pricable, sel?.bc?.meetMin, corrFlipped]);
+  //
+  // The backend pre-computes `flipWouldHelp` via the same `auto_select_sheet`
+  // call so we don't need a second engine round-trip in JS. No extra refs,
+  // no substrate suppress, no manual-un-flip memory — strict 1:1.
   useEffect(() => {
-    const sig = `${s.boardGrade}|${s.flute}|${s.outsideLiner}|${s.insideLiner}|${s.medium}`;
-    if (sig !== substrateRef.current.sig) {
-      substrateRef.current = { sig, suppressUntilNextWL: true };
-    }
-  }, [s.boardGrade, s.flute, s.outsideLiner, s.insideLiner, s.medium]);
-  // Clear the suppress flag once the user types a new W or L (substrate
-  // change is "consumed"; subsequent W/L edits resume normal auto-flip).
-  useEffect(() => {
-    if (substrateRef.current.suppressUntilNextWL) {
-      substrateRef.current.suppressUntilNextWL = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.oneUpW, s.oneUpL]);
-
-  useEffect(() => {
-    if (corrFlipped) return;  // already flipped — don't override
-    if (substrateRef.current.suppressUntilNextWL) return;  // substrate just changed — respect user choice
+    if (corrFlipped) return;
+    const w = String(s.oneUpW || "");
+    const l = String(s.oneUpL || "");
+    if (!w || !l || w === "0" || l === "0") return;
     const _buyMinActive = !!r?.buyMinActive;
     const hasIssue = !!(r && (
       r._pipeline?.exceedsSheetLibrary ||
       (r.boardHasPrice && !r.boardMeetMin && !_buyMinActive)
     ));
     if (!hasIssue) return;
-    const w = String(s.oneUpW || "");
-    const l = String(s.oneUpL || "");
-    if (!w || !l || w === "0" || l === "0") return;
-    // If state.W/L matches what we LAST auto-flipped FROM, the user just
-    // manually un-flipped — respect that decision and don't re-flip.
-    if (autoFlipRef.current.flippedAtW === w && autoFlipRef.current.flippedAtL === l) return;
-    autoFlipRef.current = { flippedAtW: w, flippedAtL: l };
+    // Legacy `flippedBetter` gate — only flip if the flipped orientation
+    // actually resolves the issue (pricable, or stock-sheet-priced).
+    if (!r?._pipeline?.flipWouldHelp) return;
     setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: true });
     pushToast && pushToast("Corr direction auto-flipped — piece fits stock sheets. Verify with customer.", "ok");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, r?.buyMinActive, corrFlipped]);
+  }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, r?._pipeline?.flipWouldHelp, corrFlipped]);
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}

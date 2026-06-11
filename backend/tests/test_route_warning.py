@@ -120,3 +120,26 @@ def test_corr_flipped_pipeline_surfacing(client):
     # The exact flip behaviour depends on the sheet library; at least the field must be present and bool.
     assert "corrFlipped" in pipe, "corrFlipped key missing in _pipeline"
     assert isinstance(pipe["corrFlipped"], bool)
+
+
+
+def test_flip_would_help_surfaced(client):
+    """Legacy parity (spot_r1_5.jsx L3949-3953): the engine must surface a
+    `_pipeline.flipWouldHelp` boolean so the frontend can mirror legacy's
+    `flippedBetter` gate without a second engine round-trip."""
+    payload = {
+        "oneUpW": 5, "oneUpL": 7,
+        "qtys": [500, 0, 0, 0, 0],
+        "flute": "B", "boardGrade": "200",
+        "outsideLiner": "42# Kemi-Lite", "insideLiner": "42# Kemi-Lite", "medium": "None",
+        "printReq": "Off", "productMats": "RSC",
+        "prepressTreatment": "Auto", "pricingBasis": "Gross Margin %",
+        "gmByTier": {"10-24": 0.25},
+    }
+    r = client.post(f"{BASE_URL}/api/engine/calculate", json=payload, timeout=60)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    row = data if "_pipeline" in data else (data.get("results") or [{}])[0]
+    pipe = row.get("_pipeline") or {}
+    assert "flipWouldHelp" in pipe, f"flipWouldHelp key missing in _pipeline: {pipe}"
+    assert isinstance(pipe["flipWouldHelp"], bool)
