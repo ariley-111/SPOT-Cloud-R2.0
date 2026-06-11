@@ -1397,26 +1397,21 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
           value={fmtMoney(r.sellPc, 2)} />
 
         {(() => {
-          // In MP mode, the One-Time Line Items section should reflect the
-          // JOB-LEVEL totals (matches Quote Table "Order Total"), not the
-          // active component's slice. r.freightLine on a component is its
-          // share; the aggregate row carries the full job freight.
+          // Cost Buildup is COMPONENT-SCOPED: every line shows the ACTIVE
+          // component's costs, not the job total. For freight in MP-Per-Job
+          // mode that means r.freightLine = this component's allocated share
+          // (e.g. $58.48 of a $70 LocalDelivery), NOT the full $70.
           const agg = isMultiPart ? (aggregate || {}) : null;
-          const freight = isMultiPart ? (agg.freightLine || 0) : (r.freightLine || 0);
-          const die = isMultiPart ? (agg.dieLineCost || 0) : (r.dieLineCost || 0);
-          const prepress = isMultiPart ? (agg.prepressLineCost || 0) : (r.prepressLineCost || 0);
-          const misc = isMultiPart ? (agg.miscLineCost || 0) : (r.miscLineCost || 0);
-          // Job-level item sell = sum of all components' sell at this qty.
-          const itemsSell = isMultiPart
-            ? (agg.itemsSell != null ? agg.itemsSell : (agg.jobSell || 0) - freight - die - prepress - misc)
-            : r.itemSell;
-          const grandTotal = isMultiPart
-            ? (agg.sellTotal || itemsSell + freight + die + prepress + misc)
-            : r.sellTotal;
+          const freight = r.freightLine || 0;
+          const die = r.dieLineCost || 0;
+          const prepress = r.prepressLineCost || 0;
+          const misc = r.miscLineCost || 0;
+          const itemsSell = r.itemSell || 0;
+          const grandTotal = r.sellTotal || (itemsSell + freight + die + prepress + misc);
           const hasAnyLine = freight > 0 || die > 0 || prepress > 0 || misc > 0;
           if (!hasAnyLine) return null;
-          const footerLabel = isMultiPart ? "Order Total" : "Quote Total";
-          const itemsLabel = isMultiPart ? "Items (all components)" : "Items";
+          const footerLabel = "Quote Total";
+          const itemsLabel = "Items";
           return (
             <>
               <SubHead label="One-Time Line Items" color="#3b82f6" />
@@ -1432,11 +1427,20 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 const freightLabel = isLocal
                   ? `Freight — Local Delivery${zone ? ` · ${zone}` : ""}`
                   : "Freight";
-                // For MP we don't have a single base+markup (each component has its share),
-                // so use the user-entered job-level base cost + markup if set on top-level state.
-                const baseCost = Number(s?.freightCost || r.freightCost || 0);
-                const markupPct = Number(s?.freightMarkup || r.freightMarkup || 0);
-                const showBreakdown = baseCost > 0 && !isLocal;
+                // Component-share breakdown: "$<component freight> + <markup>% markup".
+                // In MP-Per-Job, r.freightLine already includes markup, so the
+                // pre-markup base = r.freightLine / (1+markup). For Local
+                // Delivery (markup=0) base == r.freightLine.
+                const isMpPerJob = isMultiPart && s?.freightScope === "Per Job";
+                const markupPct = isLocal
+                  ? 0
+                  : (isMpPerJob
+                      ? Number(s?.freightMarkup || 0)
+                      : Number(s?.freightMarkup || r.freightMarkup || 0));
+                const baseCost = isMpPerJob
+                  ? (markupPct > 0 ? freight / (1 + markupPct) : freight)
+                  : Number(s?.freightCost || r.freightCost || 0);
+                const showBreakdown = baseCost > 0;
                 return (
                   <Row label={
                     <span style={{ fontStyle: "italic" }}>
@@ -1456,15 +1460,9 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 );
               })()}
               {die > 0 && (() => {
-                // In MP mode, use aggregate die base from backend response (sums
-                // each component's cuttingDieCost). Markup is the avg across
-                // components (typically all use the same rate).
-                const baseCost = isMultiPart
-                  ? Number(agg.dieBaseTotal || 0)
-                  : Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
-                const markupPct = isMultiPart
-                  ? Number(agg.dieMarkupAvg || 0)
-                  : Number(s?.dieMarkup || r.dieMarkup || 0);
+                // Component-scoped: use the active component's die cost & markup.
+                const baseCost = Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
+                const markupPct = Number(s?.dieMarkup || r.dieMarkup || 0);
                 const showBreakdown = baseCost > 0 && markupPct > 0;
                 return (
                   <Row label={
@@ -1498,9 +1496,8 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
               })()}
               {/* Named misc items — one row per user-typed name, with markup */}
               {(() => {
-                const miscItems = isMultiPart
-                  ? (agg.miscLineItems || [])
-                  : (r.miscLineItems || []);
+                // Component-scoped: show only the active component's misc items.
+                const miscItems = r.miscLineItems || [];
                 const miscMarkup = Number(s?.miscMarkup || r.miscMarkup || 0);
                 const miscCharges = s?.miscCharges || [];
                 return miscItems.filter((li) => (li.amt || 0) > 0).map((li, mi) => {
