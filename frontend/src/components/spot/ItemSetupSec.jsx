@@ -455,11 +455,11 @@ function BoardStatusBar({ s, r, setField }) {
             ⛔ Too large for any machine — cannot manufacture
           </div>
         )}
-        {exceedsSheetLib && !machineCapacityFail && (
-          <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 2, paddingLeft: 58 }}>
-            ⚠ Larger than any stock sheet — custom board order needed
-          </div>
-        )}
+        {/* "Larger than any stock sheet" warning removed per user request
+            (2026-02-11) — the ORDER badge on the Board row already conveys
+            "not stocked / custom order needed" and the yellow warning was
+            redundant + misleading when the issue was a missing sheet
+            library entry, not an oversize blank. */}
 
         {/* Decision-needed UI */}
         {needsDecision && (
