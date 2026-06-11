@@ -238,11 +238,14 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
 
 
 def allocate_job_cost(items: List[Dict[str, Any]], total_cost: float, method: str) -> List[float]:
-    """Allocate job-level cost across MFG items (port of L639-659).
+    """Allocate job-level cost across MFG items.
 
-    Legacy parity: legacy explicitly handles "Equal"; anything else falls back
-    to "By MSF" math. This means legacy's "By Weight" UI option silently uses
-    MSF allocation. Cloud preserves that exact behavior so pricing matches.
+    Methods:
+      - "Equal": evenly split across MFG items.
+      - "By Weight": proportional to each item's shipWeight (D-140 fix —
+        previously fell through to MSF; now uses real weight per user's
+        explicit freight-allocation choice).
+      - default / "By MSF": proportional to each item's oMSF (legacy default).
     """
     if not items or len(items) == 0 or total_cost <= 0:
         return [0] * len(items) if items else []
@@ -254,8 +257,18 @@ def allocate_job_cost(items: List[Dict[str, Any]], total_cost: float, method: st
         share = total_cost / len(mfg_idxs)
         for i in mfg_idxs:
             alloc[i] = share
+    elif method == "By Weight":
+        total_w = sum(items[i].get("shipWeight", 0) or 0 for i in mfg_idxs)
+        if total_w <= 0:
+            # Fallback to equal split if no weight data
+            share = total_cost / len(mfg_idxs)
+            for i in mfg_idxs:
+                alloc[i] = share
+        else:
+            for i in mfg_idxs:
+                alloc[i] = total_cost * (items[i].get("shipWeight", 0) or 0) / total_w
     else:
-        # Both "By MSF" and "By Weight" hit this branch (legacy parity).
+        # "By MSF" (default / legacy)
         total_msf = sum(items[i].get("oMSF", 0) for i in mfg_idxs)
         if total_msf <= 0:
             share = total_cost / len(mfg_idxs)

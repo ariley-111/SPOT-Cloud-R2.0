@@ -381,7 +381,12 @@ async def calculate_multi_part(
         if freight_scope == "Per Job":
             job_freight = _safe_float(payload.get("jobFreightCost"))
             method = payload.get("freightAllocMethod") or "By MSF"
-            items_for_alloc = [{"type": pc.get("type"), "oMSF": pc.get("oMSF", 0)} for pc in per_comp]
+            # Pass shipWeight so "By Weight" allocation works correctly.
+            items_for_alloc = [{
+                "type": pc.get("type"),
+                "oMSF": pc.get("oMSF", 0),
+                "shipWeight": pc.get("shipWeight", 0),
+            } for pc in per_comp]
             from engine.pricing import allocate_job_cost as _alloc
             alloc = _alloc(items_for_alloc, job_freight, method)
             for i, pc in enumerate(per_comp):
@@ -605,6 +610,7 @@ async def calculate_multi_part(
                 "sheetW": r.get("sheetW") or "",
                 "sheetL": r.get("sheetL") or "",
                 "pcsPerSheet": r.get("pcsPerSheet") or 0,
+                "shipWeight": float(r.get("shipWeight") or 0),  # for By-Weight job freight allocation
                 "route": r.get("route") or "",
                 "routeWarning": r.get("routeWarning"),  # surface "Too many CAD hours..." per-row
                 "cadHrs": cad_hrs,
@@ -650,14 +656,17 @@ async def calculate_multi_part(
     job_freight_by_slot = payload.get("jobFreightBySlot") or {}
     job_freight_flat = _safe_float(payload.get("jobFreightCost"))
     job_prepress_flat = _safe_float(payload.get("jobPrepressCost"))
-    freight_markup = _safe_float(payload.get("freightMarkup") or 0.15)
+    freight_markup_raw = payload.get("freightMarkup")
+    # Don't `or 0.15` here — that turns explicit "0" / 0 into 15%! Honor any
+    # markup the user actually set, only falling back when truly unset.
+    freight_markup = _safe_float(freight_markup_raw if freight_markup_raw not in (None, "") else 0.15)
     job_freight_treat = payload.get("jobFreightTreatment") or "Separate Line"
     job_prep_treat = payload.get("jobPrepressTreatment") or "Separate Line"
 
     def _alloc_job(items_for_slot, total_cost, method):
         """Port of legacy allocateJobCost. items_for_slot is a list of
-        {idx, type, oMSF} pairs aligned with component_pricing order. Returns
-        a list of $ allocations (same length). Purchased/Fulfillment get 0."""
+        {idx, type, oMSF, shipWeight} pairs aligned with component_pricing order.
+        Returns a list of $ allocations (same length). Purchased/Fulfillment get 0."""
         n = len(items_for_slot)
         out = [0.0] * n
         if n == 0 or total_cost <= 0:
@@ -669,6 +678,16 @@ async def calculate_multi_part(
             share = total_cost / len(mfg_idxs)
             for i in mfg_idxs:
                 out[i] = share
+        elif method == "By Weight":
+            # D-140: TRUE By Weight allocation using each component's shipWeight.
+            total_w = sum((items_for_slot[i].get("shipWeight") or 0) for i in mfg_idxs)
+            if total_w <= 0:
+                share = total_cost / len(mfg_idxs)
+                for i in mfg_idxs:
+                    out[i] = share
+            else:
+                for i in mfg_idxs:
+                    out[i] = total_cost * ((items_for_slot[i].get("shipWeight") or 0) / total_w)
         else:
             # By MSF — proportional. Fallback to Equal if no MSF data.
             total_msf = sum(items_for_slot[i]["oMSF"] for i in mfg_idxs)
@@ -693,12 +712,14 @@ async def calculate_multi_part(
         is_individual = pricing_mode == "Individual"
 
         if is_individual:
-            # Compute total oMSF per component (sum of its rows' oMSFs)
+            # Compute total oMSF + shipWeight per component (sum across rows)
             items_for_alloc = []
             for c in component_pricing:
                 tot_msf = sum(float(r.get("oMSF") or 0) for r in c["rows"])
+                # shipWeight is whole-job per component; take first row's value.
+                ship_w = next((float(r.get("shipWeight") or 0) for r in c["rows"] if r.get("shipWeight")), 0)
                 items_for_alloc.append({
-                    "type": c["type"], "oMSF": tot_msf, "rows": c["rows"],
+                    "type": c["type"], "oMSF": tot_msf, "shipWeight": ship_w, "rows": c["rows"],
                 })
             # Per-Job freight allocation
             if freight_scope == "Per Job":
