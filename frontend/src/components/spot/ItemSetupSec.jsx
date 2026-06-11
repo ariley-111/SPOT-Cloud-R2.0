@@ -108,10 +108,37 @@ export default function ItemSetupSec({ result }) {
   // this as the trigger to TRY a flipped orientation. We swap state and let
   // the next engine call validate; if the swap doesn't help, the user can
   // manually un-flip via the Flip Corr button.
-  // Guards: ref-tracked W/L pair so manual un-flip doesn't immediately re-flip.
+  // Guards:
+  //  - autoFlipRef remembers the W/L pair we last flipped FROM, so a manual
+  //    un-flip isn't immediately reversed.
+  //  - substrateRef skips the very next auto-flip after the user changes
+  //    substrate (boardGrade/flute/liners/medium). A substrate switch is an
+  //    explicit user decision; we MUST NOT flip their corrugate as a side
+  //    effect (legacy parity intent — auto-flip is a W/L-driven action).
   const autoFlipRef = useRef({ flippedAtW: null, flippedAtL: null });
+  const substrateRef = useRef({
+    sig: `${s.boardGrade}|${s.flute}|${s.outsideLiner}|${s.insideLiner}|${s.medium}`,
+    suppressUntilNextWL: false,
+  });
+  // Detect substrate change → arm the suppress flag (one-shot).
+  useEffect(() => {
+    const sig = `${s.boardGrade}|${s.flute}|${s.outsideLiner}|${s.insideLiner}|${s.medium}`;
+    if (sig !== substrateRef.current.sig) {
+      substrateRef.current = { sig, suppressUntilNextWL: true };
+    }
+  }, [s.boardGrade, s.flute, s.outsideLiner, s.insideLiner, s.medium]);
+  // Clear the suppress flag once the user types a new W or L (substrate
+  // change is "consumed"; subsequent W/L edits resume normal auto-flip).
+  useEffect(() => {
+    if (substrateRef.current.suppressUntilNextWL) {
+      substrateRef.current.suppressUntilNextWL = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.oneUpW, s.oneUpL]);
+
   useEffect(() => {
     if (corrFlipped) return;  // already flipped — don't override
+    if (substrateRef.current.suppressUntilNextWL) return;  // substrate just changed — respect user choice
     const _buyMinActive = !!r?.buyMinActive;
     const hasIssue = !!(r && (
       r._pipeline?.exceedsSheetLibrary ||
@@ -129,12 +156,6 @@ export default function ItemSetupSec({ result }) {
     pushToast && pushToast("Corr direction auto-flipped — piece fits stock sheets. Verify with customer.", "ok");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, r?.buyMinActive, corrFlipped]);
-
-  // Reset the auto-flip memory when board spec changes (so a new pair of W/L
-  // can be auto-flipped again).
-  useEffect(() => {
-    autoFlipRef.current = { flippedAtW: null, flippedAtL: null };
-  }, [s.boardGrade, s.flute, s.outsideLiner, s.insideLiner, s.medium]);
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
