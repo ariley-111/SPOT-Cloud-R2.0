@@ -7,10 +7,47 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from engine import run_estimate, CALIBRATION_BASELINE
 from engine.routing import auto_select_sheet, auto_route, compare_routes
 from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, APPROVED_SHEETS, get_grade_fallback, ENGINE
+from engine.core import BOBST_FLUTES, BOBST_MIN_W, BOBST_MIN_L, BOBST_MAX_W, BOBST_MAX_L
+from engine.core import CREST_MAX_W, CREST_MAX_L, MULLEN_UPGRADE, FLUTE_CALIPERS
 from models.schemas import User
 from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api/engine", tags=["engine"])
+
+
+@router.get("/manifest")
+async def manifest(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return the FULL Board Engine reference data so the Board Engine
+    viewer panel can render the actual rates/rules/sheets — not a stale
+    hardcoded summary. Legacy parity: matches the data legacy renders at
+    spot_r1_5.jsx L6606-6758 from its ENGINE constant."""
+    # Aggregate sheet library by spec for the bottom "Approved Sheets" row.
+    from collections import Counter
+    sheet_counts = Counter((sh["g"], sh["f"]) for sh in APPROVED_SHEETS)
+    approved_specs = [
+        {"grade": g, "flute": f, "count": n}
+        for (g, f), n in sorted(sheet_counts.items())
+    ]
+    return {
+        "msf_tiers": ENGINE["msf_tiers"],
+        "base_matrix": ENGINE["base_matrix"],
+        "liner_upgrades": ENGINE.get("liner_upgrades") or {},
+        "medium_upgrades": ENGINE.get("medium_upgrades") or {},
+        "flute_rules": ENGINE.get("flute_rules") or {},
+        "dimensional_adders": ENGINE.get("dimensional_adders") or {},
+        "fixed_charges": ENGINE.get("fixed_charges") or {},
+        "org_limits": ENGINE.get("org_limits") or {},
+        "approved_sheets_total": len(APPROVED_SHEETS),
+        "approved_specs": approved_specs,
+        "constants": {
+            "BOBST_FLUTES": BOBST_FLUTES,
+            "BOBST_MIN_W": BOBST_MIN_W, "BOBST_MIN_L": BOBST_MIN_L,
+            "BOBST_MAX_W": BOBST_MAX_W, "BOBST_MAX_L": BOBST_MAX_L,
+            "CREST_MAX_W": CREST_MAX_W, "CREST_MAX_L": CREST_MAX_L,
+            "MULLEN_UPGRADE": MULLEN_UPGRADE,
+            "FLUTE_CALIPERS": FLUTE_CALIPERS,
+        },
+    }
 
 
 @router.post("/calculate")
