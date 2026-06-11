@@ -447,7 +447,12 @@ function FreightPanel({ s }) {
       // (within our zones) → 0% markup. Anything else → 15% legacy default.
       const activeScenarioCarrier = (perJobQuotes[selSlot] || perJobQuotes[0] || {}).carrier
         || (perItemQuotes[0] || {}).carrier || "";
-      const activeIsLocal = activeScenarioCarrier === "SPC Local Delivery";
+      // Robust local-delivery detection: ANY of these signals counts as Local
+      // (legacy parity + bug-prevention). Previously only checked carrier name,
+      // which missed cases where the scenario didn't have a carrier set yet.
+      const activeIsLocal = s.quoteFOB === "LocalDelivery"
+        || activeScenarioCarrier === "SPC Local Delivery"
+        || activeScenarioCarrier === "Local Delivery";
       const patch = {
         bomItems: nextBom,
         quoteFOB: "Destination",
@@ -535,7 +540,11 @@ function FreightPanel({ s }) {
     // Auto-set markup based on currently-selected scenario's carrier
     const activeCarrier = (cache.perJobQuotes?.[selSlot] || cache.perJobQuotes?.[0] || {}).carrier
       || (cache.perItemQuotes?.[0] || {}).carrier || "";
-    patch.freightMarkup = activeCarrier === "SPC Local Delivery" ? "0" : "0.15";
+    // Robust local-delivery detection (see line ~452 explanation).
+    const _isLocal = s.quoteFOB === "LocalDelivery"
+      || activeCarrier === "SPC Local Delivery"
+      || activeCarrier === "Local Delivery";
+    patch.freightMarkup = _isLocal ? "0" : "0.15";
     const activeBi = nextBom[activeIdx];
     if (activeBi?.state) patch.freightCost = activeBi.state.freightCost;
     setManyFields(patch);
@@ -702,7 +711,8 @@ function FreightPanel({ s }) {
               <>
               {(() => {
                 const raw = Number(s.jobFreightCost) || 0;
-                const mk  = Number(s.freightMarkup ?? 0.15) || 0;
+                const _isLocal = s.quoteFOB === "LocalDelivery";
+                const mk  = Number(s.freightMarkup ?? (_isLocal ? 0 : 0.15)) || 0;
                 const total = raw * (1 + mk);
                 return (
                   <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
@@ -731,10 +741,10 @@ function FreightPanel({ s }) {
                   onChange={(e) => setField("destZip", e.target.value)}
                   style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
                 <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
-                <input className="sp-input" value={s.freightMarkup ?? "0.15"}
+                <input className="sp-input" value={s.freightMarkup ?? (s.quoteFOB === "LocalDelivery" ? "0" : "0.15")}
                   data-testid="freight-markup-input"
                   onChange={(e) => setField("freightMarkup", e.target.value)}
-                  style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
+                  style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder={s.quoteFOB === "LocalDelivery" ? "0" : "0.15"} />
               </div>
               <div style={{ marginTop: 6, display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
                 <button onClick={updateFreight} disabled={busy} data-testid="btn-freight-update"
@@ -788,10 +798,10 @@ function FreightPanel({ s }) {
                 onChange={(e) => setField("destZip", e.target.value)}
                 style={{ width: 70, padding: "3px 6px", fontSize: 11 }} placeholder="ZIP" />
               <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Markup</span>
-              <input className="sp-input" value={s.freightMarkup ?? "0.15"}
+              <input className="sp-input" value={s.freightMarkup ?? (s.quoteFOB === "LocalDelivery" ? "0" : "0.15")}
                 data-testid="freight-markup-input"
                 onChange={(e) => setField("freightMarkup", e.target.value)}
-                style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder="0.15" />
+                style={{ width: 50, padding: "3px 6px", fontSize: 11 }} placeholder={s.quoteFOB === "LocalDelivery" ? "0" : "0.15"} />
             </div>
 
             {(() => {
@@ -801,7 +811,8 @@ function FreightPanel({ s }) {
               const tint = isMP ? TINTS[idx % TINTS.length] : "var(--spot-accent)";
               const tintSoft = isMP ? `${tint}18` : "var(--spot-accent-soft)";
               const raw = Number(s.freightCost) || 0;
-              const mk  = Number(s.freightMarkup ?? 0.15) || 0;
+              const _isLocal2 = s.quoteFOB === "LocalDelivery";
+              const mk  = Number(s.freightMarkup ?? (_isLocal2 ? 0 : 0.15)) || 0;
               const total = raw * (1 + mk);
               return (
                 <div style={{ marginTop: 8, padding: "8px 10px",
