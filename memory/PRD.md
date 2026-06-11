@@ -443,6 +443,19 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - ERP/Automator API integration — **P3**
 - Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3**
 
+### 2026-06-11 — L'Oreal Grippy Chipper parity sprint (Bug A + UI polish) ✅
+- **Bug A (P0, ~$6,900 of L'Oreal gap)**: Auto-applied die charges on Crest/Bobst routes for multi-part components. Moved legacy spot_r1_5.jsx L3866-3883 `useEffect` logic from frontend (active-tab-only) into backend engine (`runner.build_prod_inputs`) so EVERY component on a Crest/Bobst route gets the default die ($1200 Crest / $1800 Bobst) — not just the active BOM tab.
+- **Bug B (P0)**: Cost Buildup "Finishing" row now sums `stripCost + assemblyCost` (legacy spot_engine L7106 parity). Detail view splits into Stripping + Glue/Tape subrows.
+- **Bug C (P0)**: Matched Set top rollup now shows PROJECT total (`jobSell`), not per-set. Per-set/per-pc metrics surfaced as secondary tiles below.
+- **Bug G (P2)**: `Cost/Pc` → 2 decimals (was 3). `Sell/MSF` and `Cost/MSF` → integer dollars (no decimals).
+- **Bug H (P2)**: "Print" row hidden in Cost Buildup when `printDirect === 0`.
+- **Bug I (P2)**: "Sell Total" → "Quote Total" everywhere (item header, Cost Buildup RowTotal, Matched Set top rollup).
+- Reverted previous misguided ItemSetupSec.jsx "always-show Die row" — Die row gated to Crest/Bobst routes only (legacy parity).
+- New regression test: `/app/backend/tests/test_auto_die.py` (6 cases — Crest/Bobst defaults, CAD no-op, user-set preserved, Amortize-opt-out, 5-component aggregate). All PASS.
+- Surfaced `dieAutoApplied`, `dieBase`, `dieTreatmentEffective` on engine result; `dieBase`, `dieEmbedded`, `stripCost` on `rows_out` for accurate per-component buildup display.
+- Multi-part aggregator now reads `dieBase` from engine result (not payload state) so auto-applied dies contribute to `dieBaseTotal`.
+- Verified by testing agent (iteration_18): 11/11 new tests + 90/91 full suite (1 pre-existing unrelated failure).
+
 ## 9. Deployment
 - Preview URL: `https://ai-connect-33.preview.emergentagent.com` (this dev sandbox)
 - Production URL: TBD (deploy ahead of 2026-06-02 11:30 AM demo recommended)
@@ -451,3 +464,11 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Login: `admin@standardprinting.com` / `spot-admin-2026`
 - Reference RFQs: Tavens, Lynk Packaging, AFA M85002
 - Demo flow: drop .msg → progress modal → review parsed fields → save → preview PDF → export
+
+## 11. L'Oreal Grippy Chipper open items (next session)
+- **Bug D (P1, ~$2,400)**: Board cost may use rounded dimensions. Audit `engine/core.py::calc_board` vs legacy `spot_engine.js::calcBoard` for sheet sqft computation.
+- **Bug E (P1)**: CORR FLIPPED red badge — Mid Disk 1/2/3 show red in legacy, not in cloud. Check `hasIssue` in routing.
+- **Bug F (P1)**: Bot Disk 1 — cloud shows red badge, legacy does not. Check `flippedBetter` orientation logic.
+- After D/E/F: re-run the full L'Oreal 12-component quote — target ≤$50 delta vs legacy $593,389.67.
+- Comprehensive automated parity test suite for L'Oreal quote — blocked on D fixed.
+
