@@ -606,7 +606,11 @@ async def calculate_multi_part(
                 "sheetL": r.get("sheetL") or "",
                 "pcsPerSheet": r.get("pcsPerSheet") or 0,
                 "route": r.get("route") or "",
+                "routeWarning": r.get("routeWarning"),  # surface "Too many CAD hours..." per-row
                 "cadHrs": cad_hrs,
+                "buyMinActive": bool(r.get("buyMinActive")),
+                "buyMinSheets": r.get("buyMinSheets"),
+                "_pipeline": r.get("_pipeline") or {},  # forward corrFlipped/customOrder/stockMode/exceedsSheetLibrary
                 "freightLine": float(r.get("freightLine") or 0),
                 "freightEmbed": float(r.get("freightEmbed") or 0),
                 "dieLineCost": float(r.get("dieLineCost") or 0),

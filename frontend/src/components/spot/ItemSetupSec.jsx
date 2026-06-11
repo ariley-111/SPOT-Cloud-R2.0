@@ -223,6 +223,14 @@ export default function ItemSetupSec({ result }) {
                   fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 3,
                   background: `${routeColor(route)}22`, color: routeColor(route),
                 }}>{s.routeOverride ? "" : "auto → "}{route}</span>
+                {/* ORDER badge (legacy spot_r1_5.jsx L5889): shown when the auto-selected
+                    sheet is a CUSTOM order (not stock). */}
+                {(r._pipeline?.customOrder && !r._pipeline?.stockMode) && (
+                  <span data-testid="sheet-order-badge" style={{
+                    fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 3,
+                    background: "#3b82f618", color: "#3b82f6",
+                  }}>ORDER</span>
+                )}
                 <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>Waste: {fmtPct(r.wastePct, 1)}</span>
               </div>
             )}
@@ -415,8 +423,20 @@ function BoardStatusBar({ s, r, setField }) {
         {/* Buy Min readout */}
         {buyMinActive && buyMinSheets && (
           <div data-testid="board-buy-min-info"
-            style={{ fontSize: 11, color: "#22c55e", fontWeight: 600, marginTop: 2, paddingLeft: 58 }}>
-            ✓ Buy Min — purchasing {fmtInt(buyMinSheets)} sheets, using {fmtInt(actualSheets || 0)}
+            style={{ display: "flex", gap: 8, alignItems: "center",
+              fontSize: 11, color: "#22c55e", fontWeight: 600, marginTop: 2, paddingLeft: 58 }}>
+            <span>✓ Buy Min — purchasing {fmtInt(buyMinSheets)} sheets, using {fmtInt(actualSheets || 0)}</span>
+            {/* Legacy parity (spot_r1_5.jsx L5994): inline "× Turn off Buy Min" so the
+                user doesn't have to open the Edit board tile editor to disable it. */}
+            <button onClick={(e) => { e.stopPropagation(); setField("buyMinBoard", "No"); }}
+              data-testid="board-turn-off-buy-min-inline-btn"
+              style={{
+                all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                padding: "2px 8px", borderRadius: 3,
+                color: "#ef4444", background: "#ef444418", border: "1px solid #ef444444",
+              }}>
+              × Turn off Buy Min
+            </button>
           </div>
         )}
         {belowMin && s.buyMinBoard !== "Yes" && (
