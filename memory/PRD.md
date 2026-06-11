@@ -370,6 +370,32 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - **Tests**: 5/5 pytest pass in `/app/backend/tests/test_below_min.py`.
 - **No external/separate warning panel** — strict legacy parity preserved.
 
+### 2026-02-11 — BUG-2026-02 fix: Job Freight allocation 3-way mismatch
+- **Symptom (user)**: $70 LocalDelivery Per-Job freight in MP-Individual showed
+  inconsistent amounts across Quote Table component rows, Quote Table footer,
+  and the Cost Buildup One-Time line item.
+- **Root cause**: `buildMpPayload` in `useEngine.js` did NOT include the
+  top-level `freightMarkup` key. Backend `engine_routes.py` therefore defaulted
+  to 0.15 and applied 15% markup to the per-component allocation even on
+  LocalDelivery (where markup should be 0). Aggregate `slots[0].freightLine`
+  added the RAW `jobFreightCost` ($70) — not markup-adjusted — creating a
+  three-way mismatch between component rows ($80.50 total), footer ($70) and
+  Cost Buildup ($70).
+- **Files changed**:
+  - `/app/frontend/src/hooks/useEngine.js` — added `freightMarkup` to MP payload.
+  - `/app/backend/routes/engine_routes.py` (L416) — aggregate now uses
+    `jobFreightCost * (1 + freightMarkup)` to match componentPricing rows.
+    Legacy parity: spot_r1_5.jsx L3442 `allocateJobCost(items, slotFreight*(1+freightMarkup), ...)`.
+  - `/app/frontend/src/components/spot/QuoteTableSec.jsx` (L771) — footer
+    `perJobFreight` display now applies markup (0 for LocalDelivery, else freightMarkup).
+- **Tests added**: 8 new pytest cases in `test_per_job_allocation.py`:
+  `TestLocalDeliveryByWeight` (3 tests) and `TestShipPerJobAggregateConsistency` (3 tests).
+  Total 11/11 passing.
+- **Verified**:
+  - LocalDelivery $70 + 0% markup → components sum $70.00, aggregate $70.00, raw $70.00 ✅
+  - Ship $70 + 15% markup → components sum $80.50, aggregate $80.50, raw $70.00 (label shows "$70 + 15% markup") ✅
+
+
 ## 6. Open items (parking lot for Tuesday meeting)
 1. Board substitution policy display — already aligned with legacy ✅
 2. Buy-Min behavior (full charge + warning) — already aligned with legacy ✅

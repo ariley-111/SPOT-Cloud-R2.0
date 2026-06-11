@@ -768,7 +768,17 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
   const basePrepress = sum("prepressLineCost");
   const totalSell = baseSell + baseFreight + baseDie + basePrepress;
 
-  const perJobFreight = jobTotals?.freightScope === "Per Job" ? Number(jobTotals.jobFreightCost || 0) : 0;
+  // Per-Job freight DISPLAYED in the footer must include the freight markup
+  // so it matches the marked-up amount actually allocated across components.
+  // Legacy parity: spot_r1_5.jsx L3442 — allocateJobCost uses (raw * (1+markup)).
+  // For Local Delivery (markup=0) this is still the raw $70. For Ship+PerJob
+  // (markup=0.15) this is $70 * 1.15 = $80.50, matching componentPricing rows.
+  const _perJobFreightMk = quoteFOB === "LocalDelivery" || quoteFOB === "Local Delivery"
+    ? 0
+    : (Number(freightMarkup) || 0);
+  const perJobFreight = jobTotals?.freightScope === "Per Job"
+    ? Number(jobTotals.jobFreightCost || 0) * (1 + _perJobFreightMk)
+    : 0;
   const perJobPrepress = jobTotals?.prepressScope === "Per Job" ? Number(jobTotals.jobPrepressCost || 0) : 0;
   const grandTotal = totalSell + perJobFreight + perJobPrepress;
 

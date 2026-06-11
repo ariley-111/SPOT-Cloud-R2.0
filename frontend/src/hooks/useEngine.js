@@ -210,6 +210,12 @@ export function buildMpPayload(state) {
     // Job-level freight / prepress
     freightScope: state.freightScope, freightAllocMethod: state.freightAllocMethod,
     jobFreightCost: state.jobFreightCost, jobFreightTreatment: state.jobFreightTreatment,
+    // BUG-2026-02: Job-level freightMarkup MUST be on the payload so the
+    // backend allocator uses the correct rate (0 for Local Delivery, 0.15 for
+    // Ship). Without this the backend defaulted to 0.15, double-billing
+    // LocalDelivery quotes by 15% and creating a 3-way mismatch between
+    // Quote Table rows, footer and One-Time line item.
+    freightMarkup: state.freightMarkup,
     prepressScope: state.prepressScope, prepressAllocMethod: state.prepressAllocMethod,
     jobPrepressCost: state.jobPrepressCost, jobPrepressTreatment: state.jobPrepressTreatment,
   };

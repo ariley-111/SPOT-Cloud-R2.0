@@ -411,10 +411,13 @@ async def calculate_multi_part(
         line_freight = sum(_safe_float(pc.get("freightLine")) for pc in per_comp
                            if _safe_float(pc.get("freightLine")) > 0)
         # If freight is allocated at the JOB level (Local Delivery, Per-Job UTS),
-        # add the job-level total to the aggregate (per-item freightLine was zeroed
-        # in the payload to avoid double-billing).
+        # add the job-level total (WITH markup) to the aggregate. Per-item
+        # freightLine was zeroed in the payload to avoid double-billing.
+        # Legacy parity: spot_r1_5.jsx L3442 `allocateJobCost(items, slotFreight*(1+freightMarkup), ...)`.
         if freight_scope == "Per Job":
-            line_freight += _safe_float(payload.get("jobFreightCost"))
+            _mk_raw = payload.get("freightMarkup")
+            _mk = _safe_float(_mk_raw if _mk_raw not in (None, "") else 0.15)
+            line_freight += _safe_float(payload.get("jobFreightCost")) * (1.0 + _mk)
         line_die = sum(_safe_float(pc.get("dieLineCost")) for pc in per_comp
                        if _safe_float(pc.get("dieLineCost")) > 0)
         # Aggregate die base (pre-markup) so the cost buildup can render
