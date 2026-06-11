@@ -108,9 +108,10 @@ export default function ItemSetupSec({ result }) {
   const autoFlipRef = useRef({ flippedAtW: null, flippedAtL: null });
   useEffect(() => {
     if (corrFlipped) return;  // already flipped — don't override
+    const _buyMinActive = !!r?.buyMinActive;
     const hasIssue = !!(r && (
       r._pipeline?.exceedsSheetLibrary ||
-      (r.boardHasPrice && !r.boardMeetMin && !buyMinActive)
+      (r.boardHasPrice && !r.boardMeetMin && !_buyMinActive)
     ));
     if (!hasIssue) return;
     const w = String(s.oneUpW || "");
@@ -123,7 +124,7 @@ export default function ItemSetupSec({ result }) {
     setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: true });
     pushToast && pushToast("Corr direction auto-flipped — piece fits stock sheets. Verify with customer.", "ok");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, buyMinActive, corrFlipped]);
+  }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, r?.buyMinActive, corrFlipped]);
 
   // Reset the auto-flip memory when board spec changes (so a new pair of W/L
   // can be auto-flipped again).
