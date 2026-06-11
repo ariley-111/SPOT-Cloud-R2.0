@@ -173,8 +173,13 @@ function CustomerInput({ value, onChange, onSelect }) {
   const [hi, setHi] = useState(0);
   const t = useRef(null);
   const ref = useRef(null);
+  // Track whether the value change came from user typing (vs. programmatic load
+  // from a saved draft/quote). Auto-open the suggestion dropdown ONLY after the
+  // user has actually typed in this field — not on quote load.
+  const userTypedRef = useRef(false);
 
   useEffect(() => {
+    if (!userTypedRef.current) return;  // skip on programmatic load (saved quote)
     if (!value || value.length < 3) { setResults([]); setOpen(false); return; }
     if (t.current) clearTimeout(t.current);
     t.current = setTimeout(async () => {
@@ -188,15 +193,15 @@ function CustomerInput({ value, onChange, onSelect }) {
     <div style={{ position: "relative" }}>
       <input ref={ref} className="sp-input" value={value || ""}
         data-testid="input-customer"
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => { userTypedRef.current = true; onChange(e.target.value); }}
         onKeyDown={(e) => {
           if (!open || results.length === 0) return;
           if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, results.length - 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
-          else if (e.key === "Enter")   { e.preventDefault(); onSelect(results[hi]); setOpen(false); }
+          else if (e.key === "Enter")   { e.preventDefault(); onSelect(results[hi]); setOpen(false); userTypedRef.current = false; }
           else if (e.key === "Escape")  { setOpen(false); }
         }}
-        onFocus={() => { if (results.length > 0) setOpen(true); }}
+        onFocus={() => { if (userTypedRef.current && results.length > 0) setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && results.length > 0 && (
@@ -209,7 +214,7 @@ function CustomerInput({ value, onChange, onSelect }) {
           {results.map((r, i) => (
             <div key={r.code}
               data-testid={`customer-result-${r.code}`}
-              onMouseDown={(e) => { e.preventDefault(); onSelect(r); setOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(r); setOpen(false); userTypedRef.current = false; }}
               onMouseEnter={() => setHi(i)}
               style={{
                 padding: "6px 10px", cursor: "pointer", fontSize: 12,
