@@ -257,6 +257,16 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     # STEP 6: Auto Buy Min
     buy_min_board = json.get("buyMinBoard", "Auto")
     board_substitution = json.get("boardSubstitution")
+    # Capture pre-buy-min state for the FE auto-flip useEffect (legacy parity:
+    # spot_r1_5.jsx L3942-3957 evaluates `hasIssue` against the SEL bc, which
+    # is the raw auto-select result — buy-min has not yet been applied at that
+    # point in legacy's render order; buy-min auto-enables in a SEPARATE
+    # useEffect that fires AFTER auto-flip. Cloud applies buy-min in the same
+    # backend pass, so we must expose the pre-buy-min `pricable`/`meetMin`
+    # snapshot to mirror legacy's flip decision.
+    pre_bm_has_price = bool(bc and bc.get("hasPrice"))
+    pre_bm_meet_min = bool(bc and bc.get("meetMin"))
+    pre_bm_pricable = bool(bc and bc.get("pricable"))
     if bc and bc["hasPrice"] and not bc["pricable"] and not bc["meetMin"] and buy_min_board == "Auto":
         buy_min_board = "Yes"
 
@@ -388,6 +398,10 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
             "routeForced": routing.get("forced", False),
             "overrideActive": bool(override_active),
             "flipWouldHelp": flip_would_help,
+            # Pre-buy-min snapshot — see STEP 6 comment for parity rationale.
+            "preBuyMinHasPrice": pre_bm_has_price,
+            "preBuyMinMeetMin": pre_bm_meet_min,
+            "preBuyMinPricable": pre_bm_pricable,
         },
         "oneUpW": eff_w, "oneUpL": eff_l, "qty": qty,
         "flute": board_spec["flute"], "boardGrade": board_spec["boardGrade"],

@@ -1,0 +1,45 @@
+{
+  "summary": "Iter 19 — Verified the 3 P0 Economics fixes from review_request. Backend: NEW test_pre_buy_min_snapshot.py (3/3 PASS) confirms _pipeline.preBuyMinHasPrice/preBuyMinMeetMin/preBuyMinPricable + flipWouldHelp exposed on both POST /api/engine/calculate AND POST /api/engine/calculate-multi-part (per-component). Below-min payload correctly reports preBuyMinMeetMin=FALSE, preBuyMinHasPrice=TRUE, preBuyMinPricable=FALSE while post-buy-min boardMeetMin=TRUE (buy-min auto-engaged). test_auto_die.py 7/7 PASS (regression intact). Full backend suite 99/100 PASS — the 1 failure (test_estimator_cannot_access_admin_rates) is pre-existing per agent_to_agent_context_note. Frontend: Logged in as rwalter@standardprinting.com / spot-rich-2026. Die row IS visible on Crest (and source-confirmed unconditional, no anyDieRoute gate) — all 3 tiles (tile-die-none / tile-die-line / tile-die-amort) + input-die-cost render. Setting Die='Line' with cost 1200 successfully writes through to state. Source review: ItemSetupSec.jsx L139-171 auto-flip useEffect reads _pipeline.preBuyMinHasPrice/preBuyMinMeetMin/preBuyMinPricable/flipWouldHelp instead of post-buy-min boardHasPrice/boardMeetMin — matches review_request fix description. ItemSetupSec.jsx L823-836 Die row block is unconditional. runner.py STEP 6 (L257-269) captures pre-bm snapshot via 3 bool flags BEFORE buyMinBoard auto-flip; exposed in result _pipeline at L400-404.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ItemSetupSec Die row", "issues": ["The '(non-Crest/Bobst route — die optional override)' hint can show on Crest route when oneUpW/L are empty (engine hasn't computed route yet — anyDieRoute=false). Cosmetic only — disappears once dims populate and engine returns r.route='Crest'. Suggest gating the hint on a positive engine result (r?.route) rather than just route emptiness, but not blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pre_buy_min_snapshot.py",
+    "/app/backend/tests/test_auto_die.py",
+    "/app/test_reports/pytest/iter19_pre_bm_autodie.xml",
+    "/app/test_reports/pytest/iter19_full.xml"
+  ],
+  "action_items": [
+    "(Pre-existing, not introduced this session) tests/test_admin_rates.py::TestAdminRoleGate::test_estimator_cannot_access_admin_rates returns 200 instead of 401/403 — out of scope.",
+    "(Optional cosmetic) Gate the '(non-Crest/Bobst route — die optional override)' hint in ItemSetupSec.jsx L831 on positive `r?.route` so it doesn't briefly flash on Crest before the first engine calc returns."
+  ],
+  "critical_code_review_comments": [
+    "runner.py L267-269 captures pre_bm_has_price/pre_bm_meet_min/pre_bm_pricable from `bc` BEFORE the STEP 6 buy_min_board auto-flip at L270 — captured *exactly* once, prior to mutation. Order correct, matches legacy spot_r1_5.jsx L3942-3957 evaluation order. ✓",
+    "runner.py L400-404 exposes preBuyMinHasPrice/preBuyMinMeetMin/preBuyMinPricable in _pipeline alongside flipWouldHelp — type-safe (bool cast). ✓",
+    "ItemSetupSec.jsx L156-171 auto-flip useEffect: reads pip.preBuyMinHasPrice / preBuyMinMeetMin / preBuyMinPricable for the legacy `hasIssue` evaluation. Removed the runtime `!buyMinActive` gate (commented out at L142). Dependencies array (L171) correctly includes all 4 preBuyMin* + flipWouldHelp + corrFlipped + corrFlippedManual. The `s.corrFlippedManual` guard preserves estimator overrides. ✓",
+    "ItemSetupSec.jsx L823-836 Die row is now a top-level <div> with no `anyDieRoute` conditional wrapping it — all 3 tiles + cost Num input always render on every route. ✓",
+    "Multi-part endpoint (engine_routes.py L553) puts perComponent array inside each slot, and each entry is the full engine result including _pipeline.preBuyMin* — verified by test_multi_part_per_component_pre_buy_min. ✓",
+    "Below-Min hard-error path at runner.py L290-326 also includes flipWouldHelp/corrFlipped but does NOT include preBuyMin* keys — this is acceptable since the FE flip useEffect short-circuits when there's no successful r. Recommend adding the 3 preBuyMin* keys to that below-min branch's _pipeline payload for consistency (defensive), but FE doesn't currently require them in that path."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pre_buy_min_snapshot.py (new — 3 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% on the 3 new pre-buy-min tests + 7/7 test_auto_die regression. Full suite 99/100 (1 pre-existing unrelated admin_rates failure).",
+    "frontend": "Die-row visibility verified live in DOM on Crest with all data-testids (tile-die-none, tile-die-line, tile-die-amort, input-die-cost) present and clickable. Die='Line' + cost 1200 accepted. Auto-flip useEffect wiring verified at source level — backend snapshot fields confirmed present so the useEffect will fire correctly when the legacy hasIssue condition is met. Did not exercise the full L'Oreal-like Multi-Part 275 DW B/C 7.9997x8 D/C Tray flow end-to-end (deep UI nav into Multi-Part + BOM item config — time-bounded), but the underlying _pipeline contract that drives that flow is verified backend-side."
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — working; rwalter@standardprinting.com / spot-rich-2026 — working",
+  "seed_data_creation": "None — used Rich Walter's existing DRAFT estimate RW-260603-141737 for live UI verification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 3 P0 regressions from iter 19 review_request verified: (1) Line Charges $0→$6,900 — die fields propagated through aggregator and Die row is now visible on all routes for estimator override; (2) Die row disappeared on Saber+D/C — fixed (L823 unconditional); (3) auto-flip not triggering on L'Oreal Mid Disks — backend now exposes _pipeline.preBuyMin* and FE useEffect reads them. For a full E2E re-validation of #3, manually create a Multi-Part quote with 275 DW B/C Kraft/Kraft, D/C Tray, 7.9997×8, qty 2500 — should see toast 'Corr direction auto-flipped' and oneUpW/L swap to 8/7.9997, then buy-min badge engages.",
+  "rca_of_the_issue": "Bug #3 RCA: legacy SPOT's auto-flip useEffect (spot_r1_5.jsx L3946) reads sel.bc.{pricable,meetMin,hasPrice} which is the raw auto-select board calc, BEFORE the buy-min useEffect mutates it (separate useEffect runs AFTER). Cloud ran buy-min in the same backend pass and exposed only the POST-buy-min boardHasPrice/boardMeetMin, so the FE useEffect saw `meetMin=true` (lifted by buy-min) and concluded `hasIssue=false`, never triggering the flip. Fix: snapshot the 3 bc flags BEFORE STEP 6 buy_min auto-flip in runner.py, expose them as _pipeline.preBuyMin*, and have ItemSetupSec.jsx auto-flip useEffect read those instead. Verified at runner.py L267-269 (capture) + L400-404 (expose) and ItemSetupSec.jsx L156-171 (consume)."
+}

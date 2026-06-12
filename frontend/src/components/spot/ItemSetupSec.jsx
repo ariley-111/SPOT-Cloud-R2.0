@@ -43,7 +43,15 @@ export default function ItemSetupSec({ result }) {
 
   const onFlipCorr = () => {
     const w = s.oneUpW, l = s.oneUpL;
-    setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: !corrFlipped });
+    // Mark this as user-initiated so the auto-flip useEffect can't re-flip
+    // immediately (legacy parity: legacy doesn't re-trigger after a manual
+    // toggle because re-render order leaves `corrFlipped` stable; cloud's
+    // state-driven useEffect needs an explicit lockout).
+    setManyFields({
+      oneUpW: l, oneUpL: w,
+      corrFlipped: !corrFlipped,
+      corrFlippedManual: true,
+    });
   };
 
   // ─── Die auto-handler (legacy spot_r1_5.jsx L3863-3883) ───────────────
@@ -130,22 +138,37 @@ export default function ItemSetupSec({ result }) {
   // no substrate suppress, no manual-un-flip memory — strict 1:1.
   useEffect(() => {
     if (corrFlipped) return;
+    // Respect user's manual override — once they've toggled the flip
+    // button on this component, never auto-revert their choice.
+    if (s.corrFlippedManual) return;
     const w = String(s.oneUpW || "");
     const l = String(s.oneUpL || "");
     if (!w || !l || w === "0" || l === "0") return;
-    const _buyMinActive = !!r?.buyMinActive;
+    // LEGACY PARITY (spot_r1_5.jsx L3946 + L3958-3960 ordering):
+    //   `hasIssue = sel && (sel.exceedsSheetLibrary
+    //                       || (sel.bc && !sel.bc.pricable && sel.bc.hasPrice && !sel.bc.meetMin))`
+    // The flip useEffect fires BEFORE the auto-buy-min useEffect in legacy, so
+    // `sel.bc` is the raw auto-select board calc — buy-min has NOT yet applied.
+    // Cloud runs buy-min in the same backend pass, so we use the explicit
+    // PRE-BUY-MIN snapshot (`_pipeline.preBuyMin*`) to mirror legacy's
+    // evaluation order. Adding a runtime `!buyMinActive` guard (our earlier
+    // approach) was wrong — it suppressed legitimate flips on Mid Disks 1/2/3.
+    const pip = r?._pipeline || {};
+    const preHasPrice = pip.preBuyMinHasPrice;
+    const preMeetMin = pip.preBuyMinMeetMin;
+    const prePricable = pip.preBuyMinPricable;
     const hasIssue = !!(r && (
-      r._pipeline?.exceedsSheetLibrary ||
-      (r.boardHasPrice && !r.boardMeetMin && !_buyMinActive)
+      pip.exceedsSheetLibrary ||
+      (preHasPrice && !preMeetMin && !prePricable)
     ));
     if (!hasIssue) return;
     // Legacy `flippedBetter` gate — only flip if the flipped orientation
     // actually resolves the issue (pricable, or stock-sheet-priced).
-    if (!r?._pipeline?.flipWouldHelp) return;
+    if (!pip.flipWouldHelp) return;
     setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: true });
     pushToast && pushToast("Corr direction auto-flipped — piece fits stock sheets. Verify with customer.", "ok");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r?._pipeline?.exceedsSheetLibrary, r?.boardHasPrice, r?.boardMeetMin, r?._pipeline?.flipWouldHelp, corrFlipped]);
+  }, [r?._pipeline?.exceedsSheetLibrary, r?._pipeline?.preBuyMinHasPrice, r?._pipeline?.preBuyMinMeetMin, r?._pipeline?.preBuyMinPricable, r?._pipeline?.flipWouldHelp, corrFlipped, s.corrFlippedManual]);
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
@@ -792,21 +815,25 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         );
       })()}
 
-      {/* Die — only show row when route requires steel die (legacy spot_r1_5.jsx L6055).
-           Backend auto-injects default die cost ($1200 Crest / $1800 Bobst) for ALL
-           components in Multi-Part quotes via runner.build_prod_inputs() so the
-           estimator never has to enter dies manually on Crest/Bobst routes. */}
-      {anyDieRoute && (
-        <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Die</span>
-          <Tile label="None"  active={s.dieTreatment === "None"}          onClick={() => setField("dieTreatment", "None")} small data-testid="tile-die-none" />
-          <Tile label="Line"  active={s.dieTreatment === "Separate Line"} onClick={() => setField("dieTreatment", "Separate Line")} small data-testid="tile-die-line" />
-          <Tile label="Amort" active={s.dieTreatment === "Amortize"}      onClick={() => setField("dieTreatment", "Amortize")} small data-testid="tile-die-amort" />
-          {s.dieTreatment !== "None" && (
-            <Num value={s.cuttingDieCost} onChange={(v) => setField("cuttingDieCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-die-cost" />
-          )}
-        </div>
-      )}
+      {/* Die — show on every route so estimators can override (legacy data shows
+           Saber+D/C components carrying dies that originated when the route was
+           Crest before falling back). Backend auto-injects default die cost
+           ($1200 Crest / $1800 Bobst) for Crest/Bobst components in Multi-Part
+           quotes. On Saber+D/C/CAD the estimator can still enter a manual die. */}
+      <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Die</span>
+        <Tile label="None"  active={s.dieTreatment === "None"}          onClick={() => setField("dieTreatment", "None")} small data-testid="tile-die-none" />
+        <Tile label="Line"  active={s.dieTreatment === "Separate Line"} onClick={() => setField("dieTreatment", "Separate Line")} small data-testid="tile-die-line" />
+        <Tile label="Amort" active={s.dieTreatment === "Amortize"}      onClick={() => setField("dieTreatment", "Amortize")} small data-testid="tile-die-amort" />
+        {s.dieTreatment !== "None" && (
+          <Num value={s.cuttingDieCost} onChange={(v) => setField("cuttingDieCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-die-cost" />
+        )}
+        {!anyDieRoute && s.dieTreatment !== "None" && (
+          <span style={{ fontSize: 10, color: "var(--spot-text3)", fontStyle: "italic", marginLeft: 4 }}>
+            (non-Crest/Bobst route — die optional override)
+          </span>
+        )}
+      </div>
 
       {/* Misc charges */}
       {(s.miscCharges || []).map((mc, mi) => (
