@@ -454,6 +454,11 @@ async def calculate_multi_part(
                 import os as _os
                 with open("/tmp/spot_mp_debug.log", "a") as _dbg:
                     _dbg.write(f"\n=== MP CALC pid={_os.getpid()} components={len(per_comp)} ===\n")
+                    # Pricing-mode + GM table — explains the elevated GMs on small components
+                    _dbg.write(f"pricingBasis={payload.get('pricingBasis')!r}  setMarginOverride={payload.get('setMarginOverride')!r}  setMarginPct={payload.get('setMarginPct')!r}\n")
+                    _dbg.write(f"gmByTier={payload.get('gmByTier')}\n")
+                    _dbg.write(f"sellByTier={payload.get('sellByTier')}\n")
+                    _dbg.write(f"forcedSellSet={payload.get('forcedSellSet')}\n")
                     _dbg.write(f"{'idx':>3} {'desc':<28} {'qty':>8} {'oMSF':>8} {'board$':>10} {'press$':>10} "
                                f"{'cut$':>10} {'strip$':>9} {'asm$':>8} {'direct$':>11} {'oh$':>8} "
                                f"{'preEm$':>8} {'dieEm$':>8} {'totMfg$':>11} {'gm%':>6} {'sell$':>11}\n")
