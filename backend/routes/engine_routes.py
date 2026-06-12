@@ -388,10 +388,17 @@ async def calculate_multi_part(
             else:
                 # Manufactured — full pipeline
                 if pricing_mode == "Matched Set":
-                    item_qtys = [str(set_qty * pcs_per_set)] * 5
+                    # LEGACY PARITY (spot_r1_5.jsx allItemsCosts builder):
+                    #   itemQtys = qtys.map(q => String(pn(q) * pn(pcsPerSet)))
+                    # Cloud previously replicated `set_qty * pcs_per_set` 5x
+                    # which inflated single-tier quotes' rate-table lookups.
+                    # Pass the legacy-shaped qtys so MSF tier classification
+                    # mirrors legacy exactly.
+                    item_qtys = [str(int(_safe_float(q) * pcs_per_set)) if str(q).strip() else "" for q in top_qtys]
+                    # Pad to 5 to match engine's tier-array expectation
+                    while len(item_qtys) < 5:
+                        item_qtys.append("")
                     use_slot = slot if slot < 5 else 0
-                    # Mirror the chosen slot to position `slot` so run_estimate picks it up
-                    item_qtys[slot] = str(item_qty)
                 else:
                     item_qtys = [str(q or "") for q in ((item.get("state") or {}).get("qtys") or top_qtys)]
                     use_slot = slot
