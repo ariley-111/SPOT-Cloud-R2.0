@@ -1212,15 +1212,15 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                     <Metric label="Total Cost" value={fmtMoney(projectCost)} testid="econ-set-cost" />
                     <Metric label="Cost / Set" value={fmtMoney(costPerSet)} testid="econ-set-cost-per" />
                   </div>
-                  {lineCharges > 0 && (
-                    <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 3 }}>
-                      <span>Line Charges: <b style={{ color: "var(--spot-text)", fontStyle: "normal" }}>{fmtMoney(lineCharges)}</b></span>
-                      <span style={{ fontStyle: "normal" }}>
-                        <span style={{ fontStyle: "italic", color: "var(--spot-text2)" }}>Quote Total: </span>
-                        <b style={{ color: "var(--spot-accent)" }}>{fmtMoney(projectQuoteTotal)}</b>
-                      </span>
-                    </div>
-                  )}
+                  {/* Always show Line Charges + Quote Total breakdown, even when $0,
+                      so the estimator can verify the value. */}
+                  <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 3 }} data-testid="econ-set-line-charges">
+                    <span>Line Charges: <b style={{ color: "var(--spot-text)", fontStyle: "normal" }} data-testid="econ-set-line-charges-value">{fmtMoney(lineCharges)}</b></span>
+                    <span style={{ fontStyle: "normal" }}>
+                      <span style={{ fontStyle: "italic", color: "var(--spot-text2)" }}>Quote Total: </span>
+                      <b style={{ color: "var(--spot-accent)" }} data-testid="econ-set-quote-total">{fmtMoney(projectQuoteTotal)}</b>
+                    </span>
+                  </div>
                 </div>
               );
             })()}
