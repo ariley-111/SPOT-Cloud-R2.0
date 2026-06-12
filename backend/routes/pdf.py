@@ -73,6 +73,186 @@ def _ship_to_addr(quote_ship_to: str, dest_zip: str) -> str:
     return dest_zip or quote_ship_to or ""
 
 
+def _matched_set_pricing_grid(bom_items: List[Dict[str, Any]],
+                              component_pricing: List[Dict[str, Any]],
+                              results: List[Dict[str, Any]],
+                              fsc_global: bool) -> str:
+    """Render the legacy Matched Set Preview pricing grid (spot_r1_5.jsx L4639-4702):
+
+    - Per-component pricing: Component × qty-tier (sell/pc per tier, using
+      itemSell/qty — clean, no embedded line charges; legacy L4655).
+    - Price/Set row: per-tier sellPerSet.
+    - Line charge rows (Die / Freight / Prepress / Misc) when present.
+    - QUOTE TOTAL row (per-tier).
+    - SETS row.
+
+    Each `results` entry corresponds to one active qty tier (slot) in matched
+    set mode — `qty` field holds setQty for that tier.
+    """
+    # Only show tiers that are pricable and have qty > 0 (matches legacy L4602)
+    active_tiers = [r for r in results
+                    if r and r.get("pricable") and float(r.get("qty") or 0) > 0]
+    if not active_tiers:
+        return ('<div style="padding:18pt;text-align:center;color:#9ca3af;font-size:12px">'
+                'No priced set quantities</div>')
+
+    th = ('padding:6px 8px;text-align:right;font-size:11px;font-weight:700;'
+          'text-transform:uppercase;letter-spacing:.05em;color:#374151')
+    dash = "\u2014"
+
+    # ─── Component spec table (legacy L4609-4638) ────────────────────
+    spec_rows = []
+    for i, it in enumerate(bom_items):
+        ist = it.get("state") or {}
+        desc = it.get("desc") or ist.get("itemDesc") or f"Item {i+1}"
+        pcs = it.get("pcsPerSet") or 1
+        typ = it.get("type") or "Manufactured"
+        brd, dims = "", dash
+        if typ == "Manufactured":
+            fl = ist.get("flute") or ""
+            gr = ist.get("boardGrade") or ""
+            ol = _liner_short(ist.get("outsideLiner"))
+            il = _liner_short(ist.get("insideLiner"))
+            brd = f"{gr} {fl} {ol}/{il}"
+            if ist.get("fscEnabled") or fsc_global:
+                brd += " \u00B7 FSC/SFI"
+            try:
+                iw, il_ = float(ist.get("oneUpW") or 0), float(ist.get("oneUpL") or 0)
+                if iw > 0 and il_ > 0: dims = f"{_fn(iw, 4)}\u00D7{_fn(il_, 4)}"
+            except (ValueError, TypeError): pass
+        else:
+            brd = "Purchased" if typ == "Purchased" else "Fulfillment"
+        spec_rows.append(
+            f'<tr><td style="padding:3px 6px;font-weight:600;width:18px">{i+1}</td>'
+            f'<td style="padding:3px 6px">{desc}</td>'
+            f'<td style="padding:3px 6px;color:#6b7280">{brd}</td>'
+            f'<td style="padding:3px 6px;color:#6b7280">{dims}</td>'
+            f'<td style="padding:3px 6px;text-align:right">{pcs}/set</td></tr>'
+        )
+
+    spec_table = (
+        f'<div style="background:#f3f4f6;border-radius:6px;padding:10px 14px;margin-bottom:14px">'
+        f'<div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:6px">'
+        f'Matched Set \u2014 {len(bom_items)} Items</div>'
+        f'<table style="width:100%;font-size:12px;border-collapse:collapse">'
+        f'<thead><tr style="border-bottom:1px solid #d1d5db">'
+        f'<th style="text-align:left;padding:3px 6px;font-size:11px;font-weight:700;color:#9ca3af">#</th>'
+        f'<th style="text-align:left;padding:3px 6px;font-size:11px;font-weight:700;color:#9ca3af">Component</th>'
+        f'<th style="text-align:left;padding:3px 6px;font-size:11px;font-weight:700;color:#9ca3af">Board</th>'
+        f'<th style="text-align:left;padding:3px 6px;font-size:11px;font-weight:700;color:#9ca3af">Blank</th>'
+        f'<th style="text-align:right;padding:3px 6px;font-size:11px;font-weight:700;color:#9ca3af">Pcs/Set</th>'
+        f'</tr></thead><tbody>{"".join(spec_rows)}</tbody></table></div>'
+    )
+
+    # ─── Per-component pricing grid (legacy L4641-4659) ──────────────
+    # Build a lookup: itemId → componentPricing entry
+    cp_by_id = {c.get("itemId"): c for c in (component_pricing or [])}
+    cp_by_idx = {c.get("itemIndex"): c for c in (component_pricing or [])}
+    set_qtys = [int(float(r.get("qty") or 0)) for r in active_tiers]
+
+    header_cells = [
+        f'<th style="text-align:left;padding:6px 8px;font-size:11px;font-weight:700;color:#374151">Component</th>'
+    ]
+    for sq in set_qtys:
+        header_cells.append(f'<th style="{th}">{_fn(sq, 0)} sets</th>')
+
+    grid_rows = []
+    for i, it in enumerate(bom_items):
+        cp = cp_by_id.get(it.get("id")) or cp_by_idx.get(i) or {}
+        rows = cp.get("rows") or []
+        # Map slotIdx → row for fast lookup
+        row_by_slot = {int(r.get("slotIdx") or 0): r for r in rows}
+        bg = "#f9fafb" if i % 2 else "#fff"
+        cells = [
+            f'<td style="padding:4px 8px;background:{bg}"><b>{i+1}.</b> {it.get("desc") or f"Item {i+1}"}</td>'
+        ]
+        for ti, tier in enumerate(active_tiers):
+            slot_i = int(tier.get("slot") or 0)
+            r = row_by_slot.get(slot_i)
+            sell_pc = 0.0
+            if r:
+                # LEGACY L4655: sell/pc in BOM grid = itemSell / qty (clean, no charges)
+                qv = float(r.get("qty") or 0)
+                isell = float(r.get("itemSell") or 0)
+                sell_pc = isell / qv if qv > 0 else 0
+            cells.append(
+                f'<td style="padding:4px 8px;text-align:right;background:{bg}">'
+                f'{_fm(sell_pc) if sell_pc > 0 else dash}</td>'
+            )
+        grid_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+    # Price/Set row (legacy L4660-4662)
+    ps_cells = [f'<td style="padding:6px 8px;color:#1e40af;font-weight:700">Price/Set</td>']
+    for tier in active_tiers:
+        sps = float(tier.get("sellPc") or 0)  # In MP matched set, results[i].sellPc = sellPerSet
+        # Fallback: derive from itemSell/qty
+        if sps == 0:
+            isell = float(tier.get("itemSell") or 0)
+            qv = float(tier.get("qty") or 0)
+            sps = isell / qv if qv > 0 else 0
+        ps_cells.append(
+            f'<td style="padding:6px 8px;text-align:right;color:#1e40af;font-weight:700">'
+            f'{_fm(sps) if sps > 0 else dash}</td>'
+        )
+
+    # Line charge rows — Die / Freight / Prepress / Misc (legacy L4665-4692)
+    # Die, Prepress, Misc are typically flat across tiers; Freight varies per-tier.
+    charge_rows_html = []
+    die_per_tier = [float(t.get("dieLineCost") or 0) for t in active_tiers]
+    frt_per_tier = [float(t.get("freightLine") or 0) for t in active_tiers]
+    pp_per_tier  = [float(t.get("prepressLineCost") or 0) for t in active_tiers]
+    misc_per_tier = [float(t.get("miscLineCost") or 0) for t in active_tiers]
+
+    def _charge_row(label: str, vals: List[float]) -> str:
+        if not any(v > 0 for v in vals): return ""
+        cells = [f'<td style="padding:4px 8px;color:#6b7280;font-style:italic">{label}</td>']
+        for v in vals:
+            cells.append(
+                f'<td style="padding:4px 8px;text-align:right;color:#6b7280">'
+                f'{_fm(v) if v > 0 else dash}</td>'
+            )
+        return f'<tr>{"".join(cells)}</tr>'
+
+    charge_rows_html.append(_charge_row("Die", die_per_tier))
+    charge_rows_html.append(_charge_row("Freight", frt_per_tier))
+    charge_rows_html.append(_charge_row("Prepress", pp_per_tier))
+    charge_rows_html.append(_charge_row("Misc", misc_per_tier))
+    charge_rows_html = [r for r in charge_rows_html if r]
+
+    # QUOTE TOTAL row (legacy L4694-4699) — uses sellTotal directly (already
+    # includes all line charges via the engine).
+    qt_cells = [f'<td style="padding:8px;color:#1e40af;font-weight:700;font-size:12px">QUOTE TOTAL</td>']
+    for tier in active_tiers:
+        st = float(tier.get("sellTotal") or 0)
+        qt_cells.append(
+            f'<td style="padding:8px;text-align:right;color:#1e40af;font-weight:700;font-size:13px">'
+            f'{_fm(st)}</td>'
+        )
+
+    # SETS row (legacy L4700-4702)
+    sets_cells = [f'<td style="padding:3px 8px;font-size:11px;color:#9ca3af">SETS</td>']
+    for sq in set_qtys:
+        sets_cells.append(
+            f'<td style="padding:3px 8px;text-align:right;font-size:11px;color:#9ca3af">'
+            f'{_fn(sq, 0)} sets</td>'
+        )
+
+    grid = (
+        f'<div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;'
+        f'letter-spacing:.05em;margin-bottom:6px">Per-Component Pricing</div>'
+        f'<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'
+        f'<thead><tr style="border-bottom:2px solid #d1d5db">{"".join(header_cells)}</tr></thead>'
+        f'<tbody>{"".join(grid_rows)}'
+        f'<tr style="border-top:2px solid #1e40af">{"".join(ps_cells)}</tr>'
+        f'{"".join(charge_rows_html)}'
+        f'<tr style="border-top:2px solid #1e40af;background:#f0f4ff">{"".join(qt_cells)}</tr>'
+        f'<tr>{"".join(sets_cells)}</tr>'
+        f'</tbody></table>'
+    )
+
+    return spec_table + grid
+
+
 def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], charge_mode: str,
                        component_pricing: List[Dict[str, Any]] = None,
                        job_totals: Dict[str, Any] = None) -> str:
@@ -108,8 +288,23 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     pricing_mode = state.get("pricingMode") or "Matched Set"
     # MP-Individual switches the pricing area to per-component sections.
     mp_individual = is_mp and pricing_mode == "Individual" and bool(component_pricing)
+    # MP-Matched Set renders the legacy per-component pricing grid (component
+    # × qty-tier with sell/pc, Price/Set row, line charges, Quote Total row).
+    mp_matched = is_mp and pricing_mode == "Matched Set"
 
-    if is_mp and not mp_individual:
+    if mp_matched:
+        # Compact title bar — full spec table renders inside the grid.
+        title = item_desc or box_style or cust_ref or f"Multi-Part Display ({len(bom_items)} components)"
+        _fsc_tag = " \u00B7 FSC/SFI" if fsc else ""
+        item_bar = (
+            f'<div style="background:#fef3c722;border:1px solid #f59e0b66;border-radius:6px;padding:10px 14px;margin-bottom:12px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline">'
+            f'<div style="font-size:14px;font-weight:700">{title}</div>'
+            f'<div style="font-size:11px;color:#f59e0b;font-weight:700;text-transform:uppercase;letter-spacing:.06em">'
+            f'Multi-Part \u00B7 Matched Set{_fsc_tag}</div>'
+            f'</div></div>'
+        )
+    elif is_mp and not mp_individual:
         # BOM bar — list each component with its key specs
         bom_rows = []
         for i, it in enumerate(bom_items):
@@ -267,6 +462,10 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         f'<tbody>{"".join(body_rows) or f"""<tr><td colspan="{len(header_cells)}" style="padding:20pt;text-align:center;color:#9ca3af">No priced quantities</td></tr>"""}</tbody>'
         f'</table>'
     )
+
+    # ─── MP-Matched Set: replace aggregate table with legacy per-component grid ─
+    if mp_matched:
+        pricing_table = _matched_set_pricing_grid(bom_items, component_pricing, results, fsc)
 
     # ─── MP-Individual: per-component sections replace the aggregate table ─
     if mp_individual:
