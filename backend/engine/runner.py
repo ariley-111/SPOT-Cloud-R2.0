@@ -88,7 +88,14 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
     resolved_route = route_result.get("route") or ""
     any_die_route = resolved_route in ("Crest", "Bobst")
     die_cost_in = pn(json.get("cuttingDieCost", "0"))
-    die_treat_in = json.get("dieTreatment", "None")
+    # LEGACY PARITY (spot_r1_5.jsx L3782): in the Multi-Part per-item engine call,
+    # `dieTreatment` defaults to "Separate Line" when missing from state — NOT
+    # to "None". So any component carrying a non-zero `cuttingDieCost` (from a
+    # prior Crest auto-die, manual entry, or imported tab) gets the die line
+    # applied even after route fell back to CAD/Saber+D/C. Cloud was defaulting
+    # to "None" which caused the L'Oreal Line Charges $6,900 → $0 regression.
+    die_treat_default = "Separate Line" if die_cost_in > 0 else "None"
+    die_treat_in = json.get("dieTreatment", die_treat_default)
     die_cost_eff: Any = json.get("cuttingDieCost", "0")
     die_treat_eff = die_treat_in
     die_auto_applied = False

@@ -661,29 +661,16 @@ export function BomSec() {
   const {
     active, sec, toggleSec,
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
-    reorderBomItem, updateBomItem, updateBomItemState, spinOffBomItem,
+    reorderBomItem, updateBomItem, spinOffBomItem,
   } = useQuote();
   // ⚠️ ALL HOOKS BEFORE EARLY RETURN — rules of hooks
   const [dragIdx, setDragIdx] = React.useState(null);
-  // Per-tab Die popover (open by item idx; null = closed)
-  const [dieOpenIdx, setDieOpenIdx] = React.useState(null);
 
   const s = active?.state || {};
   if (s.quoteType !== "Multi-Part") return null;
   const items = s.bomItems || [];
   const activeIdx = s.activeItemIdx ?? 0;
   const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a","#9ca3af","#fbbf24"];
-
-  // Read the die value for an item — for the active item it lives at top-level
-  // state; for inactive items it's in bi.state. Mirrors how legacy spot_r1_5.jsx
-  // L3854 surfaces per-row die badges in the BOM table.
-  const itemDie = (it, i) => {
-    const src = i === activeIdx ? s : (it.state || {});
-    return {
-      treatment: src.dieTreatment || "None",
-      cost: Number(src.cuttingDieCost) || 0,
-    };
-  };
 
   return (
     <Sec
@@ -742,88 +729,6 @@ export function BomSec() {
                       color: "inherit", fontSize: 11, outline: "none", textAlign: "center",
                       fontFamily: "'JetBrains Mono', monospace" }} />
                 </span>
-                {/* Per-item Die chip — legacy parity (spot_r1_5.jsx BOM-row badges).
-                    Click to open a popover and set Cost + Treatment for any
-                    component regardless of route. Stored on per-item state so
-                    inactive items keep their dies. */}
-                {(() => {
-                  const d = itemDie(it, i);
-                  const has = d.treatment !== "None" && d.cost > 0;
-                  return (
-                    <span style={{ position: "relative" }}>
-                      <span
-                        onClick={(e) => { e.stopPropagation(); setDieOpenIdx(dieOpenIdx === i ? null : i); }}
-                        data-testid={`bom-item-die-${i}`}
-                        title={has ? `Die ${d.treatment}: $${d.cost.toFixed(2)}` : "Add die"}
-                        style={{
-                          padding: "2px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700,
-                          cursor: "pointer", userSelect: "none",
-                          background: has ? "rgba(34,197,94,0.18)" : "transparent",
-                          border: `1px solid ${has ? "rgba(34,197,94,0.55)" : "var(--spot-border)"}`,
-                          color: has ? "#22c55e" : "var(--spot-text3)",
-                        }}>
-                        {has ? `Die $${d.cost.toFixed(0)}` : "+ Die"}
-                      </span>
-                      {dieOpenIdx === i && (
-                        <div onClick={(e) => e.stopPropagation()}
-                          data-testid={`bom-item-die-pop-${i}`}
-                          style={{
-                            position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
-                            background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
-                            borderRadius: 4, padding: 8, minWidth: 220,
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                            display: "flex", flexDirection: "column", gap: 6,
-                          }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)" }}>
-                            Die — {it.desc || `Item ${i+1}`}
-                          </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            {["None", "Separate Line", "Amortize"].map((t) => (
-                              <button key={t}
-                                onClick={() => updateBomItemState(i, { dieTreatment: t, ...(t === "None" ? { cuttingDieCost: 0 } : {}) })}
-                                data-testid={`bom-item-die-treat-${i}-${t.replace(/\s/g, "")}`}
-                                style={{
-                                  flex: 1, padding: "4px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700,
-                                  cursor: "pointer",
-                                  background: d.treatment === t ? "var(--spot-accent)" : "var(--spot-bg3)",
-                                  color: d.treatment === t ? "#fff" : "var(--spot-text2)",
-                                  border: `1px solid ${d.treatment === t ? "var(--spot-accent)" : "var(--spot-border)"}`,
-                                }}>
-                                {t === "Separate Line" ? "Line" : t === "Amortize" ? "Amort" : t}
-                              </button>
-                            ))}
-                          </div>
-                          {d.treatment !== "None" && (
-                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                              <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>Cost $</span>
-                              <input type="number" step="0.01" min="0" value={d.cost || ""}
-                                onChange={(e) => updateBomItemState(i, { cuttingDieCost: e.target.value })}
-                                data-testid={`bom-item-die-cost-${i}`}
-                                style={{ flex: 1, padding: "3px 5px", fontSize: 11,
-                                  background: "var(--spot-bg3)", color: "var(--spot-text)",
-                                  border: "1px solid var(--spot-border)", borderRadius: 3, outline: "none",
-                                  fontFamily: "'JetBrains Mono', monospace" }} />
-                              <button onClick={() => updateBomItemState(i, { cuttingDieCost: 1200 })}
-                                title="Crest default ($1,200)"
-                                style={{ fontSize: 10, padding: "3px 6px", borderRadius: 3,
-                                  background: "var(--spot-bg3)", color: "var(--spot-text2)",
-                                  border: "1px solid var(--spot-border)", cursor: "pointer" }}>
-                                $1200
-                              </button>
-                            </div>
-                          )}
-                          <button onClick={() => setDieOpenIdx(null)}
-                            data-testid={`bom-item-die-close-${i}`}
-                            style={{ alignSelf: "flex-end", fontSize: 10, padding: "2px 8px",
-                              borderRadius: 3, background: "var(--spot-bg3)", color: "var(--spot-text2)",
-                              border: "1px solid var(--spot-border)", cursor: "pointer" }}>
-                            Done
-                          </button>
-                        </div>
-                      )}
-                    </span>
-                  );
-                })()}
                 {items.length > 1 && (
                   <span onClick={(e) => { e.stopPropagation(); spinOffBomItem(i); }}
                     data-testid={`bom-spinoff-${i}`}
