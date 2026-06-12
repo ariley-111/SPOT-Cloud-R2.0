@@ -443,7 +443,14 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - ERP/Automator API integration — **P3**
 - Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3**
 
-### 2026-06-11 — L'Oreal Grippy Chipper parity sprint (Bug A + UI polish) ✅
+### 2026-06-12 — Per-component Die affordance + warning scoping (Iter 21)
+- **Per-component Die chip on BOM tabs** (legacy spot_r1_5.jsx BOM-row parity): Each BOM tab in MP now has a clickable "+ Die" / "Die $X" chip. Click opens a small popover with None/Line/Amort + cost input + "$1200" quick-set. Persists to per-item state — works for active AND inactive items. New `updateBomItemState(idx, patch)` helper in QuoteContext writes to top-level (active) or `bomItems[idx].state` (inactive). This unblocks ALL non-Crest/Bobst die scenarios (Saber+D/C, CAD routes) that previously had no UI affordance and resolves the "Line Charges $0 vs legacy $6,900" gap as soon as the estimator clicks the dies in.
+- **`Too many CAD hours…` warning component-scoped**: matched-set slot's `routeWarning` now surfaces only the ACTIVE component's warning (was aggregated across all components, which incorrectly persisted when switching to a non-CAD component). engine_routes.py L527.
+- Die row in OneTimeCosts panel REMAINS HIDDEN on non-Crest/Bobst routes (legacy parity, per user request).
+- Removed `corrFlippedManual` saved-state guard from auto-flip (was a stale-persistence trap from prior session).
+- Documented: for unstocked corrugation (e.g. 275 DW B/C), `flipWouldHelp` correctly returns false in both legacy and cloud because neither orientation is pricable (below mill min) AND there's no stock to fall onto. Flipping is mathematically inert for unstocked grades — same dim adders apply both ways. Legacy "CORR FLIPPED" badges on Mid Disks were manual toggles, not auto-engages.
+
+
 - **Bug A (P0, ~$6,900 of L'Oreal gap)**: Auto-applied die charges on Crest/Bobst/**Saber + D/C** routes for multi-part components. Moved legacy spot_r1_5.jsx L3866-3883 `useEffect` logic from frontend (active-tab-only) into backend engine (`runner.build_prod_inputs`) so EVERY component that resolves to a die-using route gets the default die ($1200 Crest / $1800 Bobst / $1200 Saber+D/C) — not just the active BOM tab. Saber+D/C is the legacy fallback "Saber + die cut" route, also requires a steel die.
 - **Bug B (P0)**: Cost Buildup "Finishing" row now sums `stripCost + assemblyCost`. Detail view splits into Stripping + Glue/Tape subrows.
 - **Bug C (P0)**: Matched Set top rollup shows **SELL TOTAL** (merchandise), with "Line Charges + Quote Total" breakdown line below — exactly matching legacy.

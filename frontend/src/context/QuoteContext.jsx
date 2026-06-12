@@ -470,6 +470,30 @@ export function QuoteProvider({ children }) {
     }));
   }, [activeId]);
 
+  /** Update per-item STATE fields (e.g. cuttingDieCost, dieTreatment, freightLine)
+   *  on any BOM item — active or inactive. For the active item the change is
+   *  written to top-level state (where item-level fields live during the active
+   *  session); for inactive items it's written to bomItems[idx].state, where it
+   *  will load when the user switches to that tab.
+   *  Used by BOM-tab inline editors (Die chip, etc.) that match legacy parity. */
+  const updateBomItemState = useCallback((idx, patch) => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      if (!items[idx]) return t;
+      const activeIdx = t.state.activeItemIdx ?? 0;
+      if (idx === activeIdx) {
+        // Write directly to top-level state for the active item.
+        return { ...t, state: { ...t.state, ...patch }, updatedAt: Date.now() };
+      }
+      // Inactive: merge into bomItems[idx].state.
+      const next = items.map((it, i) => i === idx
+        ? { ...it, state: { ...(it.state || {}), ...patch } }
+        : it);
+      return { ...t, state: { ...t.state, bomItems: next }, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
   /** Convert the current Simple quote → Multi-Part. If `bomDraft` is provided
    *  (array of `{desc, type, pcsPerSet, custIdent?}`), the BOM is built from
    *  the draft and the current intake becomes Item 1's state-template.
@@ -615,7 +639,7 @@ export function QuoteProvider({ children }) {
     setField, setManyFields, replaceState, setPricingMode,
     // Multi-Part actions
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
-    reorderBomItem, updateBomItem, convertToMultiPart, convertToSimple,
+    reorderBomItem, updateBomItem, updateBomItemState, convertToMultiPart, convertToSimple,
     spinOffBomItem,
     initials, initialsGateOpen, setInitialsGateOpen, commitInitials,
     sec, toggleSec, expandAll, collapseAll,
