@@ -1175,9 +1175,8 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
             {/* ─── MATCHED SET TOP BLOCK ─────────────────────────────────── */}
             {hasMatchedSetTotals && (() => {
               const setQty = agg.setQty || agg.qty || 0;
-              // Bug C: top rollup shows the PROJECT (job-level) totals, not
-              // per-set. Per-set/per-pc figures are surfaced below as
-              // secondary metrics. Matches legacy QUOTE TOTAL behavior.
+              // Legacy parity: big metric is SELL TOTAL = merchandise sell.
+              // Below: "Line Charges: $X  Quote Total: $Y" breakdown.
               const projectSell = agg.jobSell ?? agg.sellTotal ?? 0;
               const projectCost = agg.jobCost ?? agg.totalMfg ?? 0;
               const lineCharges = Math.max(0, (agg.sellTotal || projectSell) - projectSell);
@@ -1206,7 +1205,7 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                     </span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
-                    <Metric label="Quote Total" value={fmtMoney(projectQuoteTotal)} big className="green" testid="econ-set-sell" />
+                    <Metric label="Sell Total" value={fmtMoney(projectSell)} big className="green" testid="econ-set-sell" />
                     <Metric label="Sell / Set" value={fmtMoney(sellPerSet)} big testid="econ-set-sell-per" />
                     <Metric label="Margin %"  value={fmtPct(gmPct, 1)} className="green" testid="econ-set-gm-pct" />
                     <Metric label="Margin $"  value={fmtMoney(gmDollar)} testid="econ-set-gm-dol" />
@@ -1214,9 +1213,12 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                     <Metric label="Cost / Set" value={fmtMoney(costPerSet)} testid="econ-set-cost-per" />
                   </div>
                   {lineCharges > 0 && (
-                    <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 3 }}>
-                      <span>Items: {fmtMoney(projectSell)}</span>
-                      <span>+ Line Charges: {fmtMoney(lineCharges)}</span>
+                    <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 3 }}>
+                      <span>Line Charges: <b style={{ color: "var(--spot-text)", fontStyle: "normal" }}>{fmtMoney(lineCharges)}</b></span>
+                      <span style={{ fontStyle: "normal" }}>
+                        <span style={{ fontStyle: "italic", color: "var(--spot-text2)" }}>Quote Total: </span>
+                        <b style={{ color: "var(--spot-accent)" }}>{fmtMoney(projectQuoteTotal)}</b>
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1263,7 +1265,10 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
             {/* ─── SELL ROW with optional line-item breakdown ──────────────── */}
             <div style={{ opacity: isFulfillment ? 0.5 : 1, paddingBottom: 6, borderBottom: "1px solid var(--spot-line)" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <Metric label="Quote Total" value={fmtMoney(r.itemSell)} big className="green" testid="metric-sell-total" />
+                <Metric label="Sell Total" value={fmtMoney(r.itemSell)} big className="green" testid="metric-sell-total" />
+                {/* Sell/Pc reflects ORDER total / qty (legacy spot_engine.js
+                    L838: sellPc = sellTotal/ordQty) so a $1,380 die on a
+                    2,500-pc job makes Sell/Pc = $1.27, not $0.72. */}
                 <Metric label="Sell / Pc"  value={fmtMoney(r.sellPc, 2)} big testid="metric-sell-pc" />
               </div>
               {(() => {
@@ -1303,8 +1308,8 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
               <Metric label="Margin $"  value={fmtMoney(r.gmDollar)} className="green" testid="metric-gm-dollar" />
               <Metric label="Total Cost" value={fmtMoney(r.totalMfg)} testid="metric-total-cost" />
               <Metric label="Cost / Pc"  value={fmtMoney(r.costPc, 2)} testid="metric-cost-pc" />
-              <Metric label="Sell / MSF" value={fmtMoney(r.sellMSF, 0)} testid="metric-sell-msf" />
-              <Metric label="Cost / MSF" value={fmtMoney(r.costMSF, 0)} testid="metric-cost-msf" />
+              <Metric label="Sell / MSF" value={fmtMoney(r.sellMSF, 2)} testid="metric-sell-msf" />
+              <Metric label="Cost / MSF" value={fmtMoney(r.costMSF, 2)} testid="metric-cost-msf" />
             </div>
 
             {/* ─── PRODUCTION ROW ──────────────────────────────────────────── */}
@@ -1335,7 +1340,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
   if (!result || result.error) return null;
   const r = result;
   const detail = view === "detail";
-  const spoilSheets = Math.max(0, Math.round((r.matMakeready || 0) / Math.max(0.01, (r.boardEffRate || 1) * (r.boardOSqFt / 1000 || 0.001))));
+  const spoilSheets = r.extraSheets || 0;
 
   // ─── Multi-Part empty state ──────────────────────────────────────────
   // When the active BOM component lacks dims/specs, run_estimate returns
@@ -1378,7 +1383,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         <SubHead label="Direct Production" color="var(--spot-green)" />
         <Row label={detail ? <RowInline main="Material" sub={`${r.msfTier || "—"} tier, ${fmtMoney(r.boardEffRate)}/MSF`} /> : "Material"} value={fmtMoney(r.matTotal)} />
         {detail && (r.matMakeready > 0) && (
-          <SubRow label={`MR/Spoil Board ${spoilSheets || ""} extra sheets`.trim()} value={fmtMoney(r.matMakeready)} />
+          <SubRow label={`MR/Spoil Board ${spoilSheets} extra sheets`} value={fmtMoney(r.matMakeready)} />
         )}
         {detail && r.pressHrs > 0 && (
           <SubRow label={`Press ${fmtNum(r.pressHrs, 1)}h @ ${fmtMoney(r.incaRate)}/hr`} value={fmtMoney(r.pressCost)} />
@@ -1394,7 +1399,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
           <SubRow label={r.cutterBasis ? `${r.route} ${r.cutterBasis}` : `${r.route} ${labelize(r.cadDifficulty || "Standard")}`}
             value={fmtMoney(r.cutterDirect)} />
         )}
-        <Row label={`Cutting ${r.route}`} value={fmtMoney(r.cutterDirect)} />
+        <Row label="Cutting" value={fmtMoney(r.cutterDirect)} />
         {detail && (r.stripCost || 0) > 0 && (
           <SubRow label={`Stripping ${labelize(s.strippingComplexity || "Standard")}${s.perimeterStripping === "Yes" ? " + edge" : ""} @ $17.00/hr`} value={fmtMoney(r.stripCost)} />
         )}
@@ -1425,7 +1430,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
 
         <SubHead label="Pricing" color="var(--spot-purple)" />
         <Row label={<span>Margin <span style={{ color: "var(--spot-text3)" }}>{fmtPct(r.gmPct, 1)} of sell</span></span>} value={fmtMoney(r.gmDollar)} />
-        <RowTotal label="Quote Total" value={fmtMoney(r.itemSell)} />
+        <RowTotal label="Sell Total" value={fmtMoney(r.itemSell)} />
         <Row label={<span>Sell/Pc <span style={{ color: "var(--spot-text3)" }}>{fmtInt(r.qty)} pcs</span></span>}
           value={fmtMoney(r.sellPc, 2)} />
 

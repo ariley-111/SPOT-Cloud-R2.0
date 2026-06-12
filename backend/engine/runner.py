@@ -428,6 +428,9 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         # to Saber + die cut" so the frontend can render it as an orange banner.
         "routeWarning": routing.get("warning"),
         "matTotal": wf["matTotal"], "matMakeready": wf["matMakeready"],
+        "extraSheets": wf.get("extraSheets") or 0,
+        "mkSheets": wf.get("mkSheets") or 0,
+        "spoilSheets": wf.get("spoilSheets") or 0,
         "pressCost": wf["pressCost"], "inkCost": wf["inkCost"], "whiteCost": wf["whiteCost"],
         "side2Cost": wf["side2Cost"], "printDirect": wf["printDirect"],
         "saberCost": wf["saberCost"], "cutterDirect": wf["cutterDirect"],
