@@ -49,6 +49,23 @@ def test_bobst_auto_die_1800_default():
     assert abs(r["dieBase"] - 1800) < 0.01
 
 
+def test_saber_dc_auto_die_1200_default():
+    """Saber + D/C fallback also uses a die ($1200 default).
+
+    Legacy spot_engine.js L633 returns this as a fallback route when no
+    Crest die fits; the warning literally says "falling back to Saber +
+    die cut". So a die IS required and legacy applies $1200 default.
+    """
+    # Force Saber + D/C with high CAD hours + no Crest viability
+    r = run_estimate({
+        **_crest_payload(rule_in="0", route_override="Saber + D/C"),
+        "saber": "Yes", "saberBlanksOut": "1",
+    })
+    assert r["route"] == "Saber + D/C"
+    assert r["dieAutoApplied"] is True
+    assert abs(r["dieBase"] - 1200) < 0.01
+
+
 def test_cad_route_no_auto_die():
     """CAD route → no auto-die."""
     r = run_estimate(_crest_payload(rule_in="0", route_override="Auto"))

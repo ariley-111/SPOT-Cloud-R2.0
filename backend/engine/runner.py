@@ -75,19 +75,27 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
             freight_cost = json.get("freightCost", "0")
 
     # ─── Auto-Die (legacy spot_r1_5.jsx L3866-3883 parity) ─────────────────
-    # When the resolved route is Crest or Bobst, legacy auto-fills the die
-    # cost ($1200 Crest / $1800 Bobst) if the estimator didn't supply one.
-    # We do this in the engine (not the React useEffect) so multi-part quotes
-    # get auto-die for every component — not just the active tab.
+    # When the resolved route is Crest, Bobst, or Saber + D/C (Saber-cut
+    # blanks fed into a die-cutter), legacy auto-fills the die cost
+    # ($1200 Crest / $1800 Bobst / $1200 Saber+D/C) if the estimator didn't
+    # supply one. We do this in the engine (not the React useEffect) so
+    # multi-part quotes get auto-die for every component — not just the
+    # active tab. Saber + D/C is the legacy fallback route when no Crest
+    # die fits ("falling back to Saber + die cut"), so it still uses a
+    # steel die.
     resolved_route = route_result.get("route") or ""
-    any_die_route = resolved_route in ("Crest", "Bobst")
+    any_die_route = resolved_route in ("Crest", "Bobst", "Saber + D/C")
     die_cost_in = pn(json.get("cuttingDieCost", "0"))
     die_treat_in = json.get("dieTreatment", "None")
     die_cost_eff: Any = json.get("cuttingDieCost", "0")
     die_treat_eff = die_treat_in
     die_auto_applied = False
     if any_die_route and die_cost_in <= 0 and die_treat_in != "Amortize":
-        default_cost = asmp.get("bobstDieCost") if resolved_route == "Bobst" else asmp.get("crestDieCost")
+        # Bobst gets the $1800 default; Crest and Saber + D/C both use
+        # the Crest die default ($1200) since the Saber+D/C fallback uses
+        # the same die-cutter envelope.
+        default_cost = (asmp.get("bobstDieCost") if resolved_route == "Bobst"
+                        else asmp.get("crestDieCost"))
         if default_cost is None:
             default_cost = 1800 if resolved_route == "Bobst" else 1200
         die_cost_eff = str(default_cost)
@@ -428,6 +436,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         # to Saber + die cut" so the frontend can render it as an orange banner.
         "routeWarning": routing.get("warning"),
         "matTotal": wf["matTotal"], "matMakeready": wf["matMakeready"],
+        "matPerMsf": wf.get("matPerMsf") or 0,
         "extraSheets": wf.get("extraSheets") or 0,
         "mkSheets": wf.get("mkSheets") or 0,
         "spoilSheets": wf.get("spoilSheets") or 0,

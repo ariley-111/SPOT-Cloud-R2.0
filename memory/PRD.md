@@ -444,17 +444,20 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3**
 
 ### 2026-06-11 — L'Oreal Grippy Chipper parity sprint (Bug A + UI polish) ✅
-- **Bug A (P0, ~$6,900 of L'Oreal gap)**: Auto-applied die charges on Crest/Bobst routes for multi-part components. Moved legacy spot_r1_5.jsx L3866-3883 `useEffect` logic from frontend (active-tab-only) into backend engine (`runner.build_prod_inputs`) so EVERY component on a Crest/Bobst route gets the default die ($1200 Crest / $1800 Bobst) — not just the active BOM tab.
-- **Bug B (P0)**: Cost Buildup "Finishing" row now sums `stripCost + assemblyCost` (legacy spot_engine L7106 parity). Detail view splits into Stripping + Glue/Tape subrows.
-- **Bug C (P0)**: Matched Set top rollup now shows PROJECT total (`jobSell`), not per-set. Per-set/per-pc metrics surfaced as secondary tiles below.
-- **Bug G (P2)**: `Cost/Pc` → 2 decimals (was 3). `Sell/MSF` and `Cost/MSF` → integer dollars (no decimals).
-- **Bug H (P2)**: "Print" row hidden in Cost Buildup when `printDirect === 0`.
-- **Bug I (P2)**: "Sell Total" → "Quote Total" everywhere (item header, Cost Buildup RowTotal, Matched Set top rollup).
+- **Bug A (P0, ~$6,900 of L'Oreal gap)**: Auto-applied die charges on Crest/Bobst/**Saber + D/C** routes for multi-part components. Moved legacy spot_r1_5.jsx L3866-3883 `useEffect` logic from frontend (active-tab-only) into backend engine (`runner.build_prod_inputs`) so EVERY component that resolves to a die-using route gets the default die ($1200 Crest / $1800 Bobst / $1200 Saber+D/C) — not just the active BOM tab. Saber+D/C is the legacy fallback "Saber + die cut" route, also requires a steel die.
+- **Bug B (P0)**: Cost Buildup "Finishing" row now sums `stripCost + assemblyCost`. Detail view splits into Stripping + Glue/Tape subrows.
+- **Bug C (P0)**: Matched Set top rollup shows **SELL TOTAL** (merchandise), with "Line Charges + Quote Total" breakdown line below — exactly matching legacy.
+- **Bug G**: `Cost/Pc` → 2 decimals. `Sell/MSF` and `Cost/MSF` show **dollars and cents** ($773.57, not $774).
+- **Bug H**: "Print" row hidden in Cost Buildup when `printDirect === 0`.
+- **Bug I (CORRECTED)**: Big metric labels are **"Sell Total"** (matched set + active component). Cost Buildup PRICING section ends with "Sell Total $X" then "Sell/Pc". Then "ONE-TIME LINE ITEMS" SubHead → Die row → final **"Quote Total"** RowTotal at the bottom (always shows, equals Sell Total when no line items).
+- **Material `$/MSF`**: now uses `matPerMsf` (= matTotal/oMSF) matching legacy spot_r1_5.jsx L7119, not `effRate` (excluded pallet prep).
+- **MR/Spoil Board**: shows extra-sheet count ("6 extra sheets") sourced from new `extraSheets` engine field.
+- **"Cutting CAD" → "Cutting"** label only; subrow continues to show "CAD Standard".
+- **Active Component "Sell/Pc"** uses `r.sellPc` (= sellTotal/qty, matches legacy $1.27 when die present).
 - Reverted previous misguided ItemSetupSec.jsx "always-show Die row" — Die row gated to Crest/Bobst routes only (legacy parity).
-- New regression test: `/app/backend/tests/test_auto_die.py` (6 cases — Crest/Bobst defaults, CAD no-op, user-set preserved, Amortize-opt-out, 5-component aggregate). All PASS.
-- Surfaced `dieAutoApplied`, `dieBase`, `dieTreatmentEffective` on engine result; `dieBase`, `dieEmbedded`, `stripCost` on `rows_out` for accurate per-component buildup display.
+- New regression test: `/app/backend/tests/test_auto_die.py` (7 cases — Crest/Bobst/Saber+D/C defaults, CAD no-op, user-set preserved, Amortize-opt-out, 5-component aggregate). All PASS.
+- Surfaced `dieAutoApplied`, `dieBase`, `dieTreatmentEffective`, `matPerMsf`, `extraSheets`, `mkSheets`, `spoilSheets` on engine result; `dieBase`, `dieEmbedded`, `stripCost` on `rows_out` for accurate per-component buildup display.
 - Multi-part aggregator now reads `dieBase` from engine result (not payload state) so auto-applied dies contribute to `dieBaseTotal`.
-- Verified by testing agent (iteration_18): 11/11 new tests + 90/91 full suite (1 pre-existing unrelated failure).
 
 ## 9. Deployment
 - Preview URL: `https://ai-connect-33.preview.emergentagent.com` (this dev sandbox)

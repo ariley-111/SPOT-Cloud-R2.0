@@ -1381,7 +1381,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
       </div>
       <div style={{ padding: "8px 10px", fontSize: 12 }}>
         <SubHead label="Direct Production" color="var(--spot-green)" />
-        <Row label={detail ? <RowInline main="Material" sub={`${r.msfTier || "—"} tier, ${fmtMoney(r.boardEffRate)}/MSF`} /> : "Material"} value={fmtMoney(r.matTotal)} />
+        <Row label={detail ? <RowInline main="Material" sub={`${r.msfTier || "—"} tier, ${fmtMoney(r.matPerMsf || r.boardEffRate)}/MSF`} /> : "Material"} value={fmtMoney(r.matTotal)} />
         {detail && (r.matMakeready > 0) && (
           <SubRow label={`MR/Spoil Board ${spoilSheets} extra sheets`} value={fmtMoney(r.matMakeready)} />
         )}
@@ -1436,10 +1436,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
 
         {(() => {
           // Cost Buildup is COMPONENT-SCOPED: every line shows the ACTIVE
-          // component's costs, not the job total. For freight in MP-Per-Job
-          // mode that means r.freightLine = this component's allocated share
-          // (e.g. $58.48 of a $70 LocalDelivery), NOT the full $70.
-          const agg = isMultiPart ? (aggregate || {}) : null;
+          // component's costs, not the job total.
           const freight = r.freightLine || 0;
           const die = r.dieLineCost || 0;
           const prepress = r.prepressLineCost || 0;
@@ -1447,17 +1444,16 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
           const itemsSell = r.itemSell || 0;
           const grandTotal = r.sellTotal || (itemsSell + freight + die + prepress + misc);
           const hasAnyLine = freight > 0 || die > 0 || prepress > 0 || misc > 0;
-          if (!hasAnyLine) return null;
-          const footerLabel = "Quote Total";
-          const itemsLabel = "Items";
           return (
             <>
-              <SubHead label="One-Time Line Items" color="#3b82f6" />
-              {isMultiPart && (
-                <Row label={<span style={{ color: "var(--spot-text3)" }}>{itemsLabel}</span>}
-                  value={<span style={{ color: "var(--spot-text3)" }}>{fmtMoney(itemsSell)}</span>} />
-              )}
-              {freight > 0 && (() => {
+              {hasAnyLine && (
+                <>
+                  <SubHead label="One-Time Line Items" color="#3b82f6" />
+                  {isMultiPart && (
+                    <Row label={<span style={{ color: "var(--spot-text3)" }}>Items</span>}
+                      value={<span style={{ color: "var(--spot-text3)" }}>{fmtMoney(itemsSell)}</span>} />
+                  )}
+                  {freight > 0 && (() => {
                 // Distinct label & breakdown for Local Delivery — make it
                 // unmistakable on the customer-facing cost buildup.
                 const isLocal = s?.quoteFOB === "LocalDelivery";
@@ -1556,7 +1552,12 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                   );
                 });
               })()}
-              <RowTotal label={footerLabel} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
+                  <RowTotal label="Quote Total" value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
+                </>
+              )}
+              {!hasAnyLine && (
+                <RowTotal label="Quote Total" value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
+              )}
             </>
           );
         })()}
