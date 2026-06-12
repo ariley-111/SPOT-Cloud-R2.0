@@ -105,14 +105,10 @@ export default function ItemSetupSec({ result }) {
       pushToast && pushToast(`Die added — ${dieLabel} routing requires a steel die`, "ok");
       return;
     }
-    // Route → Crest/Bobst, user has no treatment AND no cost yet — auto-add default
-    if (anyDieRoute && !da.isAutoNone && currentTreat === "None" && currentCost <= 0) {
-      setManyFields({ dieTreatment: "Separate Line", cuttingDieCost: dieDefault });
-      pushToast && pushToast(
-        `Die added — ${dieLabel} routing requires a steel die ($${dieDefault} default)`,
-        "ok"
-      );
-    }
+    // NOTE: legacy parity (spot_r1_5.jsx) — dies are ALWAYS user-specified.
+    // We DO NOT auto-add a die when route resolves to Crest/Bobst. Phantom
+    // die line charges on every die-cut-route component were a recurring
+    // source of $1,380+/item math drift versus legacy (2026-02-12).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anyDieRoute, anyBobst, isFulfillment, route, itemKey]);
 

@@ -1325,7 +1325,12 @@ function PerComponentBreakdownLegacy({ row }) {
                 <td style={{ padding: "3px 6px", textAlign: "right" }}>×{pc.pcsPerSet || 1}</td>
                 <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtInt(pc.qty || pc.totalQty || 0)}</td>
                 <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.costPc || (pc.qty > 0 ? (pc.totalMfg || 0) / pc.qty : 0), 4)}</td>
-                <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.sellPc || (pc.qty > 0 ? (pc.itemSell || 0) / pc.qty : 0), 4)}</td>
+                {/* LEGACY PARITY (spot_r1_5.jsx L4655, 4760, 4931): BOM
+                    per-component table shows Sell/Pc = itemSell / qty
+                    (cost-of-goods, no die/freight/prepress line charges).
+                    sellPc on the backend = sellTotal/qty (all-in) which is
+                    the Cost-Buildup tier value, not this BOM grid value. */}
+                <td style={{ padding: "3px 6px", textAlign: "right" }}>{fmtMoney(pc.qty > 0 ? (pc.itemSell || 0) / pc.qty : 0, 4)}</td>
                 <td style={{ padding: "3px 6px", textAlign: "right", fontWeight: 600 }}>{fmtMoney(pc.itemSell || 0)}</td>
                 {hasAllocFreight && (
                   <td style={{ padding: "3px 6px", textAlign: "right", color: "#06b6d4", fontWeight: 600 }}

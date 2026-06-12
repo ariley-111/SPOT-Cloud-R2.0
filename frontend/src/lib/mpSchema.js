@@ -68,20 +68,20 @@ export function gatherItemState(state) {
 /** Build a blank item-level state (reset to DEFAULT_STATE defaults for item-level keys only).
  *  Always seeds `custIdent`/`miscCharges` to a fresh value (item-level per legacy parity).
  *
- *  Multi-Part BOM components additionally auto-populate the Die as
- *  `Separate Line` / `$1,200` / 15% markup so estimators don't have to manually
- *  flip every component to "Line" — they remove the die (treatment=None) on
- *  components that don't need one. This matches the cloud-only product
- *  decision (2026-06-12) that net-new MP components default to billing a die.
+ *  Multi-Part BOM components default to NO die — Die: None. Estimators add a
+ *  Die line (Separate Line / Amortize) per component as needed. Legacy parity
+ *  (spot_r1_5.jsx — dies are user-specified, never auto-added on BOM creation).
+ *  Revised 2026-02-12 per user direction: auto-defaulting $1,200 dies on every
+ *  new component created phantom charges on items that don't need a die.
  */
 export function freshItemState(overrides = {}) {
   const out = {};
   for (const k of ITEM_LEVEL_KEYS) out[k] = DEFAULT_STATE[k];
   out.custIdent = "";
   out.miscCharges = [];  // Fresh array — never share refs with DEFAULT_STATE
-  // Die default for net-new BOM components — see comment above.
-  out.dieTreatment = "Separate Line";
-  out.cuttingDieCost = "1200";
+  // Die defaults — None. Estimator opts-in per component.
+  out.dieTreatment = "None";
+  out.cuttingDieCost = "0";
   out.dieMarkup = "0.15";
   return { ...out, ...overrides };
 }
