@@ -443,48 +443,6 @@ async def calculate_multi_part(
         # ── Aggregate at job level ──────────────────────────────────────
         job_cost = sum(_safe_float(pc.get("totalMfg")) for pc in per_comp)
         job_sell_components = sum(_safe_float(pc.get("itemSell")) for pc in per_comp)
-
-        # TEMP DIAGNOSTIC LOG — captures every per-component cost contributor for
-        # the L'Oreal parity hunt. Writes to /tmp/spot_mp_debug.log so we can
-        # diff cloud's per-component sells against legacy values without
-        # cluttering supervisor logs. Triggered ONLY for MP quotes with ≥6
-        # components (e.g. L'Oreal's 12) — avoids noise on normal usage.
-        if len(per_comp) >= 6:
-            try:
-                import os as _os
-                with open("/tmp/spot_mp_debug.log", "a") as _dbg:
-                    _dbg.write(f"\n=== MP CALC pid={_os.getpid()} components={len(per_comp)} ===\n")
-                    # Pricing-mode + GM table — explains the elevated GMs on small components
-                    _dbg.write(f"pricingBasis={payload.get('pricingBasis')!r}  setMarginOverride={payload.get('setMarginOverride')!r}  setMarginPct={payload.get('setMarginPct')!r}\n")
-                    _dbg.write(f"gmByTier={payload.get('gmByTier')}\n")
-                    _dbg.write(f"sellByTier={payload.get('sellByTier')}\n")
-                    _dbg.write(f"forcedSellSet={payload.get('forcedSellSet')}\n")
-                    _dbg.write(f"{'idx':>3} {'desc':<28} {'qty':>8} {'oMSF':>8} {'board$':>10} {'press$':>10} "
-                               f"{'cut$':>10} {'strip$':>9} {'asm$':>8} {'direct$':>11} {'oh$':>8} "
-                               f"{'preEm$':>8} {'dieEm$':>8} {'totMfg$':>11} {'gm%':>6} {'sell$':>11}\n")
-                    for i, pc in enumerate(per_comp):
-                        desc = (pc.get("desc") or pc.get("itemDesc") or "?")[:28]
-                        qty = pc.get("totalQty") or pc.get("qty") or 0
-                        oMSF = pc.get("oMSF") or 0
-                        board = pc.get("boardCost") or pc.get("board") or 0
-                        press = pc.get("pressCost") or pc.get("press") or 0
-                        cut = pc.get("cutCost") or pc.get("cutterCost") or pc.get("cut") or 0
-                        strip = pc.get("stripCost") or 0
-                        asm = pc.get("assemblyCost") or 0
-                        direct = pc.get("totalDirect") or (board + press + cut + strip + asm)
-                        oh = pc.get("overhead") or 0
-                        pre_em = pc.get("prepressEmbedded") or 0
-                        die_em = pc.get("dieEmbedded") or 0
-                        tot_mfg = pc.get("totalMfg") or 0
-                        gm = pc.get("gmPct") or 0
-                        sell = pc.get("itemSell") or 0
-                        _dbg.write(f"{i:>3} {desc:<28} {qty:>8.0f} {oMSF:>8.2f} {board:>10.2f} {press:>10.2f} "
-                                   f"{cut:>10.2f} {strip:>9.2f} {asm:>8.2f} {direct:>11.2f} {oh:>8.2f} "
-                                   f"{pre_em:>8.2f} {die_em:>8.2f} {tot_mfg:>11.2f} {gm:>5.1%} {sell:>11.2f}\n")
-                    _dbg.write(f"{'TOTAL':<35} job_cost={job_cost:>11.2f} job_sell={job_sell_components:>11.2f}\n")
-            except Exception:
-                pass
-
         # Split line charges by type so the right-rail Cost Buildup can
         # display Freight / Die / Prepress separately (matches Quote Table)
         line_freight = sum(_safe_float(pc.get("freightLine")) for pc in per_comp
