@@ -246,50 +246,60 @@ export default function PreviewPdfModal({ onClose }) {
                 )}
               </div>
 
-              {/* Item description bar */}
-              <div style={{ background: "#f3f4f6", borderRadius: 6,
-                padding: "10px 14px", marginBottom: 20 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>
-                  {s.itemDesc || s.boxStyle || "—"}
-                </div>
-                {specBits.length > 0 && (
-                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-                    {specBits.join(" · ")}
+              {/* Item description bar — single-piece quotes only. For Multi-Part
+                  (Matched Set or Individual), the BOM listing serves as the
+                  identifier; an extra item bar would duplicate the project
+                  name above. */}
+              {!(s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0) && (
+                <div style={{ background: "#f3f4f6", borderRadius: 6,
+                  padding: "10px 14px", marginBottom: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>
+                    {s.itemDesc || s.boxStyle || "—"}
                   </div>
-                )}
-              </div>
+                  {specBits.length > 0 && (
+                    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                      {specBits.join(" · ")}
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* MP-5: Bill of Materials listing (MP-MatchedSet only — Individual shows per-component sections below instead) */}
+              {/* MP-Matched Set: BOM listing with all components — # / Component / Board / Blank / Pcs/Set. */}
               {s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (s.pricingMode || "Matched Set") === "Matched Set" && (
-                <div style={{ background: "#fef3c722", border: "1px solid #f59e0b66",
+                <div style={{ background: "#f3f4f6",
                   borderRadius: 6, padding: "10px 14px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700,
+                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 700,
                     textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
-                    Multi-Part · Matched Set · {(s.bomItems || []).length} components
+                    Matched Set — {(s.bomItems || []).length} Items
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead><tr style={{ borderBottom: "1px solid #d1d5db", color: "#6b7280" }}>
+                      <th style={{ ...thS, textAlign: "left", width: 24 }}>#</th>
                       <th style={{ ...thL, textAlign: "left" }}>Component</th>
-                      <th style={{ ...thS, textAlign: "center" }}>Type</th>
-                      <th style={{ ...thS, textAlign: "center" }}>Pcs/Set</th>
-                      <th style={{ ...thL, textAlign: "left" }}>Specs</th>
+                      <th style={{ ...thL, textAlign: "left" }}>Board</th>
+                      <th style={{ ...thL, textAlign: "left" }}>Blank</th>
+                      <th style={{ ...thS, textAlign: "right" }}>Pcs/Set</th>
                     </tr></thead>
                     <tbody>
                       {(s.bomItems || []).map((it, i) => {
                         const ist = it.state || {};
-                        const sp = [];
-                        if (it.custIdent || ist.custIdent) sp.push(it.custIdent || ist.custIdent);
-                        if (ist.boardGrade && ist.flute) sp.push(`${ist.boardGrade}# ${ist.flute}`);
-                        if (ist.outsideLiner || ist.insideLiner) sp.push(`${fmLnr(ist.outsideLiner)}/${fmLnr(ist.insideLiner)}`);
-                        const iw = Number(ist.oneUpW || 0), il = Number(ist.oneUpL || 0);
-                        if (iw > 0 && il > 0) sp.push(`${fmtNum(iw, 4)}×${fmtNum(il, 4)}`);
-                        const tc = it.type === "Manufactured" ? "#3b82f6" : it.type === "Purchased" ? "#06b6d4" : "#22c55e";
+                        let brd = "", dims = "—";
+                        if ((it.type || "Manufactured") === "Manufactured") {
+                          const fl = ist.flute || "", gr = ist.boardGrade || "";
+                          const ol = fmLnr(ist.outsideLiner), il = fmLnr(ist.insideLiner);
+                          brd = `${gr}# ${fl} ${ol}/${il}`;
+                          const iw = Number(ist.oneUpW || 0), il2 = Number(ist.oneUpL || 0);
+                          if (iw > 0 && il2 > 0) dims = `${fmtNum(iw, 4)}×${fmtNum(il2, 4)}`;
+                        } else {
+                          brd = it.type === "Purchased" ? "Purchased" : "Fulfillment";
+                        }
                         return (
                           <tr key={it.id || i} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                            <td style={{ padding: "5px 10px", fontWeight: 600 }}>{it.desc || `Item ${i+1}`}</td>
-                            <td style={{ padding: "5px 10px", textAlign: "center", fontSize: 11, color: tc, fontWeight: 700 }}>{it.type || "Manufactured"}</td>
-                            <td style={{ padding: "5px 10px", textAlign: "center", fontSize: 11, color: "#6b7280" }}>{it.pcsPerSet || 1}/set</td>
-                            <td style={{ padding: "5px 10px", fontSize: 11, color: "#6b7280" }}>{sp.join(" · ")}</td>
+                            <td style={{ padding: "5px 8px", fontWeight: 700, color: "#6b7280" }}>{i + 1}</td>
+                            <td style={{ padding: "5px 10px", fontWeight: 600 }}>{it.desc || `Item ${i + 1}`}</td>
+                            <td style={{ padding: "5px 10px", color: "#6b7280" }}>{brd}</td>
+                            <td style={{ padding: "5px 10px", color: "#6b7280" }}>{dims}</td>
+                            <td style={{ padding: "5px 10px", textAlign: "right", color: "#6b7280" }}>{it.pcsPerSet || 1}</td>
                           </tr>
                         );
                       })}
@@ -308,13 +318,22 @@ export default function PreviewPdfModal({ onClose }) {
                 />
               )}
 
-              {/* Pricing table — for SP and MP-MatchedSet */}
-              {!(s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (s.pricingMode || "Matched Set") === "Individual") && (
+              {/* MP-Matched Set: Per-component pricing grid (legacy parity, spot_r1_5.jsx L4639-4702) */}
+              {s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0 && (s.pricingMode || "Matched Set") === "Matched Set" && (
+                <MatchedSetPricingGrid
+                  bomItems={s.bomItems || []}
+                  componentPricing={componentPricing}
+                  slots={previewRows}
+                />
+              )}
+
+              {/* Pricing table — for Simple-piece quotes only */}
+              {!(s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0) && (
                 <PricingTable
                   rows={previewRows}
                   hasLineItems={hasLineItems}
                   chargeMode={chargeMode}
-                  isMP={s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0}
+                  isMP={false}
                 />
               )}
 
@@ -471,9 +490,143 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
   );
 }
 
-// ─── Per-Component Sections (MP-Individual mode) ──────────────────────
+// ─── Matched-Set Per-Component Pricing Grid (legacy parity, spot_r1_5.jsx L4639-4702) ──────
+// For Multi-Part quotes in Matched Set mode. Lists every component with its
+// clean per-piece sell price (itemSell/qty, no embedded charges), then
+// Price/Set row, line-charge rows (Die / Freight / Prepress / Misc) when present,
+// QUOTE TOTAL row, and SETS row.
+function MatchedSetPricingGrid({ bomItems, componentPricing, slots }) {
+  if (!slots || slots.length === 0) {
+    return (
+      <div style={{ padding: 18, textAlign: "center", color: "#9ca3af",
+        marginBottom: 16, fontSize: 12 }}>No priced set quantities</div>
+    );
+  }
+  const cpByIdx = new Map();
+  const cpById = new Map();
+  (componentPricing || []).forEach((c) => {
+    if (c.itemIndex !== undefined) cpByIdx.set(c.itemIndex, c);
+    if (c.itemId) cpById.set(c.itemId, c);
+  });
+
+  const tiers = slots.map((s) => ({
+    slot: Number(s.slot ?? 0),
+    setQty: Number(s.setQty ?? s.qty ?? 0),
+    sellTotal: Number(s.sellTotal || 0),
+    sellPerSet: Number(s.sellPc || s.sellPerSet || 0),
+    die: Number(s.dieLineCost || 0),
+    freight: Number(s.freightLine || 0),
+    prepress: Number(s.prepressLineCost || 0),
+    misc: Number(s.miscLineCost || 0),
+  }));
+
+  const lineRow = (label, vals) => {
+    if (!vals.some((v) => v > 0)) return null;
+    return (
+      <tr key={label}>
+        <td style={{ padding: "4px 8px", color: "#6b7280", fontStyle: "italic" }}>{label}</td>
+        {vals.map((v, i) => (
+          <td key={i} style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>
+            {v > 0 ? fmtMoney(v) : "—"}
+          </td>
+        ))}
+      </tr>
+    );
+  };
+
+  const dieVals = tiers.map((t) => t.die);
+  const frtVals = tiers.map((t) => t.freight);
+  const ppVals = tiers.map((t) => t.prepress);
+  const miscVals = tiers.map((t) => t.misc);
+
+  return (
+    <div style={{ marginBottom: 16 }} data-testid="preview-mp-matched-grid">
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#1e40af",
+        textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+        Per-Component Pricing
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <thead>
+          <tr style={{ borderBottom: "2px solid #d1d5db" }}>
+            <th style={{ ...thL, color: "#374151" }}>Component</th>
+            {tiers.map((t) => (
+              <th key={t.slot} style={{ ...thS, color: "#374151" }}>{fmtInt(t.setQty)} sets</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {(bomItems || []).map((it, i) => {
+            const cp = cpById.get(it.id) || cpByIdx.get(i) || {};
+            const rowBySlot = new Map();
+            (cp.rows || []).forEach((r) => rowBySlot.set(Number(r.slotIdx ?? 0), r));
+            const bg = i % 2 ? "#f9fafb" : "#fff";
+            return (
+              <tr key={it.id || i}>
+                <td style={{ padding: "4px 8px", background: bg }}>
+                  <b>{i + 1}.</b> {it.desc || `Item ${i + 1}`}
+                </td>
+                {tiers.map((t) => {
+                  const r = rowBySlot.get(t.slot);
+                  const qv = Number(r?.qty || 0);
+                  const isell = Number(r?.itemSell || 0);
+                  const sellPc = qv > 0 ? isell / qv : 0;
+                  return (
+                    <td key={t.slot} style={{ padding: "4px 8px", textAlign: "right", background: bg }}>
+                      {sellPc > 0 ? `${fmtMoney(sellPc)}/pc` : "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+          {/* Price/Set row */}
+          <tr style={{ borderTop: "2px solid #1e40af" }}>
+            <td style={{ padding: "6px 8px", color: "#1e40af", fontWeight: 700 }}>Price/Set</td>
+            {tiers.map((t) => (
+              <td key={t.slot} style={{ padding: "6px 8px", textAlign: "right",
+                color: "#1e40af", fontWeight: 700 }}>
+                {t.sellPerSet > 0 ? fmtMoney(t.sellPerSet) : "—"}
+              </td>
+            ))}
+          </tr>
+          {lineRow("Die", dieVals)}
+          {lineRow("Freight", frtVals)}
+          {lineRow("Prepress", ppVals)}
+          {lineRow("Misc", miscVals)}
+          {/* QUOTE TOTAL row */}
+          <tr style={{ borderTop: "2px solid #1e40af", background: "#f0f4ff" }}>
+            <td style={{ padding: "8px", color: "#1e40af", fontWeight: 700, fontSize: 12 }}>
+              QUOTE TOTAL
+            </td>
+            {tiers.map((t) => (
+              <td key={t.slot} style={{ padding: "8px", textAlign: "right",
+                color: "#1e40af", fontWeight: 700, fontSize: 13 }}>
+                {fmtMoney(t.sellTotal)}
+              </td>
+            ))}
+          </tr>
+          {/* SETS row */}
+          <tr>
+            <td style={{ padding: "3px 8px", fontSize: 11, color: "#9ca3af" }}>SETS</td>
+            {tiers.map((t) => (
+              <td key={t.slot} style={{ padding: "3px 8px", textAlign: "right",
+                fontSize: 11, color: "#9ca3af" }}>
+                {fmtInt(t.setQty)} sets
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+
 // Each BOM component renders as its own section with its own qty rows.
 // Per-Job costs go in a Job Totals footer at the bottom.
+// ─── Per-Component Sections (MP-Individual mode) ──────────────────────
+// Each BOM component renders as its own section with its own qty rows.
+// Per-Job costs go in a Quote Summary footer at the bottom.
 function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }) {
   const isExcl = (itemId, slotIdx) => (excludeMap[itemId] || []).includes(slotIdx);
 
@@ -525,15 +678,12 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
                   <th style={thL}>Qty</th>
                   <th style={thS}>Each</th>
                   <th style={thS}>Per/M</th>
-                  <th style={thS}>Freight</th>
-                  <th style={thS}>Die</th>
-                  <th style={thS}>Prepress</th>
                   <th style={{ ...thS, color: "#1e40af" }}>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={7} style={{ padding: 16, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>
+                  <tr><td colSpan={4} style={{ padding: 16, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>
                     No qty entered
                   </td></tr>
                 ) : rows.map((r, i) => (
@@ -542,9 +692,6 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
                     <td style={{ padding: "6px 10px", fontWeight: 600 }}>{fmtInt(r.qty)}</td>
                     <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtMoney(r.sellPc, 4)}</td>
                     <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{fmtMoney(r.perM, 2)}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—"}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{Number(r.dieLineCost) > 0 ? fmtMoney(r.dieLineCost) : "—"}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{Number(r.prepressLineCost) > 0 ? fmtMoney(r.prepressLineCost) : "—"}</td>
                     <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, color: "#1e40af" }}>
                       {fmtMoney(r.sellTotal)}
                     </td>
@@ -564,7 +711,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
           <div style={{
             fontSize: 11, fontWeight: 700, color: "#1e40af",
             textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6,
-          }}>Job Totals</div>
+          }}>Quote Summary</div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <tbody>
               <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Items (base sell)</td>
