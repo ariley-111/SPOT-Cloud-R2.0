@@ -470,8 +470,13 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 ## 11. L'Oreal Grippy Chipper open items (next session)
 - **Bug D (P1, ~$2,400)**: Board cost may use rounded dimensions. Audit `engine/core.py::calc_board` vs legacy `spot_engine.js::calcBoard` for sheet sqft computation.
-- **Bug E (P1)**: CORR FLIPPED red badge — Mid Disk 1/2/3 show red in legacy, not in cloud. Check `hasIssue` in routing.
-- **Bug F (P1)**: Bot Disk 1 — cloud shows red badge, legacy does not. Check `flippedBetter` orientation logic.
-- After D/E/F: re-run the full L'Oreal 12-component quote — target ≤$50 delta vs legacy $593,389.67.
+- After D fixed: re-run the full L'Oreal 12-component quote — target ≤$50 delta vs legacy $593,389.67.
 - Comprehensive automated parity test suite for L'Oreal quote — blocked on D fixed.
+
+### 2026-06-12 — Economics panel P0 regression cleanup ✅ (Iter 19)
+- **Line Charges $0.00 → $6,900 (P0)**: Die row was hidden when route ≠ Crest/Bobst (commit b5ee596). Saber+D/C and CAD components couldn't carry a die → `line_die` summed to 0 → Matched Set "Line Charges" displayed $0. Reverted: Die row now visible on ALL routes with a "(non-Crest/Bobst route — die optional override)" hint when route is resolved and not Crest/Bobst. Backend `runner.build_prod_inputs` still auto-injects defaults only on Crest/Bobst per legacy spot_r1_5.jsx L3870.
+- **Corr Flipped not triggering on Mid Disks 1/2/3 (P0, $361.60 delta)**: Cloud's auto-flip useEffect evaluated `hasIssue` against POST-buy-min `boardHasPrice/boardMeetMin`, but legacy evaluates against PRE-buy-min `sel.bc` (separate useEffect ordering — flip fires before buy-min auto-enable). Fix: `runner.py` STEP 6 captures `bc.hasPrice/meetMin/pricable` snapshot BEFORE buy-min auto-enables, exposes as `_pipeline.preBuyMinHasPrice/preBuyMinMeetMin/preBuyMinPricable`. `ItemSetupSec.jsx` auto-flip useEffect now reads those instead. Removed the erroneous `!buyMinActive` runtime gate that was the original suppression source.
+- New regression test: `/app/backend/tests/test_pre_buy_min_snapshot.py` (3 cases — single-component pre-buy-min snapshot exposure + flipWouldHelp + multi-part per-component _pipeline propagation). All PASS.
+- Backend pytest 99/100 (1 pre-existing `test_estimator_cannot_access_admin_rates` unrelated to this work). Testing agent iteration 19 verified all fixes at source + runtime.
+- Bug E/F (Corr Flipped condition mismatch) now considered **RESOLVED** by the pre-buy-min snapshot fix; collapse the two into a single closed item.
 

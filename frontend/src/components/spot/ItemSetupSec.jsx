@@ -828,7 +828,7 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         {s.dieTreatment !== "None" && (
           <Num value={s.cuttingDieCost} onChange={(v) => setField("cuttingDieCost", v)} step="0.01" min="0" style={{ width: 58, padding: "4px 5px", fontSize: 12 }} data-testid="input-die-cost" />
         )}
-        {!anyDieRoute && s.dieTreatment !== "None" && (
+        {!anyDieRoute && s.dieTreatment !== "None" && route && route !== "—" && (
           <span style={{ fontSize: 10, color: "var(--spot-text3)", fontStyle: "italic", marginLeft: 4 }}>
             (non-Crest/Bobst route — die optional override)
           </span>
