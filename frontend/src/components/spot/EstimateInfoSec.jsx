@@ -122,47 +122,74 @@ export default function EstimateInfoSec() {
         )}
       </div>
 
-      {/* Quantities — up to 8 slots, +Qty adds a slot, Auto-Fill multiplies last */}
-      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text3)",
-          textTransform: "uppercase", letterSpacing: ".06em", width: 64, flexShrink: 0 }}>Qty</span>
-        {(s.qtys || ["", "", "", "", ""]).map((q, i) => (
-          <input key={i} className="sp-input" type="number" value={q || ""}
-            data-testid={`input-qty-${i}`}
-            placeholder="—"
-            onChange={(e) => {
-              const next = [...(s.qtys || ["", "", "", "", ""])];
-              while (next.length < 5) next.push("");
-              next[i] = e.target.value; setField("qtys", next);
-            }}
-            style={{ width: 65, padding: "4px 6px", fontSize: 12, textAlign: "center" }} />
-        ))}
-        <button onClick={() => {
-          const cur = s.qtys || [];
-          if (cur.length >= 8) return;
-          setField("qtys", [...cur, ""]);
-        }} data-testid="btn-qty-add"
-          disabled={(s.qtys || []).length >= 8}
-          style={{
-            all: "unset", cursor: (s.qtys || []).length >= 8 ? "not-allowed" : "pointer",
-            fontSize: 11, fontWeight: 700, color: "var(--spot-accent)",
-            padding: "4px 8px", border: "1px solid var(--spot-accent)", borderRadius: 3,
-            opacity: (s.qtys || []).length >= 8 ? 0.4 : 1,
-          }}
-          title="Add another quantity slot (max 8)">+ Qty</button>
-        <button onClick={() => {
-          const filled = (s.qtys || []).filter((q) => Number(q) > 0);
-          const last = Number(filled[filled.length - 1]) || 100;
-          const tiers = [last, last * 2, last * 5, last * 10, last * 20].slice(0, 5).map(String);
-          setField("qtys", tiers);
-        }} data-testid="btn-qty-autofill"
-          style={{
-            all: "unset", cursor: "pointer",
-            fontSize: 11, fontWeight: 700, color: "var(--spot-green)",
-            padding: "4px 8px", border: "1px solid var(--spot-green)", borderRadius: 3,
-          }}
-          title="Auto-fill 5 tiers from last entered (×1, ×2, ×5, ×10, ×20)">Auto-Fill</button>
-      </div>
+      {/* Quantities — up to 8 slots, +Qty adds a slot, Auto-Fill multiplies last.
+          Multi-Part Individual mode shows the active component's TRUE pcs qty
+          (set_qty × pcsPerSet) — legacy parity (spot_r1_5.jsx L2071-2075 +
+          switchBomItem applyItemState). State is stored as raw set qtys; the
+          input multiplies/divides by pcsPerSet at the display layer so users
+          see and edit component-level pieces directly. */}
+      {(() => {
+        const isMP = (s.quoteType || "Simple") === "Multi-Part";
+        const isIndividual = isMP && s.pricingMode === "Individual";
+        const activeBom = (s.bomItems || [])[s.activeItemIdx ?? 0];
+        const pps = Math.max(1, Number(activeBom?.pcsPerSet) || 1);
+        const showMultiplied = isIndividual && pps > 1;
+        const qtyLabel = showMultiplied ? `Qty × ${pps}` : "Qty";
+        const displayVal = (raw) => {
+          if (!showMultiplied) return raw || "";
+          const n = parseInt(raw, 10);
+          return n > 0 ? String(n * pps) : "";
+        };
+        const writeVal = (input) => {
+          if (!showMultiplied) return input;
+          const n = parseInt(input, 10);
+          return n > 0 ? String(Math.round(n / pps)) : "";
+        };
+        return (
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: showMultiplied ? "#f59e0b" : "var(--spot-text3)",
+              textTransform: "uppercase", letterSpacing: ".06em", width: 64, flexShrink: 0 }}
+              data-testid="estinfo-qty-label">{qtyLabel}</span>
+            {(s.qtys || ["", "", "", "", ""]).map((q, i) => (
+              <input key={i} className="sp-input" type="number" value={displayVal(q)}
+                data-testid={`input-qty-${i}`}
+                placeholder="—"
+                onChange={(e) => {
+                  const next = [...(s.qtys || ["", "", "", "", ""])];
+                  while (next.length < 5) next.push("");
+                  next[i] = writeVal(e.target.value);
+                  setField("qtys", next);
+                }}
+                style={{ width: 65, padding: "4px 6px", fontSize: 12, textAlign: "center" }} />
+            ))}
+            <button onClick={() => {
+              const cur = s.qtys || [];
+              if (cur.length >= 8) return;
+              setField("qtys", [...cur, ""]);
+            }} data-testid="btn-qty-add"
+              disabled={(s.qtys || []).length >= 8}
+              style={{
+                all: "unset", cursor: (s.qtys || []).length >= 8 ? "not-allowed" : "pointer",
+                fontSize: 11, fontWeight: 700, color: "var(--spot-accent)",
+                padding: "4px 8px", border: "1px solid var(--spot-accent)", borderRadius: 3,
+                opacity: (s.qtys || []).length >= 8 ? 0.4 : 1,
+              }}
+              title="Add another quantity slot (max 8)">+ Qty</button>
+            <button onClick={() => {
+              const filled = (s.qtys || []).filter((q) => Number(q) > 0);
+              const last = Number(filled[filled.length - 1]) || 100;
+              const tiers = [last, last * 2, last * 5, last * 10, last * 20].slice(0, 5).map(String);
+              setField("qtys", tiers);
+            }} data-testid="btn-qty-autofill"
+              style={{
+                all: "unset", cursor: "pointer",
+                fontSize: 11, fontWeight: 700, color: "var(--spot-green)",
+                padding: "4px 8px", border: "1px solid var(--spot-green)", borderRadius: 3,
+              }}
+              title="Auto-fill 5 tiers from last entered (×1, ×2, ×5, ×10, ×20)">Auto-Fill</button>
+          </div>
+        );
+      })()}
     </Sec>
   );
 }
