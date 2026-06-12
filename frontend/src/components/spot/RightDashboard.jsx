@@ -916,7 +916,9 @@ function FreightPanel({ s }) {
 function RouteComparison({ s, primary }) {
   const { active, setField } = useQuote();
   const tabId = active?.id;
-  const [open, setOpen] = useState(true);  // default expanded for visibility (legacy default)
+  // LEGACY PARITY (spot_r1_5.jsx L3686): showRouteComp defaults to FALSE.
+  // Estimator clicks the header to expand the comparison table.
+  const [open, setOpen] = useState(false);
   const [comp, setComp] = useState(null);
   const [busy, setBusy] = useState(false);
   const qty = primary?.qty;
@@ -964,6 +966,12 @@ function RouteComparison({ s, primary }) {
   if (comp?.cad) cols.push({ key: "CAD", label: "CAD", d: comp.cad });
   if (comp?.crest) cols.push({ key: "Crest", label: "Crest", d: comp.crest });
   if (comp?.bobst) cols.push({ key: "Bobst", label: "Bobst", d: comp.bobst });
+
+  // LEGACY PARITY (spot_r1_5.jsx L6909): only render the panel when BOTH
+  // CAD and Crest are viable. compareRoutes returns null when either route
+  // fails (Crest envelope, board grade not Crest-eligible, etc.). For unstocked
+  // grades like 275 DW B/C, Crest is typically not viable → panel hidden entirely.
+  if (!comp || !comp.cad || !comp.crest) return null;
 
   const switchTo = (rt) => {
     setField("routeOverride", s.routeOverride === rt ? "Auto" : rt);
@@ -1420,8 +1428,15 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
             Prepress amort.{detail && r.prepressEmbedded > 0 ? <span style={{ color: "var(--spot-text3)" }}> {fmtMoney(r.prepressEmbedded)}, no OH/GM</span> : ""}
           </span>
         } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.prepressEmbedded)}</span>} />
-        <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
-          value={<span style={{ fontStyle: "italic" }}>{(r.dieEmbedded > 0) ? fmtMoney(r.dieEmbedded) : "None"}</span>} />
+        {/* Hide Die row in Indirect when no embedded die — legacy parity:
+            legacy doesn't render a "Die: None" line in the Indirect section.
+            Embedded die only appears when treatment is Amortize and engine
+            computed an embedded portion. Otherwise dies show as One-Time
+            Line Items below. */}
+        {(r.dieEmbedded || 0) > 0 && (
+          <Row label={<span style={{ fontStyle: "italic" }}>Die</span>}
+            value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.dieEmbedded)}</span>} />
+        )}
         {(r.freightEmbed || 0) > 0 && (
           <Row label={<span style={{ fontStyle: "italic" }}>Freight (embed)</span>}
             value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.freightEmbed)}</span>} />

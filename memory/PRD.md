@@ -443,7 +443,17 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - ERP/Automator API integration — **P3**
 - Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3**
 
-### 2026-06-12 — Per-component Die affordance + warning scoping (Iter 21)
+### 2026-06-12 — Die UX + Route Comparison legacy parity (Iter 22)
+- **Die row in Item Setup → always visible** on EVERY route (no more `anyDieRoute` gate). Estimator can set None/Line/Amort + cost + markup per component regardless of routing.
+- **Default die for net-new BOM components**: `Separate Line` / `$1,200` / 15% markup, auto-applied in `mpSchema.freshItemState()`. Net-new MP components ship a die by default — user clicks "None" to remove. Did NOT change global `DEFAULT_STATE` so single (non-MP) quotes remain die-free at start.
+- **Tile click smart-fill**: clicking "Line" or "Amort" on a fresh row auto-fills `$1,200`/15% if cost was zero. Clicking "None" clears cost back to `0`.
+- **Indirect-section "Die: None" row hidden** when `dieEmbedded = 0` (legacy parity — no zero-value Indirect die row).
+- **Backend dieTreatment default** now mirrors legacy `spot_r1_5.jsx L3782`: `"Separate Line"` when `cuttingDieCost > 0`, `"None"` otherwise. Closes the regression where MP-Matched-Set components with persisted die costs silently produced $0 line charges in cloud.
+- **Route Comparison panel** now matches legacy `spot_r1_5.jsx L3686 + L6909`:
+  - Hidden entirely when `compareRoutes` returns no viable CAD+Crest pair (returns null) — e.g. 275 DW B/C is unstocked AND not Crest-eligible → no panel at all.
+  - Default collapsed (`showRouteComp = false`); estimator clicks header to expand.
+
+
 - **Per-component Die chip on BOM tabs** (legacy spot_r1_5.jsx BOM-row parity): Each BOM tab in MP now has a clickable "+ Die" / "Die $X" chip. Click opens a small popover with None/Line/Amort + cost input + "$1200" quick-set. Persists to per-item state — works for active AND inactive items. New `updateBomItemState(idx, patch)` helper in QuoteContext writes to top-level (active) or `bomItems[idx].state` (inactive). This unblocks ALL non-Crest/Bobst die scenarios (Saber+D/C, CAD routes) that previously had no UI affordance and resolves the "Line Charges $0 vs legacy $6,900" gap as soon as the estimator clicks the dies in.
 - **`Too many CAD hours…` warning component-scoped**: matched-set slot's `routeWarning` now surfaces only the ACTIVE component's warning (was aggregated across all components, which incorrectly persisted when switching to a non-CAD component). engine_routes.py L527.
 - Die row in OneTimeCosts panel REMAINS HIDDEN on non-Crest/Bobst routes (legacy parity, per user request).

@@ -66,12 +66,23 @@ export function gatherItemState(state) {
 }
 
 /** Build a blank item-level state (reset to DEFAULT_STATE defaults for item-level keys only).
- *  Always seeds `custIdent`/`miscCharges` to a fresh value (item-level per legacy parity). */
+ *  Always seeds `custIdent`/`miscCharges` to a fresh value (item-level per legacy parity).
+ *
+ *  Multi-Part BOM components additionally auto-populate the Die as
+ *  `Separate Line` / `$1,200` / 15% markup so estimators don't have to manually
+ *  flip every component to "Line" — they remove the die (treatment=None) on
+ *  components that don't need one. This matches the cloud-only product
+ *  decision (2026-06-12) that net-new MP components default to billing a die.
+ */
 export function freshItemState(overrides = {}) {
   const out = {};
   for (const k of ITEM_LEVEL_KEYS) out[k] = DEFAULT_STATE[k];
   out.custIdent = "";
   out.miscCharges = [];  // Fresh array — never share refs with DEFAULT_STATE
+  // Die default for net-new BOM components — see comment above.
+  out.dieTreatment = "Separate Line";
+  out.cuttingDieCost = "1200";
+  out.dieMarkup = "0.15";
   return { ...out, ...overrides };
 }
 
