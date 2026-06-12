@@ -377,9 +377,15 @@ async def calculate_multi_part(
                 ist = item.get("state") or {}
                 iqs = ist.get("qtys") or []
                 try:
-                    item_qty = int(iqs[slot]) if slot < len(iqs) and iqs[slot] not in ("", None) else set_qty
+                    raw = int(iqs[slot]) if slot < len(iqs) and iqs[slot] not in ("", None) else set_qty
                 except (TypeError, ValueError):
-                    item_qty = set_qty
+                    raw = set_qty
+                # LEGACY PARITY (spot_r1_5.jsx L2071-2075): when committing a BOM
+                # draft, legacy stores `state.qtys` PRE-MULTIPLIED by pcsPerSet so
+                # every downstream calc (including Individual mode) sees the true
+                # component pcs count. Cloud stores raw set qtys; multiply at
+                # runtime so Individual mode matches legacy 1:1.
+                item_qty = raw * pcs_per_set
 
             if item_type == "Purchased":
                 r = _calc_purchased(item, slot, item_qty, purch_margin, payload)
@@ -400,7 +406,17 @@ async def calculate_multi_part(
                         item_qtys.append("")
                     use_slot = slot if slot < 5 else 0
                 else:
-                    item_qtys = [str(q or "") for q in ((item.get("state") or {}).get("qtys") or top_qtys)]
+                    # Individual mode — legacy parity (spot_r1_5.jsx L2071-2075):
+                    # state.qtys is stored pre-multiplied by pcsPerSet in legacy.
+                    # Cloud stores raw set qtys; multiply here so the engine sees
+                    # the true component pcs count.
+                    raw_qtys = (item.get("state") or {}).get("qtys") or top_qtys
+                    item_qtys = [
+                        (str(int(_safe_float(q) * pcs_per_set)) if str(q).strip() else "")
+                        for q in raw_qtys
+                    ]
+                    while len(item_qtys) < 5:
+                        item_qtys.append("")
                     use_slot = slot
                 item_payload = _build_item_payload(item, payload, item_qtys)
                 try:
@@ -593,7 +609,10 @@ async def calculate_multi_part(
 
         # Determine the qty list for this component
         if pricing_mode == "Individual":
-            # Use this component's OWN qtys — only non-blank entries
+            # Use this component's OWN qtys — only non-blank entries.
+            # LEGACY PARITY (spot_r1_5.jsx L2071-2075): state.qtys is stored
+            # pre-multiplied by pcsPerSet. Cloud stores raw set qtys; multiply
+            # here so Individual mode prices the true component pcs count.
             comp_qtys: List[int] = []
             comp_slot_idx: List[int] = []  # which top-level slot each row came from
             iqs = ist.get("qtys") or []
@@ -604,7 +623,7 @@ async def calculate_multi_part(
                 except (TypeError, ValueError):
                     qv = 0
                 if qv > 0:
-                    comp_qtys.append(qv)
+                    comp_qtys.append(qv * pcs_per_set)
                     comp_slot_idx.append(slot_i)
         else:
             # Matched Set: use top-level set qtys; item_qty = set_qty * pcs_per_set
@@ -625,8 +644,9 @@ async def calculate_multi_part(
             if item_type == "Purchased":
                 r = _calc_purchased(item, slot_i, iq, purch_margin, payload)
             elif item_type == "Fulfillment":
-                # Fulfillment fee is per-set; iq here = set qty
-                set_qty_for_ful = iq if pricing_mode == "Individual" else (iq // pcs_per_set if pcs_per_set > 0 else iq)
+                # Fulfillment fee is per-set; iq here = component qty (post-multiply).
+                # Convert back to set qty for the fulfillment fee math.
+                set_qty_for_ful = (iq // pcs_per_set) if pcs_per_set > 0 else iq
                 r = _calc_fulfillment(item, slot_i, set_qty_for_ful, ful_margin, payload)
             else:
                 # Manufactured — run engine
@@ -657,7 +677,7 @@ async def calculate_multi_part(
             rows_out.append({
                 "slotIdx": slot_i,
                 "qty": int(qty_val),
-                "setQty": int(qty_val / pcs_per_set) if (pricing_mode == "Matched Set" and pcs_per_set > 0) else int(qty_val),
+                "setQty": int(qty_val / pcs_per_set) if pcs_per_set > 0 else int(qty_val),
                 "sellPc": sell_pc,
                 "costPc": cost_pc,
                 "perM": sell_pc * 1000.0,
