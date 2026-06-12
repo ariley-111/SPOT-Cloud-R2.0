@@ -497,3 +497,56 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Backend pytest 99/100 (1 pre-existing `test_estimator_cannot_access_admin_rates` unrelated to this work). Testing agent iteration 19 verified all fixes at source + runtime.
 - Bug E/F (Corr Flipped condition mismatch) now considered **RESOLVED** by the pre-buy-min snapshot fix; collapse the two into a single closed item.
 
+
+### 2026-06-12 — Session 3: math parity closed + PDF parity + 4 P1/P2 features ✅
+**$361.60 delta — RESOLVED as a legacy UI quirk (no code bug).**
+- Legacy's "Preview Quote" total reads from the mixed-state `setTotals` aggregate (spot_r1_5.jsx L4602, L7633), which uses `calcResults` (live) for the active item and `runItem` (simplified) for the other 11 items. The two paths differ on `routeOverride`, `overrideSheetId`, live `prepressTreatment`, top-level `quoteFOB` — producing slightly different per-item sells. Legacy Preview total is therefore **non-deterministic** (changes based on which BOM item was active when Preview was clicked).
+- Cloud always uses the full engine for every item → deterministic $593,751.27 (the math-correct total). Confirmed via my Node legacy_replay.js using legacy's own `spot_runner.runEstimate` — agrees with cloud to the cent.
+- User verification: clicked Item 2 in legacy → Sell/Pc jumped from $0.69 (runItem) to $0.72 (calcResults), matching cloud's stable $0.7164. User accepted "I want the real numbers". Issue closed.
+- Locked with `/app/backend/tests/test_matched_set_parity.py` (per-component + slot aggregation). 4/4 PASS.
+
+**Per-piece display fixes**
+- BOM Per-Component table Sell/Pc: was using `pc.sellPc` (backend = `sellTotal/qty`, all-in) → switched to `itemSell/qty` (legacy `spot_r1_5.jsx` L4655). Item 2 now shows $0.72 not $1.27.
+- New BOM components default to **Die: None** (was auto-defaulting `Separate Line / $1,200` which produced phantom dies on items legacy showed none).
+- Removed auto-add-die-on-Crest/Bobst route logic (legacy never auto-added dies — always user-specified).
+- Individual mode component qtys now multiply by `pcsPerSet` (legacy `spot_r1_5.jsx` L2071-2075 parity — pre-multiplied in legacy state.qtys at BOM commit; cloud multiplies at runtime).
+- Estimate Info Qty input flips label to `Qty × N` and displays component-level pcs in Individual mode.
+
+**PDF parity — Matched Set per-component pricing grid**
+- Replaced cloud's aggregate pricing table with legacy's per-component grid (spot_r1_5.jsx L4639-4702): each component × set-qty tier showing clean `itemSell/qty` Sell/Pc, Price/Set row, Die/Freight/Prepress/Misc line-charge rows (only when > 0), QUOTE TOTAL row, SETS row.
+- Removed the orange "Item 1" / "Multi-Part" item bar from both MP-Matched Set and MP-Individual modes.
+- Individual mode per-component sections dropped Freight/Die/Prepress columns (4-col `Qty | Each | Per/M | Total`); footer "Job Totals" → "Quote Summary".
+- Same changes applied to in-app `PreviewPdfModal.jsx` (new `MatchedSetPricingGrid` component).
+- Locked with `/app/backend/tests/test_matched_set_pdf.py` (2 tests).
+
+**Item 1 — Save parser files (quote-lifetime)** ✅
+- New `services/parser_files.py` + Mongo collection `parser_files`. Each `/api/parser/parse-rfq` call persists raw uploads to `/app/backend/uploads/<draft_id>/<file_id>.<ext>` with sha256, mime, uploaded_by, source, parent_filename metadata.
+- New endpoints: `GET /api/parser/files?quote_id=…`, `GET /api/parser/files/{id}/download`, `DELETE /api/parser/files/{id}`.
+- `FilesSec.jsx` shows a "Saved RFQ files" panel listing all persisted files for the draft, with per-file download (↓) and delete (×) buttons.
+- Quote lifetime: `delete_draft` handler now calls `purge_quote_files(draft_id)` to sweep disk + metadata.
+
+**Item 2 — Inline spinners (no more full-screen overlays)** ✅
+- UTS spinner: removed `ProgressModal`, added a small pill inside `FreightDashModal` header (orange, with destZip).
+- Parser spinner: removed `ProgressModal`, added an amber inline pill inside `FilesSec` section header ("PARSING RFQ" with spinning dot).
+- Added shared `@keyframes spot-spin` to `theme.css`.
+
+**Item 3 — Parser accepts .zip uploads** ✅
+- Backend: on `/api/parser/parse-rfq`, any `.zip` upload is opened in-memory (`zipfile` stdlib), each member validated by extension + size, flattened, and threaded into the existing email-expansion + non-email loops via a `_ZipMemberShim`.
+- Caps: 50 MB compressed zip, 100 members, 30 MB per member. Skips `__MACOSX/`, dotfiles, directories, unsafe extensions.
+- `file_summary` reports per-zip `members_added` / `members_skipped`.
+- Frontend: added `.zip` to the RFQ extension regex in `FilesSec.jsx`.
+- New test: `/app/backend/tests/test_parser_zip.py` — 1/1 PASS (validates 2 safe members extracted, junk skipped).
+
+**Item 4 — Sheet Library legacy parity** ✅
+- Backend: new `POST /api/engine/sheet-library` returns ALL approved + stock sheets enriched per-row with `pcsPerSheet, sheetsReq, wastePct, costMsf, costPc, total, pricable, hasPrice, specMatch, isStock`. Internally iterates `APPROVED_SHEETS` (216 sheets) + payload `stockSheets`, runs `compute_layout` and `calc_board` per row, falls back to flipped orientation when natural fit fails. Sorted: spec-match first, then by total PO asc.
+- Frontend: rewrote `SheetLibraryModal.jsx` from 122-line card grid to legacy-parity 280-line table:
+  - Header w/ "Current spec / All specs" toggle and best-match subtitle.
+  - Search box (filter on dims/grade/flute/liner text).
+  - Add Stock W × L → persists in `s.stockSheets` (per-quote, like legacy). Stock rows tagged STOCK and deletable per-row.
+  - Sortable columns: Sheet | Flute | Grade | Outside | Inside | Type | Pcs/Sh | Sheets | Waste | $/MSF | Cost/Pc | Total PO.
+  - Best-priced spec-matching row highlighted GREEN with `BEST` badge; user override row highlighted ACCENT with `ACTIVE` badge.
+  - Actions per row: `Use This` (sets `overrideSheetId`, closes modal), `Remove` (clears override), `Del` (deletes stock).
+  - Footer: Clear Override / Clear All Stock / row counts.
+
+**Test summary (this session): 11/11 PASS** — test_matched_set_parity (2), test_matched_set_pdf (2), test_preview_pdf (5), test_parser_zip (1), plus existing test_pre_buy_min_snapshot from prior session. No regressions.
+

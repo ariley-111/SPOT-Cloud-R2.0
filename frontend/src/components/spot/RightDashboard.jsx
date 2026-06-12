@@ -573,9 +573,9 @@ function FreightPanel({ s }) {
 
   return (
     <>
-      <ProgressModal open={busy} accent="#f59e0b"
-        title="Getting Freight Quote"
-        subtitle={`Calling UTS · ${s.destZip || ""}`} />
+      {/* UTS inline spinner moved into FreightDashModal header — see
+          FreightDashModal busy prop (2026-06-12, per user feedback that the
+          full-screen ProgressModal blocked the rest of the UI). */}
       <FreightDashModal open={dashOpen} onClose={() => setDashOpen(false)}
         applyScopeFromCache={applyScopeFromCache} updateFreight={updateFreight} busy={busy} />
     <div data-testid="freight-panel" style={panelStyle("#f59e0b")}>

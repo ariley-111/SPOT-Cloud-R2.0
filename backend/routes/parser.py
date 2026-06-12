@@ -26,11 +26,16 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS
 from models.schemas import User
 from routes.auth import get_current_user
 from parser_knowledge import build_knowledge_prompt, EXTRACTION_INSTRUCTIONS
+from services import parser_files as _parser_files
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/parser", tags=["parser"])
 
@@ -401,16 +406,28 @@ async def parse_rfq(
     customer_code: Optional[str] = Form(default=None),
     customer_name: Optional[str] = Form(default=None),
     est_initials: Optional[str] = Form(default=None),
+    quote_id: Optional[str] = Form(default=None),
     u: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Parse one or more RFQ attachments + optional email body into a structured estimate.
 
-    Accepts PDF, PNG, JPEG, WebP, GIF, plain text. Each file becomes a content block;
-    email body (if provided) becomes a text block. Output matches the legacy
-    {parsed, sources, method, asks, confidence} contract.
+    Accepts PDF, PNG, JPEG, WebP, GIF, plain text, .zip (members extracted),
+    .eml/.msg (body + attachments extracted). Each file becomes a content
+    block; email body (if provided) becomes a text block. Output matches the
+    legacy {parsed, sources, method, asks, confidence} contract.
+
+    If `quote_id` is provided (the active quote/draft id), every uploaded raw
+    file is persisted via services.parser_files.save_parser_file so the
+    estimator can re-download / re-open the source documents later. Lifetime
+    is tied to the quote — purge_quote_files runs on quote deletion.
     """
     if not files and not email_body and not notes:
         raise HTTPException(400, "Must provide at least one file or email_body")
+
+    # Lazy import: avoid mongo import explosion when running pytest in isolation.
+    from services.parser_files import save_parser_file
+    persist_for = (quote_id or "").strip() or None
+    user_email = getattr(u, "email", "") or getattr(u, "id", "") or ""
 
     content_parts: List[Dict[str, Any]] = []
     file_summary: List[Dict[str, Any]] = []
@@ -419,6 +436,139 @@ async def parse_rfq(
         content_parts.append({"type": "text", "text": f"EMAIL BODY:\n\n{email_body}"})
     if notes:
         content_parts.append({"type": "text", "text": f"ESTIMATOR NOTES:\n\n{notes}"})
+
+    # ─── Persist raw uploads (2026-06-12) ──────────────────────────
+    # Save each user-uploaded file to disk + parser_files collection BEFORE
+    # any zip/email expansion, so the estimator can re-download the exact
+    # bytes they sent. We need to read+buffer to do this without breaking the
+    # subsequent zip/email loops (UploadFile is a single-pass stream).
+    persisted_files: List[Dict[str, Any]] = []
+    buffered_files: List[Any] = []
+    if persist_for:
+        # Local shim — same shape as the zip-member shim below so the rest of
+        # the pipeline reads `.filename / .content_type / await read()` uniformly.
+        class _BufferedUpload:
+            def __init__(self, filename: str, content_type: str, content: bytes):
+                self.filename = filename
+                self.content_type = content_type
+                self._content = content
+            async def read(self):
+                return self._content
+
+        for f in files:
+            try:
+                raw_bytes = await f.read()
+            except Exception:
+                buffered_files.append(f)
+                continue
+            buffered_files.append(_BufferedUpload(f.filename, f.content_type or "", raw_bytes))
+            if not raw_bytes:
+                continue
+            try:
+                meta = await save_parser_file(
+                    quote_id=persist_for,
+                    filename=f.filename or "upload",
+                    mime=f.content_type or "application/octet-stream",
+                    content=raw_bytes,
+                    uploaded_by=user_email,
+                    source="upload",
+                )
+                persisted_files.append({"id": meta["id"], "filename": meta["filename"],
+                                        "bytes": meta["bytes"]})
+            except Exception as e:
+                logger.warning(f"parser file persist failed for {f.filename}: {e}")
+        files = buffered_files
+
+    # ─── ZIP file expansion (2026-06-12) ───────────────────────────
+    # If any upload is a .zip, extract its members (PDFs, images, docs, .eml,
+    # etc.) and process each as if it were a top-level upload. We re-wrap each
+    # member as a lightweight UploadFile-like shim so it falls into the
+    # existing email-expansion + non-email file loops below.
+    if any((f.filename or "").lower().endswith(".zip") for f in files):
+        import io
+        import zipfile
+
+        class _ZipMemberShim:
+            """Mimics enough of UploadFile for the loops below: filename,
+            content_type, and async read()."""
+            def __init__(self, filename: str, content_type: str, content: bytes):
+                self.filename = filename
+                self.content_type = content_type
+                self._content = content
+            async def read(self):
+                return self._content
+
+        SAFE_EXTS = (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic",
+                     ".heif", ".eml", ".msg", ".txt", ".csv", ".md",
+                     ".xlsx", ".xls", ".docx", ".doc", ".rtf")
+        MIME_BY_EXT = {
+            ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
+            ".heic": "image/heic", ".heif": "image/heif",
+            ".eml": "message/rfc822", ".msg": "application/vnd.ms-outlook",
+            ".txt": "text/plain", ".csv": "text/csv", ".md": "text/markdown",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls": "application/vnd.ms-excel",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc": "application/msword", ".rtf": "application/rtf",
+        }
+        MAX_ZIP_BYTES = 50 * 1024 * 1024   # 50 MB compressed
+        MAX_MEMBER_COUNT = 100
+        MAX_MEMBER_BYTES = 30 * 1024 * 1024  # 30 MB per inner file
+
+        next_files: List[Any] = []
+        for f in files:
+            fname_l = (f.filename or "").lower()
+            if not fname_l.endswith(".zip"):
+                next_files.append(f)
+                continue
+            raw = await f.read()
+            if len(raw) > MAX_ZIP_BYTES:
+                file_summary.append({"name": f.filename, "type": "zip",
+                                     "error": f"zip exceeds {MAX_ZIP_BYTES // 1024 // 1024}MB limit"})
+                continue
+            try:
+                zf = zipfile.ZipFile(io.BytesIO(raw))
+            except zipfile.BadZipFile as e:
+                file_summary.append({"name": f.filename, "type": "zip",
+                                     "error": f"corrupt zip: {e}"})
+                continue
+            members_added = 0
+            members_skipped = 0
+            for info in zf.infolist():
+                if members_added >= MAX_MEMBER_COUNT:
+                    members_skipped += 1
+                    continue
+                if info.is_dir():
+                    continue
+                name = info.filename
+                # Skip macOS junk + dotfiles
+                if "__MACOSX/" in name or name.split("/")[-1].startswith(".") or name.endswith("/"):
+                    continue
+                ext_idx = name.rfind(".")
+                ext = name[ext_idx:].lower() if ext_idx >= 0 else ""
+                if ext not in SAFE_EXTS:
+                    members_skipped += 1
+                    continue
+                if info.file_size > MAX_MEMBER_BYTES:
+                    members_skipped += 1
+                    continue
+                try:
+                    member_bytes = zf.read(info)
+                except (RuntimeError, zipfile.BadZipFile) as e:
+                    logger.warning(f"zip member read failed {name}: {e}")
+                    members_skipped += 1
+                    continue
+                inner_name = name.rsplit("/", 1)[-1]  # flatten any folder structure
+                mime = MIME_BY_EXT.get(ext, "application/octet-stream")
+                next_files.append(_ZipMemberShim(inner_name, mime, member_bytes))
+                members_added += 1
+            file_summary.append({
+                "name": f.filename, "type": "zip",
+                "members_added": members_added,
+                "members_skipped": members_skipped,
+            })
+        files = next_files
 
     # ─── Email file expansion ───────────────────────────────────────
     # If any uploaded file is .eml or .msg, extract body text + attachments and
@@ -553,4 +703,40 @@ async def parse_rfq(
     # Strip internal-only fields before returning to client
     result.pop("_call_cost_usd", None)
     result.pop("_resolved_model", None)
-    return {**result, "files": file_summary}
+    return {**result, "files": file_summary, "persistedFiles": persisted_files}
+
+
+# ─── Parser file storage management (2026-06-12) ─────────────────────────
+# Lets estimators list / re-download / delete the raw RFQ files they uploaded
+# for a given quote. Quote-lifetime persistence — `purge_quote_files` runs
+# from the quote/draft delete handler.
+
+@router.get("/files")
+async def list_files(quote_id: str, _u: User = Depends(get_current_user)):
+    """List non-deleted RFQ files attached to a quote/draft."""
+    return {"files": await _parser_files.list_parser_files(quote_id)}
+
+
+@router.get("/files/{file_id}/download")
+async def download_file(file_id: str, _u: User = Depends(get_current_user)):
+    """Stream the original bytes back to the user."""
+    doc = await _parser_files.get_parser_file(file_id)
+    if not doc:
+        raise HTTPException(404, "File not found")
+    path = doc.get("disk_path")
+    if not path or not os.path.exists(path):
+        raise HTTPException(410, "File blob missing on disk")
+    return FileResponse(
+        path,
+        media_type=doc.get("mime") or "application/octet-stream",
+        filename=doc.get("filename") or f"file-{file_id[:8]}",
+    )
+
+
+@router.delete("/files/{file_id}")
+async def delete_file(file_id: str, _u: User = Depends(get_current_user)):
+    """Soft-delete + remove the blob from disk."""
+    ok = await _parser_files.soft_delete_file(file_id)
+    if not ok:
+        raise HTTPException(404, "File not found")
+    return {"ok": True, "id": file_id}

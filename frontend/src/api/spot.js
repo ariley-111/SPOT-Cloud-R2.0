@@ -159,6 +159,7 @@ export const parseRfq = (files, emailBody, notes, opts = {}) => {
   if (opts.customerCode) fd.append("customer_code", opts.customerCode);
   if (opts.customerName) fd.append("customer_name", opts.customerName);
   if (opts.estInitials)  fd.append("est_initials",  opts.estInitials);
+  if (opts.quoteId)      fd.append("quote_id",      opts.quoteId);
   return api
     .post("/parser/parse-rfq", fd, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -166,6 +167,17 @@ export const parseRfq = (files, emailBody, notes, opts = {}) => {
     })
     .then((r) => r.data);
 };
+
+export const sheetLibraryPriced = (body) =>
+  api.post("/engine/sheet-library", body).then((r) => r.data);
+
+// ─── Saved RFQ files (quote-lifetime persistence) ───────
+export const listParserFiles = (quoteId) =>
+  api.get(`/parser/files?quote_id=${encodeURIComponent(quoteId)}`).then((r) => r.data.files || []);
+export const downloadParserFileUrl = (fileId) =>
+  `${api.defaults.baseURL}/parser/files/${encodeURIComponent(fileId)}/download`;
+export const deleteParserFile = (fileId) =>
+  api.delete(`/parser/files/${encodeURIComponent(fileId)}`).then((r) => r.data);
 
 // ─── PDF ────────────────────────────────────────────────
 export const previewPdfBlob = (quote, results, opts = {}) =>

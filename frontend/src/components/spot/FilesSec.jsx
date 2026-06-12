@@ -2,9 +2,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfq } from "../../api/spot";
+import { parserBudget, parseRfq, listParserFiles, downloadParserFileUrl, deleteParserFile } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
-import ProgressModal from "./ProgressModal";
 import { makeBomItem, applyItemStateTo, freshItemState } from "../../lib/mpSchema";
 
 export default function FilesSec() {
@@ -17,10 +16,23 @@ export default function FilesSec() {
   const [parserError, setParserError] = useState("");
   const [budget, setBudget] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  // Saved (quote-lifetime) parser files for this draft — fetched from
+  // /api/parser/files on mount + after each successful parse.
+  const [savedFiles, setSavedFiles] = useState([]);
   const inputRef = useRef(null);
   const folderName = s.estNum && s.custName ? `${s.custName}_${s.estNum}` : null;
 
   useEffect(() => { parserBudget().then(setBudget).catch(() => {}); }, []);
+
+  // Load saved RFQ files for this draft (quote-lifetime storage).
+  useEffect(() => {
+    if (!active?.id) { setSavedFiles([]); return; }
+    let cancel = false;
+    listParserFiles(active.id)
+      .then((arr) => { if (!cancel) setSavedFiles(arr); })
+      .catch(() => { if (!cancel) setSavedFiles([]); });
+    return () => { cancel = true; };
+  }, [active?.id]);
 
   // Reset per-tab UI state when the active tab changes — files dropped on
   // tab A should not bleed into tab B (was a real bug, reported 2026-06-04).
@@ -31,7 +43,7 @@ export default function FilesSec() {
     setReviewOpen(false);
   }, [active?.id]);
 
-  const isRfqLike = (name) => /\.(pdf|docx?|xlsx?|csv|tsv|rtf|eml|msg|txt|jpg|jpeg|png|webp|heic)$/i.test(name || "");
+  const isRfqLike = (name) => /\.(pdf|docx?|xlsx?|csv|tsv|rtf|eml|msg|txt|jpg|jpeg|png|webp|heic|zip)$/i.test(name || "");
   const isEmailFile = (name) => /\.(eml|msg)$/i.test(name || "");
   const ingestFiles = (list) => {
     const arr = Array.from(list || []).map((f) => ({
@@ -71,10 +83,13 @@ export default function FilesSec() {
         customerCode: s.custCode || "",
         customerName: s.custName || "",
         estInitials:  s.estInitials || "",
+        quoteId:      active?.id || "",  // tie persisted files to this draft (2026-06-12)
       });
       setParseResult(r);
       setReviewOpen(true);
       parserBudget().then(setBudget).catch(() => {});
+      // Refresh saved-files list so the newly persisted uploads appear immediately.
+      if (active?.id) listParserFiles(active.id).then(setSavedFiles).catch(() => {});
     } catch (e) {
       setParserError(e?.response?.data?.detail || e.message);
     } finally { setBusy(false); }
@@ -85,7 +100,29 @@ export default function FilesSec() {
   };
 
   return (
-    <Sec label="Files" hue="#06b6d4" open={sec.files} onToggle={() => toggleSec("files")}
+    <Sec label={
+      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span>Files</span>
+        {busy && (
+          <span data-testid="parser-inline-spinner"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "2px 8px", borderRadius: 99,
+              background: "rgba(168,85,247,.18)", border: "1px solid #a855f7",
+              fontSize: 10, fontWeight: 700, color: "#a855f7",
+              letterSpacing: ".04em", textTransform: "uppercase",
+            }}>
+            <span style={{
+              width: 9, height: 9, borderRadius: "50%",
+              border: "2px solid #a855f7", borderTopColor: "transparent",
+              display: "inline-block",
+              animation: "spot-spin 0.9s linear infinite",
+            }} />
+            Parsing RFQ
+          </span>
+        )}
+      </span>
+    } hue="#06b6d4" open={sec.files} onToggle={() => toggleSec("files")}
       data-testid="sec-files">
       {/* Drop zone */}
       <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -145,6 +182,54 @@ export default function FilesSec() {
         </div>
       )}
 
+      {/* Saved RFQ files (quote-lifetime persistence — 2026-06-12) */}
+      {savedFiles.length > 0 && (
+        <div data-testid="saved-rfq-files" style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
+            textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>
+            Saved RFQ files ({savedFiles.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {savedFiles.map((sf) => (
+              <div key={sf.id} data-testid={`saved-rfq-${sf.id}`} style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "4px 6px",
+                background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
+                borderRadius: 4, fontSize: 11,
+              }}>
+                <span style={{
+                  fontSize: 10, color: "#06b6d4", fontWeight: 700, minWidth: 36,
+                  textTransform: "uppercase", letterSpacing: ".06em",
+                }}>{sf.source === "zip_member" ? "ZIP" : "RFQ"}</span>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis",
+                  whiteSpace: "nowrap", color: "var(--spot-text)" }} title={sf.filename}>
+                  {sf.filename}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--spot-text3)",
+                  minWidth: 52, textAlign: "right" }}>{fmtBytes(sf.bytes || 0)}</span>
+                <a href={downloadParserFileUrl(sf.id)} target="_blank" rel="noreferrer"
+                  data-testid={`saved-rfq-dl-${sf.id}`}
+                  style={{ fontSize: 10, color: "var(--spot-accent)", fontWeight: 700,
+                    padding: "2px 6px", textDecoration: "none" }}>↓</a>
+                <button onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm(`Delete saved file "${sf.filename}"?`)) return;
+                    try {
+                      await deleteParserFile(sf.id);
+                      setSavedFiles((cur) => cur.filter((x) => x.id !== sf.id));
+                      pushToast("File deleted", "ok");
+                    } catch (err) {
+                      pushToast(err?.response?.data?.detail || err.message, "err");
+                    }
+                  }}
+                  data-testid={`saved-rfq-rm-${sf.id}`}
+                  style={{ all: "unset", cursor: "pointer", fontSize: 12,
+                    color: "var(--spot-err)", padding: "2px 4px", fontWeight: 700 }}>×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Build Estimate sub-panel — the Anthropic parser launcher */}
       <div style={{
         marginTop: 10, display: "flex", flexDirection: "column", gap: 5,
@@ -189,20 +274,9 @@ export default function FilesSec() {
         />
       )}
 
-      {/* In-flight parser progress modal */}
-      <ProgressModal open={busy} accent="#a855f7"
-        title="Parsing RFQ"
-        subtitle={(() => {
-          const rfqs = files.filter((f) => f.class === "rfq");
-          const emails = rfqs.filter((f) => /\.(eml|msg)$/i.test(f.filename));
-          const pdfs   = rfqs.filter((f) => /\.pdf$/i.test(f.filename));
-          const bits = [];
-          if (emails.length) bits.push(`${emails.length} email${emails.length === 1 ? "" : "s"}`);
-          if (pdfs.length)   bits.push(`${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"}`);
-          const others = rfqs.length - emails.length - pdfs.length;
-          if (others > 0) bits.push(`${others} other`);
-          return `${bits.join(" + ") || rfqs.length + " file" + (rfqs.length === 1 ? "" : "s")} · Calling Anthropic Opus — typically 15-60 sec; larger or multi-CAD RFQs can take 1-3 min`;
-        })()} />
+      {/* Inline spinner moved into section header (FilesSec label, see top).
+          Full-screen ProgressModal was removed 2026-06-12 per user feedback
+          ("don't take up the entire screen"). */}
     </Sec>
   );
 }

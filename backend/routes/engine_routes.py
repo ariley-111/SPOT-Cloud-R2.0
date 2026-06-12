@@ -107,6 +107,122 @@ async def defaults(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
 
 
 
+@router.post("/sheet-library")
+async def sheet_library_priced(
+    payload: Dict[str, Any] = Body(...),
+    _u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Enriched Sheet Library — returns every approved sheet (+ user stock
+    sheets) with layout + board-cost computed against the active item's W/L/qty
+    so the legacy Sheet Library modal can show pcs/sh, sheets, waste, $/MSF,
+    cost/pc, total PO per row (spot_r1_5.jsx L8316-8376).
+
+    Body: {
+      oneUpW, oneUpL, qty,
+      boardGrade, flute, outsideLiner, insideLiner, medium,
+      fscEnabled, fscFee, kemiTariff, palletPrepFee, under5MsfFee,
+      stockSheets: [ {id, g, f, ol, il, md, w, l, isStock} ],  # per-quote
+    }
+    """
+    from engine.core import compute_layout, calc_board, get_grade_fallback
+
+    p = payload or {}
+    try:
+        uw = float(p.get("oneUpW") or 0)
+        ul = float(p.get("oneUpL") or 0)
+        qty = int(float(p.get("qty") or 0))
+    except (TypeError, ValueError):
+        uw = ul = qty = 0
+    if uw <= 0 or ul <= 0 or qty <= 0:
+        return {"sheets": [], "warning": "Provide oneUpW, oneUpL, qty > 0"}
+
+    grade = (p.get("boardGrade") or "").strip()
+    flute = (p.get("flute") or "").strip()
+    ol = (p.get("outsideLiner") or "None").strip()
+    il = (p.get("insideLiner") or "None").strip()
+    med = (p.get("medium") or "None").strip()
+
+    base_spec = {
+        "flute": flute, "boardGrade": grade,
+        "outsideLiner": ol, "insideLiner": il, "medium": med,
+        "fscEnabled": bool(p.get("fscEnabled")),
+        "fscFee": float(p.get("fscFee") or 25),
+        "kemiTariff": float(p.get("kemiTariff") or 2.50),
+        "palletPrepFee": float(p.get("palletPrepFee") or 17.50),
+        "under5MsfFee": float(p.get("under5MsfFee") or 0),
+        "widthIn": 0, "lengthIn": 0,
+    }
+
+    fb_grade = get_grade_fallback(grade)
+
+    all_sheets = list(APPROVED_SHEETS)
+    for ss in (p.get("stockSheets") or []):
+        try:
+            all_sheets.append({
+                "id": ss.get("id") or f"STK-{ss.get('w')}x{ss.get('l')}",
+                "g": ss.get("g") or grade, "f": ss.get("f") or flute,
+                "ol": ss.get("ol") or ol, "il": ss.get("il") or il,
+                "md": ss.get("md") or med,
+                "w": float(ss.get("w") or 0), "l": float(ss.get("l") or 0),
+                "isStock": True,
+            })
+        except (TypeError, ValueError):
+            continue
+
+    rows: List[Dict[str, Any]] = []
+    for sh in all_sheets:
+        sw, sl = float(sh.get("w") or 0), float(sh.get("l") or 0)
+        if sw <= 0 or sl <= 0:
+            continue
+        layout = compute_layout(uw, ul, sw, sl)
+        if not layout or layout.get("pcsPerSheet", 0) <= 0:
+            # Try flipped — match legacy auto-flip semantic
+            layout = compute_layout(ul, uw, sw, sl)
+            if not layout or layout.get("pcsPerSheet", 0) <= 0:
+                continue
+        sheets_req = -(-qty // layout["pcsPerSheet"])  # ceil
+        bspec = dict(base_spec, widthIn=sw, lengthIn=sl)
+        # Use this sheet's actual grade/flute/liner for the board-cost lookup
+        bspec.update({
+            "boardGrade": sh.get("g") or grade,
+            "flute": sh.get("f") or flute,
+            "outsideLiner": sh.get("ol") or ol,
+            "insideLiner": sh.get("il") or il,
+            "medium": sh.get("md") or med,
+        })
+        bc = calc_board(bspec, sheets_req, bool(sh.get("isStock")))
+        cost_msf = bc.get("effWithFsc") if bc and bc.get("pricable") else None
+        cost_pc = bc.get("costPc") if bc and bc.get("pricable") else None
+        total = bc.get("total") if bc and bc.get("pricable") else None
+        spec_match = (
+            (sh.get("g") == grade or (fb_grade and sh.get("g") == fb_grade))
+            and sh.get("f") == flute
+            and sh.get("ol") == ol and sh.get("il") == il
+            and sh.get("md") == med
+        )
+        rows.append({
+            "id": sh.get("id"),
+            "w": sw, "l": sl,
+            "g": sh.get("g"), "f": sh.get("f"),
+            "ol": sh.get("ol"), "il": sh.get("il"), "md": sh.get("md"),
+            "isStock": bool(sh.get("isStock")),
+            "specMatch": bool(spec_match),
+            "pcsPerSheet": layout.get("pcsPerSheet"),
+            "sheetsReq": sheets_req,
+            "wastePct": layout.get("wastePct"),
+            "costMsf": cost_msf, "costPc": cost_pc, "total": total,
+            "pricable": bool(bc and bc.get("pricable")),
+            "hasPrice": bool(bc and bc.get("hasPrice")),
+            "meetMin": bool(bc and bc.get("meetMin")),
+        })
+    # Sort: spec-match first, then by total PO ascending (best price up top)
+    rows.sort(key=lambda r: (
+        0 if r["specMatch"] else 1,
+        r["total"] if r["pricable"] else 9_999_999,
+    ))
+    return {"sheets": rows}
+
+
 @router.get("/sheet-availability")
 async def sheet_availability(
     boardGrade: str, flute: str, medium: str = "None",

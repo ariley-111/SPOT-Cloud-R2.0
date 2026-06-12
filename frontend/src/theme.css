@@ -1,5 +1,13 @@
 /* SPOT Cloud — theme tokens ported from legacy spot_r1_5.jsx (themes.dark + themes.light).
    Toggle via <html data-theme="light"> — set by Toolbar sun/moon button. */
+
+/* Shared inline spinner animation — small status pills in modal/section headers
+   (Freight UTS, Parser, etc.) reference `animation: spot-spin 0.9s linear infinite`. */
+@keyframes spot-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 :root {
   /* Surface */
   --spot-bg:        #0b0d11;

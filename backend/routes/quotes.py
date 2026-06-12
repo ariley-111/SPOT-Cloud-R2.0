@@ -91,6 +91,14 @@ async def delete_draft(draft_id: str, user: User = Depends(get_current_user)) ->
     result = await db[COL_QUOTE_DRAFTS].delete_one({"id": draft_id, "owner_id": user.id})
     if result.deleted_count == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Draft not found")
+    # Quote-lifetime parser-file storage (2026-06-12) — purge raw uploads tied
+    # to this draft so disk + metadata never outlive their owning quote.
+    try:
+        from services.parser_files import purge_quote_files
+        await purge_quote_files(draft_id)
+    except Exception:
+        # Best-effort — don't fail the delete if cleanup glitches.
+        pass
     return {"status": "ok"}
 
 

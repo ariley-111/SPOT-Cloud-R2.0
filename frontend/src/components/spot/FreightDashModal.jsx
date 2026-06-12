@@ -74,6 +74,22 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
         <div style={hdr}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>📦 Freight Dashboard</div>
+            {busy && (
+              <div data-testid="freight-uts-spinner"
+                style={{ display: "flex", alignItems: "center", gap: 6,
+                  padding: "3px 10px", borderRadius: 99,
+                  background: "rgba(245,158,11,.15)", border: "1px solid #f59e0b",
+                  fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                  letterSpacing: ".04em" }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: "50%",
+                  border: "2px solid #f59e0b", borderTopColor: "transparent",
+                  display: "inline-block",
+                  animation: "spot-spin 0.9s linear infinite",
+                }} />
+                <span>CALLING UTS{s.destZip ? ` · ${s.destZip}` : ""}</span>
+              </div>
+            )}
             <div style={shipToBox}>
               <span style={{ fontSize: 9, color: "var(--spot-text3)", letterSpacing: ".08em" }}>SHIP TO</span>
               <input className="sp-input" value={s.destZip || ""}
