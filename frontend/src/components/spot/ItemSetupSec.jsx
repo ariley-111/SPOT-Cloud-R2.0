@@ -156,6 +156,20 @@ export default function ItemSetupSec({ result }) {
       pip.exceedsSheetLibrary ||
       (preHasPrice && !preMeetMin && !prePricable)
     ));
+    // TEMP debug — remove once auto-flip parity is confirmed on L'Oreal quote.
+    // Lets the estimator see exactly which condition is gating the flip.
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[SPOT-DEBUG auto-flip]", {
+        comp: s.itemDesc || `item-${s.activeItemIdx ?? "?"}`,
+        oneUpW: s.oneUpW, oneUpL: s.oneUpL, corrFlipped,
+        preBuyMinHasPrice: preHasPrice, preBuyMinMeetMin: preMeetMin, preBuyMinPricable: prePricable,
+        exceedsSheetLibrary: pip.exceedsSheetLibrary,
+        flipWouldHelp: pip.flipWouldHelp,
+        buyMinActive: r?.buyMinActive,
+        hasIssue, willFlip: !!(hasIssue && pip.flipWouldHelp),
+      });
+    }
     if (!hasIssue) return;
     // Legacy `flippedBetter` gate — only flip if the flipped orientation
     // actually resolves the issue (pricable, or stock-sheet-priced).

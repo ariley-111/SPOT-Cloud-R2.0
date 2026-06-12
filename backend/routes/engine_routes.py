@@ -523,13 +523,11 @@ async def calculate_multi_part(
         active_idx = max(0, min(active_idx, len(per_comp) - 1)) if per_comp else 0
         active_pc = per_comp[active_idx] if per_comp else {}
 
-        # Aggregate routeWarning across components for the matched-set banner.
-        # Legacy spot_r1_5.jsx L811-814 surfaces "Too many CAD hours and no
-        # Crest/Bobst route viable — falling back to Saber + die cut" at the
-        # quote-table level. In MP-Matched-Set the slot row drives the banner;
-        # without this surface the warning silently disappears.
-        agg_warnings = sorted({pc.get("routeWarning") for pc in per_comp if pc.get("routeWarning")})
-        slot_route_warning = "; ".join(agg_warnings) if agg_warnings else None
+        # Surface the ACTIVE component's routeWarning only (legacy parity:
+        # legacy displays "Too many CAD hours…" for the currently-active BOM
+        # component, not aggregated across the job — when the user switches
+        # to a non-CAD component the warning disappears).
+        slot_route_warning = active_pc.get("routeWarning")
 
         # Shape compatible with QuoteTableSec's row schema
         out_slots.append({
