@@ -135,19 +135,30 @@ export default function ItemSetupSec({ result }) {
   // The backend pre-computes `flipWouldHelp` via the same `auto_select_sheet`
   // call so we don't need a second engine round-trip in JS. No extra refs,
   // no substrate suppress, no manual-un-flip memory — strict 1:1.
+  // Reset stale CORR FLIPPED state on square pieces (W === L). Bot Disk 1
+  // in the L'Oreal quote had `corrFlipped:true` persisted from a prior buggy
+  // auto-flip — for square dims the flag is cosmetically wrong and confuses
+  // the estimator (red badge with no actual orientation change).
+  useEffect(() => {
+    if (!corrFlipped) return;
+    const w = parseFloat(String(s.oneUpW || ""));
+    const l = parseFloat(String(s.oneUpL || ""));
+    if (w > 0 && l > 0 && w === l) {
+      setField("corrFlipped", false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corrFlipped, s.oneUpW, s.oneUpL]);
+
   useEffect(() => {
     if (corrFlipped) return;
     const w = String(s.oneUpW || "");
     const l = String(s.oneUpL || "");
     if (!w || !l || w === "0" || l === "0") return;
-    // LEGACY PARITY (spot_r1_5.jsx L3946 + L3958-3960 ordering):
-    //   `hasIssue = sel && (sel.exceedsSheetLibrary
-    //                       || (sel.bc && !sel.bc.pricable && sel.bc.hasPrice && !sel.bc.meetMin))`
-    // The flip useEffect fires BEFORE the auto-buy-min useEffect in legacy, so
-    // `sel.bc` is the raw auto-select board calc — buy-min has NOT yet applied.
-    // Cloud runs buy-min in the same backend pass, so we use the explicit
-    // PRE-BUY-MIN snapshot (`_pipeline.preBuyMin*`) to mirror legacy's
-    // evaluation order.
+    // Square pieces: flipping is meaningless (same dimensions both ways) — don't
+    // engage the "CORR FLIPPED" badge for these. Legacy parity is implicit
+    // because for square pieces flippedBetter would equal hasIssue, so the flip
+    // would oscillate the badge with no actual dim change. Skip the noise.
+    if (parseFloat(w) === parseFloat(l)) return;
     const pip = r?._pipeline || {};
     const preHasPrice = pip.preBuyMinHasPrice;
     const preMeetMin = pip.preBuyMinMeetMin;
