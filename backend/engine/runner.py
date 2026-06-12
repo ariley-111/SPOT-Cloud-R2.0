@@ -75,25 +75,24 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
             freight_cost = json.get("freightCost", "0")
 
     # ─── Auto-Die (legacy spot_r1_5.jsx L3866-3883 parity) ─────────────────
-    # When the resolved route is Crest, Bobst, or Saber + D/C (Saber-cut
-    # blanks fed into a die-cutter), legacy auto-fills the die cost
-    # ($1200 Crest / $1800 Bobst / $1200 Saber+D/C) if the estimator didn't
-    # supply one. We do this in the engine (not the React useEffect) so
-    # multi-part quotes get auto-die for every component — not just the
-    # active tab. Saber + D/C is the legacy fallback route when no Crest
-    # die fits ("falling back to Saber + die cut"), so it still uses a
-    # steel die.
+    # When the resolved route is Crest or Bobst, legacy auto-fills the die
+    # cost ($1200 Crest / $1800 Bobst) if the estimator didn't supply one.
+    # We do this in the engine (not the React useEffect) so multi-part
+    # quotes get auto-die for every component — not just the active tab.
+    #
+    # NOTE: Saber + D/C is NOT included. Legacy spot_r1_5.jsx L3870 strictly
+    # checks `route==="Crest" || route==="Bobst"` for auto-die. Saber+D/C is
+    # the fallback route when no Crest die *fits* — by definition no die
+    # was viable, so legacy never auto-applies one. (We tried adding it
+    # 2026-06-12 and over-applied by 2 dies = $2,760 vs legacy.)
     resolved_route = route_result.get("route") or ""
-    any_die_route = resolved_route in ("Crest", "Bobst", "Saber + D/C")
+    any_die_route = resolved_route in ("Crest", "Bobst")
     die_cost_in = pn(json.get("cuttingDieCost", "0"))
     die_treat_in = json.get("dieTreatment", "None")
     die_cost_eff: Any = json.get("cuttingDieCost", "0")
     die_treat_eff = die_treat_in
     die_auto_applied = False
     if any_die_route and die_cost_in <= 0 and die_treat_in != "Amortize":
-        # Bobst gets the $1800 default; Crest and Saber + D/C both use
-        # the Crest die default ($1200) since the Saber+D/C fallback uses
-        # the same die-cutter envelope.
         default_cost = (asmp.get("bobstDieCost") if resolved_route == "Bobst"
                         else asmp.get("crestDieCost"))
         if default_cost is None:

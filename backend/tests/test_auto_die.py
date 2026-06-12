@@ -49,21 +49,22 @@ def test_bobst_auto_die_1800_default():
     assert abs(r["dieBase"] - 1800) < 0.01
 
 
-def test_saber_dc_auto_die_1200_default():
-    """Saber + D/C fallback also uses a die ($1200 default).
+def test_saber_dc_no_auto_die():
+    """Saber + D/C does NOT auto-apply a die.
 
-    Legacy spot_engine.js L633 returns this as a fallback route when no
-    Crest die fits; the warning literally says "falling back to Saber +
-    die cut". So a die IS required and legacy applies $1200 default.
+    Legacy spot_r1_5.jsx L3870 strictly checks `route==="Crest"||route==="Bobst"`
+    — Saber+D/C is the fallback route when no Crest die fits, so by definition
+    no die was viable. Items that *do* show a die in legacy on a Saber+D/C
+    item got it from a sticky React state where the route was previously
+    Crest, not from the auto-die useEffect on the current Saber+D/C route.
     """
-    # Force Saber + D/C with high CAD hours + no Crest viability
     r = run_estimate({
         **_crest_payload(rule_in="0", route_override="Saber + D/C"),
         "saber": "Yes", "saberBlanksOut": "1",
     })
     assert r["route"] == "Saber + D/C"
-    assert r["dieAutoApplied"] is True
-    assert abs(r["dieBase"] - 1200) < 0.01
+    assert r["dieAutoApplied"] is False, "Saber+D/C must not auto-apply die"
+    assert (r.get("dieBase") or 0) == 0
 
 
 def test_cad_route_no_auto_die():
