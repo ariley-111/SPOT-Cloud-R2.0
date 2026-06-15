@@ -442,6 +442,8 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Quote analytics / win-loss reporting — **P3**
 - ERP/Automator API integration — **P3**
 - Multi-Part-aware "BOM Template" library (re-use display skeletons) — **P3**
+- Auto-persist email attachments as their own rows in "Saved RFQ files" — **P2**
+  (so CAD PDF inside an .eml shows in the saved-files panel without drilling into the email)
 
 ### 2026-06-12 — Die UX + Route Comparison legacy parity (Iter 22)
 - **Die row in Item Setup → always visible** on EVERY route (no more `anyDieRoute` gate). Estimator can set None/Line/Amort + cost + markup per component regardless of routing.
