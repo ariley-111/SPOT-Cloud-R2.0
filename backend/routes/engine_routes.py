@@ -192,7 +192,11 @@ async def sheet_library_priced(
         })
         bc = calc_board(bspec, sheets_req, bool(sh.get("isStock")))
         cost_msf = bc.get("effWithFsc") if bc and bc.get("pricable") else None
-        cost_pc = bc.get("costPc") if bc and bc.get("pricable") else None
+        # LEGACY PARITY (spot_r1_5.jsx L5000): costPc = total / component_qty.
+        # `bc["costPc"]` from calc_board returns total/sheets_req (cost per
+        # SHEET, not per piece) — different semantics. Sheet Library wants
+        # cost-per-piece for the active-item qty, so we override here.
+        cost_pc = (bc["total"] / qty) if (bc and bc.get("pricable") and qty > 0) else None
         total = bc.get("total") if bc and bc.get("pricable") else None
         spec_match = (
             (sh.get("g") == grade or (fb_grade and sh.get("g") == fb_grade))

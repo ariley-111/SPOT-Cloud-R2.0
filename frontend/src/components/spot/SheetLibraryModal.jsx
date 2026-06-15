@@ -358,6 +358,33 @@ export default function SheetLibraryModal({ open = true, onClose }) {
                 Clear All Stock ({stockCount})
               </button>
             )}
+            <button onClick={() => {
+                // Legacy-parity CSV export (spot_r1_5.jsx L8262-8271)
+                const hdr = ["Sheet W","Sheet L","Flute","Grade","Outside","Inside","Medium","Type","Pcs/Sh","Sheets","Waste%","$/MSF","Cost/Pc","Total PO","Spec Match"];
+                const lines = [hdr.join(",")];
+                visibleRows.forEach((x) => {
+                  lines.push([x.w, x.l, x.f, x.g,
+                    x.ol === "None" ? "Kraft" : x.ol, x.il === "None" ? "Kraft" : x.il,
+                    x.md === "None" ? "None" : x.md, x.isStock ? "Stock" : "Approved",
+                    x.pcsPerSheet || "", x.sheetsReq || "",
+                    x.wastePct != null ? `${(x.wastePct * 100).toFixed(1)}%` : "",
+                    x.pricable ? (x.costMsf ?? 0).toFixed(2) : "",
+                    x.pricable ? (x.costPc ?? 0).toFixed(4) : "",
+                    x.pricable ? (x.total ?? 0).toFixed(2) : "",
+                    x.specMatch ? "Yes" : "No",
+                  ].map((v) => `"${v}"`).join(","));
+                });
+                const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `Sheet_Library_${s.flute || "spec"}_${s.boardGrade || ""}.csv`.replace(/[\\/:*?"<>|]/g, "_");
+                a.click(); URL.revokeObjectURL(a.href);
+              }} data-testid="sheetlib-export-csv"
+              style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                padding: "4px 10px", border: "1px solid var(--spot-accent)", borderRadius: 4,
+                color: "var(--spot-accent)" }}>
+              Export CSV
+            </button>
           </div>
           <div style={{ fontSize: 10, color: "var(--spot-text3)" }} data-testid="sheetlib-counts">
             {visibleRows.length} sheet{visibleRows.length === 1 ? "" : "s"}
