@@ -554,7 +554,33 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 
 
-### 2026-02-15 (cont.) — Email attachment preview parity ✅
+### 2026-02-15 (cont.) — BOM Builder qty-edit dimension-wipe fix ✅ (Iter 21+22)
+- **User report (prod)**: re-opening BOM Builder on an MP quote and changing
+  default qtys silently wiped every component's `oneUpW/L/totalRuleInches/
+  qtys/boxStyle`. Round-trip lost all per-item state.
+- **Root cause**: `convertToMultiPart` unconditionally rebuilt every item via
+  `freshItemState({...seed})` where seed only carried shared fields
+  (flute, grade, liners, print). The per-item dim/rule/qty fields were never
+  passed through the BOM Builder draft rows.
+- **Fix 1** (`BomBuilderModal.jsx` L54-67 + L165-180): on prefill, capture each
+  existing item's `state` into a new `_existingState` field on the draft row.
+  On `Save BOM`, pass it through as `existingState`.
+- **Fix 2** (`QuoteContext.jsx::convertToMultiPart` L524-545): branch on
+  `row.existingState`: when present, preserve it verbatim and override only
+  `qtys` (from `opts.defaultQtys`) and `itemDesc`. New-build path
+  (`row.existingState === null`) still calls `freshItemState({...seed})`.
+- **Fix 3** (`QuoteContext.jsx` new `snapshotActiveItemState()` + wired into
+  `Placeholders.jsx` bom-edit-builder-btn): edge case caught by iter21 —
+  if user typed top-level dims and clicked Edit-in-BOM-Builder without
+  switching BOM tabs first, the in-flight edits weren't mirrored into
+  `bomItems[activeIdx].state` so the builder's prefill saw stale state.
+  New method runs `gatherItemState(top-level) → bomItems[activeIdx].state`
+  before dispatching `spot:open-bom-builder` so the builder reads fresh data.
+- **Verified live (iter22)**: persisted Items 1+2 dims (10x20, 15x25) survive
+  default-qty changes AND pcs/set changes; Item 3's unsaved 7x14 (typed
+  immediately before opening builder) is preserved through Save BOM.
+
+
 - Refactored `/app/backend/routes/parser.py::preview_file` into a shared
   `_build_preview_payload(filename, mime, raw)` helper so any byte blob can
   be rendered with the same kind-switch (pdf/image/text/email/sheet/zip/docx/rtf).
