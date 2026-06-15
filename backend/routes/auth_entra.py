@@ -19,7 +19,7 @@ Required env vars (set per environment in Admin Console → Integrations later):
   - ENTRA_TENANT_ID
   - ENTRA_CLIENT_ID
   - ENTRA_CLIENT_SECRET
-  - APP_BASE_URL                e.g. https://ai-connect-33.preview.emergentagent.com
+  - APP_BASE_URL                e.g. https://spot-multi-user.preview.emergentagent.com
                                 (this is the same host the redirect URI uses)
   - ALLOWED_EMAIL_DOMAIN        default: standardprinting.com
   - SSO_ADMIN_EMAILS            comma-separated, lowercased

@@ -1,0 +1,138 @@
+<analysis>**original_problem_statement**: The user wants to port a local, Claude-built desktop web app called SPOT (Standard Printing Optimization Tool) to the Emergent cloud platform. The goal is to retain 100% of its current pricing math, functionality, and integrations, while transitioning to a multi-user cloud architecture with a proper database.
+PRODUCT REQUIREMENTS:
+- Preserve mathematical parity with the legacy pricing engine exactly.
+- Implement multi-tab draft support for estimators.
+- UI must closely match the legacy aesthetic (1:1 UI rebuild).
+- Implement Legacy Multi-Part features (display, kits, multiple CADs).
+- Build Admin console for system settings (Rates, Sheets, Integrations).
+
+**User's preferred language**: English (INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only)
+
+**what currently exists?**: A fully functional React + FastAPI + MongoDB app. The backend pricing engine perfectly matches legacy output. The parser handles RFQ processing and persistent file saving. The frontend features multi-part support and accurate quoting tables. In this session, the agent successfully implemented the In-App File Preview Modal (including inline email attachment previews), fixed a dimension-wiping bug in the BOM Builder, and resolved an issue where saved RFQ files disappeared upon quote saving.
+
+**Last working item**: 
+    - Last item agent was working: Investigating a reported discrepancy in pricing logic where 200 E Kemi/Kraft for dimensions 20.3125 x 13.5938 triggers a Buy Min warning in prod and results in 21 ups (3x7) on a 63x126 sheet in legacy, whereas the cloud engine calculates 27 ups (3x9) and no Buy Min warning at standard quantities. The agent analyzed routing, sheet selection, and legacy imposition logic, verifying that the layout formulas are identical.
+    - Status: BLOCKED
+    - Agent Testing Done: Y (Ran backend python repro scripts)
+    - Which testing method agent to use? backend testing agent / manual python -c scripts
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**:  
+  - Issue 1: Buy Min / Imposition Parity discrepancy for 200 E Kemi/Kraft (P0)
+     - Attempted fixes: Investigated , ,  and compared against  legacy code. Found formulas match exactly (). The agent suspects either a user sheet override, a different total quantity causing an auto-route change to Crest (which forces a smaller 60x120 sheet), or an input difference.
+     - Next debug checklist: Await user's screenshot and quantity details. Check if the Buy Min badge () or Below Min row is triggered. Verify if the CAD -> Crest routing fallback rule is shifting the sheet size.
+     - Why fix this issue and what will be achieved with the fix?: Finalizes math parity with legacy for layout edge cases.
+     - Status: BLOCKED (Waiting on user feedback from their meeting)
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? backend
+
+**In progress Task List**: 
+  None currently.
+
+**Upcoming and Future Tasks**
+    - P0: Implement new features and fixes derived from the user's show and tell demo meeting (expect a list from the user).
+    - P0: Port Cost Report modal from legacy (Internal Cost-Buildup View).
+    - P0: DB backup strategy.
+    - P1: Substrate substitution parity.
+    - P1: Per-component validation badges.
+    - P2: Categorize saved quotes (Multi-part, Individual, Customer, Project Name) for easier lookup.
+    - P2: Auto-persist email attachments as individual saved-files rows in the parser files list.
+    - P2: Phase 5 Integrations - Ignition API Customer Sync.
+    - P3: SharePoint PDF archive.
+    - P3: Cover Letter note field.
+    - P3: Admin Console Governance / Approval Workflow.
+
+**Completed work in this session**
+- Built In-App Parser File Preview Modal including support for clicking and viewing attachments inside .eml/.msg files inline (, ). (DONE)
+- Fixed BOM Builder Dimension-Wipe Bug where saving the BOM erased  by preserving  upon round-trip (). (DONE)
+- Fixed edge-case where in-flight top-level dim edits were lost if opening BOM Builder without switching tabs first (, ). (DONE)
+- Fixed Saved RFQ Files disappearing on Quote Save. Added  logic to migrate  draft IDs to permanent Quote IDs upon saving (, , , , ). (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+   Issue 1: Pricing Mode Tile Click Event Swallowed
+   - Debug checklist: Testing agent reported that the inability to switch TO Matched Set looks like a click event swallowed somewhere in the  component or  (not the context callback). 
+   - Why to solve this issue and what will be achieved with this?: Ensures users can easily switch between Individual and Matched Set modes without UI friction.
+   - Should Test frontend/backend/both after fix: frontend
+   - Is recurring issue? N
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: None
+  - Recurrence count: 0
+  - Status: RESOLVED
+
+**Code Architecture**
+core.pypricing.pyrunner.pyrouting.pyengine_routes.pypdf.pyparser.pyquotes.pyparser_files.pysheet_library.pyrate_overrides.pyemail_extract.pyQuoteTableSec.jsxFilesSec.jsxFilePreviewModal.jsxBomBuilderModal.jsxToolbar.jsxQuoteContext.jsxAuthContext.jsxdefaults.jsmpSchema.jsspot.jsclient.js
+
+**Key Technical Concepts**
+React, FastAPI, MongoDB, Anthropic Opus (Parser), Weasyprint (PDF), OIDC SSO.
+
+**key DB schema**
+  - : {owner_id, est_num, state, exportExclude, status}
+  - : Stores saved RFQ attachments permanently for quote lifecycle tied to .
+
+**changes in tech stack**
+  - None this session.
+
+**All files of reference** 
+  -  (Updated to add attachment preview & file ID reassign endpoints)
+  -  (Updated to fix BOM state wipe and trigger file reassignment logic)
+  -  (Updated to call file reassignment on quote save)
+  -  (Core file persistence/reassign logic)
+  - , ,  (Investigated for Buy Min / imposition discrepancy edge case)
+
+**Areas that need refactoring**: 
+  - NA
+
+**key api endpoints**
+  - 
+  -  (New)
+  -  (New)
+  - 
+
+**Critical Info for New Agent**
+- **Environment Note:** The user has deployed the app to PRODUCTION. You (the agent) only have access to the PREVIEW environment. When debugging production issues, reproduce and fix them in the preview environment, then inform the user that a redeployment is necessary for changes to reach production.
+- **Buy Min Discrepancy:** The user reported a Buy Min discrepancy on 200 E Kemi/Kraft (21 ups vs 27 ups). The math in the cloud app for imposition exactly matches the legacy code. Wait for the user to provide a screenshot, exact total quantity, and routing choice. The discrepancy is likely due to an auto-routing shift (e.g., CAD to Crest forcing a smaller sheet size) or a manual UI override.
+- **User Demo:** The user is returning from a show and tell demo meeting with their team. Expect the next message to contain a fresh list of features and bug fixes. Address any blockers first before moving through their list.
+
+**documents and test reports created in this job**
+  - 
+  - 
+  - 
+  - 
+  - 
+
+**Last 10 User Messages and any pending HUMAN messages** 
+ - *User*: Requested the ability to extract and preview each file attached to parsed emails. (Resolved)
+ - *User*: Suggested saving email attachments as their own row in the Saved RFQ files list. (Added to backlog)
+ - *User*: Reported a production bug: changing quantity in the BOM builder makes dimensions disappear. (Resolved)
+ - *User*: Reported a bug where saved quotes, upon reopening, do not show previously saved parser files. (Resolved)
+ - *User*: Approved backlogging an enhancement, mentioned an upcoming demo meeting, and asked about forking. (Agent advised forking/waiting)
+ - *User*: Added Cost Report and categorizing saved quotes to the backlog. (Added to backlog)
+ - *User* (PENDING): Asked why 200 E Kemi/Kraft is showing a Buy Min for 20.3125 x 13.5938 in prod, whereas legacy has no warning and gives 3x7=21 out on a 63x126 sheet. Agent investigated, found the cloud engine accurately yields 27 ups (3x9) using identical layout logic, and requested the user's exact quantity/screenshot to reproduce the likely routing override. Waiting for user response.
+
+**Project Health Check:**
+  - Broken: None
+  - Mocked: Ignition API Customer Sync.
+
+**3rd Party Integrations**
+  - Microsoft Entra ID (SSO) — requires User API Key
+  - UTS API (Freight quotes) — requires User API Key
+  - Anthropic Opus (RFQ Parser) — requires User API Key
+
+**Testing status**
+  - Testing agent used after significant changes: YES (Tested BOM Builder fixes and Parser file reassignments extensively).
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: , 
+  - Known regressions: Tile click issue on switching to Matched Set (reported by testing agent earlier).
+
+**Credentials to test flow:**
+  - Standard admin:  / 
+
+**What agent forgot to execute**
+  Nothing forgotten. The agent safely paused execution to await the user's return from their demo meeting along with screenshots required to reproduce the imposition/Buy Min issue.
+
+**Debugging checklist for current issue**
+    Issue: Buy Min / Imposition Parity discrepancy for 200 E Kemi/Kraft (P0)
+    Frontend files to check:  (check  propagation)
+    Backend files to check:  (check layout math),  (check Buy Min override state),  (check if auto route forced Crest over CAD due to threshold).
+    Action: Wait for the user's screenshot and quantity array. Compare the user's sheet size (likely 60x120 instead of 63x126 due to Crest auto-routing).</analysis>

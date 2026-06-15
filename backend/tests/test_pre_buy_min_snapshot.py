@@ -15,7 +15,7 @@ import pytest
 import requests
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL")
-            or "https://ai-connect-33.preview.emergentagent.com").rstrip("/")
+            or "https://spot-multi-user.preview.emergentagent.com").rstrip("/")
 
 
 @pytest.fixture(scope="module")
