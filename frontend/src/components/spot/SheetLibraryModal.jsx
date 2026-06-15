@@ -51,7 +51,16 @@ export default function SheetLibraryModal({ open = true, onClose }) {
 
   const oneUpW = Number(s.oneUpW || 0);
   const oneUpL = Number(s.oneUpL || 0);
-  const activeQty = Number((s.qtys || [])[s.activeQtyTier || 0] || (s.qtys || [])[0] || 0);
+  // LEGACY PARITY (spot_r1_5.jsx L8256): selQty = qtys[selSlot] || qtys[0].
+  // Legacy stores qtys PRE-multiplied by pcsPerSet at BOM commit (L2071-2075),
+  // so its `qtys[0]` = 15,000 for a Bot Disk 1 (pps=6) at 2,500 sets. Cloud
+  // stores raw set qtys; multiply here for multi-part components so the Sheet
+  // Library prices the right component qty (sheets needed, $/MSF, cost/pc).
+  const _rawQty = Number((s.qtys || [])[s.activeQtyTier || 0] || (s.qtys || [])[0] || 0);
+  const _isMP = (s.quoteType || "Simple") === "Multi-Part" && (s.bomItems || []).length > 0;
+  const _activeBom = _isMP ? (s.bomItems || [])[s.activeItemIdx ?? 0] : null;
+  const _pps = Math.max(1, Number(_activeBom?.pcsPerSet) || 1);
+  const activeQty = _isMP ? _rawQty * _pps : _rawQty;
   const overrideId = s.overrideSheetId || null;
   const stockSheets = s.stockSheets || [];
 
