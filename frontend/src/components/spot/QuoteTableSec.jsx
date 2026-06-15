@@ -307,16 +307,34 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
   const s = active?.state || {};
   const totalCols = cols.length;
   // Per legacy spot_r1_5.jsx L6223:
-  //   ea  → itemSell / qty
-  //   msf → (itemSell / qty) * 1000
-  //   set → r.setSell (already computed as job_sell / set_qty in backend)
+  //   ea  → itemSell / totalQty  (ACTIVE COMPONENT's per-piece in Matched Set)
+  //   msf → (itemSell / totalQty) * 1000
+  //   set → setTotals.sellPerSet  (set aggregate / set qty)
+  //
+  // In Matched Set mode the row's r.itemSell/r.qty equals r.setSell (since
+  // r.qty == setQty in the aggregated row), so Sell/Ea and Sell/M would
+  // incorrectly mirror Sell/Set. Pull the active component's per-piece value
+  // from r.perComponent[activeIdx] instead — matching legacy behavior.
+  const _isMP = s.quoteType === "Multi-Part" && (s.bomItems || []).length > 0;
+  const _isMatched = _isMP && (s.pricingMode || "Matched Set") === "Matched Set";
+  const _activeIdx = Math.max(0, Math.min(
+    Number(s.activeItemIdx ?? 0),
+    Math.max(0, (s.bomItems || []).length - 1),
+  ));
   const computeSellDisp = (r) => {
     if (r.qty <= 0) return 0;
+    if (_isMatched && sellMode !== "set") {
+      const ac = Array.isArray(r.perComponent) ? r.perComponent[_activeIdx] : null;
+      const acQty = Number(ac?.totalQty ?? ac?.qty ?? 0);
+      if (ac && acQty > 0) {
+        const perEaComp = Number(ac.itemSell || 0) / acQty;
+        return sellMode === "msf" ? perEaComp * 1000 : perEaComp;
+      }
+    }
     const perEa = r.itemSell / r.qty;
     if (sellMode === "msf") return perEa * 1000;
     if (sellMode === "set") {
-      // r.setSell is already per-set (engine_routes.py L460); fall back to perEa
-      // which is mathematically equivalent in matched-set rows (qty == setQty).
+      // r.setSell is already per-set (engine_routes.py); fall back to perEa.
       return Number(r.setSell || perEa);
     }
     return perEa;
@@ -330,7 +348,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
               <th key={c.k}
                 onClick={c.cycle ? cycleSellMode : undefined}
                 data-testid={c.cycle ? "sell-col-header" : undefined}
-                title={c.cycle ? "Click to cycle Sell/Ea ↔ Sell/M" + (sellMode === "set" || (sellMode === "msf" && /* matched */ false) ? " ↔ Sell/Set" : "") : undefined}
+                title={c.cycle ? (_isMatched ? "Click to cycle Sell/Ea → Sell/M → Sell/Set" : "Click to cycle Sell/Ea ↔ Sell/M") : undefined}
                 style={{
                   padding: "5px 6px", textAlign: c.align, fontSize: 11, fontWeight: 700,
                   textTransform: "uppercase", color: c.accent ? "var(--spot-accent)" : "var(--spot-text3)",

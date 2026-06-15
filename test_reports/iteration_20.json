@@ -1,0 +1,33 @@
+{
+  "summary": "Iter 20 — Validated the QuoteTableSec FlatLayout.computeSellDisp() fix for Multi-Part Matched Set Sell column cycling (Ea/M/Set). Code review confirms the fix matches the review_request spec and legacy spot_r1_5.jsx L6202/L6223: when `_isMatched && sellMode !== 'set'`, the code pulls `r.perComponent[_activeIdx].itemSell / .totalQty` for Sell/Ea and multiplies by 1000 for Sell/M; falls through to `r.setSell` for Sell/Set. Cycle order Ea → M → Set → Ea is implemented in `cycleSellMode` at L57-67 with the `set` option gated on `isMatched`. Single-Part live UI test PASSED: cycle is Sell/Ea ↔ Sell/M only (verified via Playwright — no Sell/Set option in non-Matched modes). Matched-Set live end-to-end UI verification could NOT be completed because `tile-pricing-matched` click does not actually switch `pricingMode` from default 'Individual' to 'Matched Set' in a freshly created tab (confirmed across 3 attempts, both via Playwright `click(force=True)` and `locator.click`). UI banner remains 'MULTI-PART · INDIVIDUAL' and the FlatLayout (data-testid='quote-table') never renders. Could be a pre-existing issue with the Tile component's onClick wiring on the Pricing toggle row, OR Playwright not propagating React synthetic events on that specific Tile. This is unrelated to the FlatLayout fix being tested but BLOCKS live verification of the 3-mode cycle. The fix code itself is correct per source review.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EstimateInfoSec PRICING tiles (tile-pricing-matched)", "issue": "Clicking [data-testid=tile-pricing-matched] does not switch pricingMode from 'Individual' to 'Matched Set' on a fresh new tab. Reproduced 3x via Playwright (force=True + locator.click). PRICING row continues to show Individual highlighted; quote-table banner stays 'MULTI-PART · INDIVIDUAL'. tile-pricing-individual ↔ tile-pricing-matched both visible. This blocks the live verification of the Matched Set Sell column 3-mode cycle fix.", "selector": "[data-testid='tile-pricing-matched']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Investigate why tile-pricing-matched click does not toggle pricingMode in fresh Multi-Part tabs. Suggested checks: (a) the Tile component's onClick handler propagation; (b) whether a stale closure in setPricingMode useCallback (deps [activeId] at QuoteContext.jsx L201) misses the latest active tab when a tab was just created via newTab; (c) whether a confirmation modal is intercepting clicks. Manual reproduction: log in → new tab → click Multi-Part → click Matched Set → observe PRICING row remains Individual.",
+    "Once #1 is fixed, re-test the 3-mode cycle in Matched Set: confirm (1) Sell/Set, Sell/Ea, Sell/M produce 3 DIFFERENT values; (2) switching active BOM item changes Sell/Ea but NOT Sell/Set; (3) Sell/M ≈ Sell/Ea × 1000."
+  ],
+  "critical_code_review_comments": [
+    "QuoteTableSec.jsx L324-341 computeSellDisp: implementation matches review_request spec exactly. When _isMatched && sellMode != 'set' it reads r.perComponent[_activeIdx].itemSell/totalQty (with safe fallback to ac.qty), and Sell/M = perEaComp * 1000. Set mode returns r.setSell (from engine_routes.py per-comp aggregation). Bounds-safe: _activeIdx clamped via Math.max(0, Math.min(...)) at L320-323. ✓",
+    "QuoteTableSec.jsx L52-67 sellMode/cycleSellMode: default is 'set' in Matched mode and 'ea' otherwise; cycle Ea→M→Set in Matched, Ea↔M otherwise. The auto-downgrade of stored 'set' to 'ea' if user switches out of Matched (L55) is correct UX. ✓",
+    "QuoteTableSec.jsx L350-351 sell-col-header tooltip dynamically reflects the cycle path ('Click to cycle Sell/Ea → Sell/M → Sell/Set' vs 'Sell/Ea ↔ Sell/M'). ✓",
+    "Single-Part path untouched (line 334 r.itemSell/r.qty fallback) — verified live: Simple mode cycles Ea↔M only. ✓"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only request)",
+    "frontend": "Single-Part toggle: 100% PASS live. Multi-Part Individual toggle: code path verified (FlatLayout not used; per-component layout still uses same cycle which is Ea↔M when isMatched=false). Multi-Part Matched Set toggle: code path verified at source level (correct), but live UI verification blocked by separate tile-pricing-matched bug (see action_items)."
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — working",
+  "seed_data_creation": "Created 3 fresh draft Multi-Part tabs (SA-260615-113735, SA-260615-113906, SA-260615-114115) during testing — left in DRAFT state, can be cleaned up.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The FlatLayout fix in QuoteTableSec.jsx computeSellDisp is correctly implemented per spec — code review confirms perfect parity with legacy spot_r1_5.jsx L6223 and the review_request description. The blocker for live E2E verification is that the PRICING [Matched Set] tile click is not toggling pricingMode in a new tab. Once main agent fixes that tile, re-run the cycle test: click sell-col-header to cycle through Set→Ea→M and verify (a) 3 distinct $ values, (b) switching active BOM item (bom-item-0/1/2) changes only Sell/Ea, not Sell/Set, (c) Sell/M = Sell/Ea × 1000. The Single-Part Sell/Ea↔Sell/M cycle was verified live and passes. There may also be a workaround: load an existing Matched Set quote rather than creating one fresh — that would bypass the tile-pricing-matched bug for verification purposes.",
+  "rca_of_the_issue": "Test setup blocker (not the fix being tested): tile-pricing-matched click does not switch pricingMode. Hypothesis: the setPricingMode useCallback at QuoteContext.jsx L133-201 has deps=[activeId] (L201), so after newTab() creates a new tab and setActiveId fires, the click handler closed over a stale activeId may still target the previous tab. However the Individual tile bug would symmetrically apply — yet Individual stays selected because that's the default state, so the inability to switch TO Matched looks like a click event swallowed somewhere in the Tile component (not the context callback). Needs Tile-level investigation by main agent."
+}

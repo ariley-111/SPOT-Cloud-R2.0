@@ -96,7 +96,13 @@ def select_override_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str
     bc = calc_board(bi, sheets_req, is_stock=True)
     cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
     cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
-    sheet = {"id": f"OVR-{int(override_w)}x{int(override_l)}",
+    # Preserve fractional precision in the id (matches the FE format
+    # spot/SheetLibraryModal.jsx → `OVR-${Number(w)}x${Number(l)}` so that
+    # round-tripping the id through MongoDB never silently truncates
+    # 63.5 → 63 (which would re-cost a different sheet on reload).
+    _w_str = f"{override_w:g}"
+    _l_str = f"{override_l:g}"
+    sheet = {"id": f"OVR-{_w_str}x{_l_str}",
              "g": board_spec["boardGrade"], "f": board_spec["flute"],
              "ol": board_spec["outsideLiner"], "il": board_spec["insideLiner"],
              "md": board_spec["medium"], "w": override_w, "l": override_l}
