@@ -1,0 +1,37 @@
+{
+  "summary": "Verified the parser_files reassign bug fix end-to-end. Backend layer fully passing (7/7 pytest), including the full lifecycle: persist a tiny .txt under a local-xxx id via /api/parser/parse-rfq → POST /api/parser/files/reassign with from_id=local-xxx,to_id=draft-uuid → GET /api/parser/files?quote_id=draft-uuid returns the file with stable file_id → reassign draft→quote → list and preview/download still resolve (proves disk_path is absolute and unaffected by re-keying). Endpoint contract confirmed: returns {updated:N, from_id, to_id} with N>=1 on valid migration; returns {updated:0} for empty/same/no-matching ids. Frontend: admin login, FilesSec data-testids (files-drop-zone, files-browse-input, btn-build-estimate, toolbar-save, toolbar-load) all mount as expected. Dropped a 5-line tiny .txt via files-browse-input, RFQ class was detected, Build Estimate enabled and clicked. Filled est# (TESTE2E1) + dims; toolbar-save fired createQuote and reassignParserFiles(active.id, saved.id) per Toolbar.jsx onSave L102-106. After reload, TESTE2E1 appeared in the Drafts list (verified via Load Quote modal). Note: data-testid for save is `toolbar-save` not `save-btn` as listed in the request — main agent should update reference doc.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Build Estimate → saved-rfq-files panel refresh", "issue": "FilesSec.runParseDirect refreshes savedFiles INSIDE the try block (L96). If parseRfq throws (Anthropic 429/budget/timeout), save_parser_file already persisted the bytes but the FE never re-fetches /api/parser/files until filesQuoteId changes via autosave promotion. Estimator sees no Saved RFQ files panel for several seconds. Suggest: move listParserFiles refresh into a finally block (always refresh after parse attempt) since save_parser_file runs BEFORE the anthropic call.", "affected_selectors": ["saved-rfq-files"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_parser_files_reassign_http.py",
+    "/app/backend/tests/test_parser_files_reassign.py",
+    "/app/test_reports/pytest/iter23_reassign.xml"
+  ],
+  "action_items": [
+    "(Optional polish) FilesSec.jsx L82-100: move the listParserFiles refresh to a finally block so the Saved RFQ files panel appears even when the Anthropic parse step fails (the file is already persisted by then).",
+    "Request doc lists the toolbar save data-testid as `save-btn` — it's actually `toolbar-save`. Update the bug-fix reference."
+  ],
+  "critical_code_review_comments": [
+    "services/parser_files.py L130-148: reassign_quote_files() correctly guards empty/same ids and uses update_many filtered by deleted_at:null so soft-deleted records aren't resurrected. modified_count returned as the count. Clean.",
+    "routes/parser.py L721-734: ReassignBody Pydantic model accepts any strings — endpoint relies on the service-layer guard. Acceptable but a stricter Field(min_length=1) on both would be defensible.",
+    "Toolbar.jsx onSave L102-106: reassignParserFiles wrapped in try/empty-catch — silent failure on the reassign. If the migration fails for any reason the user gets a successful Save toast but the files are orphaned. Consider surfacing a non-fatal pushToast(warn) on catch so estimators know to re-attach files. NOT BLOCKING.",
+    "FilesSec.jsx L17 filesQuoteId = s.quoteId || active?.id — exactly matches the bug-fix description. After save, state.quoteId is set, so subsequent listParserFiles calls go to the right id. useEffect dependency on filesQuoteId at L46 ensures re-fetch on id change.",
+    "Disk paths in parser_files.disk_path are absolute and not migrated on reassign (by design — confirmed in services docstring L139-141). preview_file and download_file resolve correctly post-reassign. Verified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_parser_files_reassign_http.py (created — HTTP-level integration tests)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "Mounting + Save + reload flow verified; saved-rfq-files panel refresh timing flagged as minor"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — working",
+  "seed_data_creation": "Created a draft 'TESTE2E1' via UI during testing (visible in Drafts). Backend HTTP test creates+deletes a `reassign_lifecycle.txt` parser_files record per run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reassign endpoint and full lifecycle proven at backend HTTP layer. If retesting frontend: the data-testid is `toolbar-save` (not `save-btn`). The saved-rfq-files panel only appears AFTER the first successful listParserFiles returns non-empty — which happens (a) on the post-parse refresh inside the try-block of FilesSec.runParseDirect, or (b) when filesQuoteId changes (local→draft autosave / draft→quote save). If parse fails, expect a brief window where the panel is missing.",
+  "rca_of_the_issue": "Original bug: parser_files saved with quote_id = active.id (a transient `local-xxx` tab id). On first autosave the tab id was replaced with a server draft uuid, orphaning the files. On Save Quote a fresh quote uuid was generated, orphaning them again. Fix verified: (1) /api/parser/files/reassign re-keys all matching parser_files docs via update_many; disk paths are absolute so preview/download still resolve. (2) QuoteContext autosave calls reassignParserFiles(localId, draftId) on the local→draft promotion. (3) Toolbar.onSave calls reassignParserFiles(active.id, saved.id) on Save Quote. (4) FilesSec uses filesQuoteId = state.quoteId || active.id so the listParserFiles query always targets the current owner. Backend HTTP lifecycle test exercises the entire chain and asserts file remains preview-able after both migrations."
+}

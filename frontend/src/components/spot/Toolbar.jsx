@@ -2,7 +2,7 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
-import { createQuote, updateQuoteStatus } from "../../api/spot";
+import { createQuote, updateQuoteStatus, reassignParserFiles } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
 import SpotCube from "./SpotCube";
 
@@ -96,6 +96,14 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
       // dropdown can persist changes via PATCH on subsequent edits.
       setField("quoteId", saved.id);
       setField("quoteStatus", saved.status || currentStatus);
+      // Migrate parser files from the draft tab id → saved-quote id so they
+      // remain accessible when the quote is later loaded back.
+      // (Bug fix 2026-02-15.)
+      try {
+        if (active?.id && saved.id && active.id !== saved.id) {
+          await reassignParserFiles(active.id, saved.id);
+        }
+      } catch (_) {}
       pushToast(`Saved ${saved.est_num || s.estNum || "quote"}`, "ok");
       // If "File" checkbox is checked, also download a .json snapshot
       if (fileCbRef.current?.checked) {

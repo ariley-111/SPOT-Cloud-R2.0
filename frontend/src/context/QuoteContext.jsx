@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, reassignParserFiles } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
 import {
@@ -226,6 +226,10 @@ export function QuoteProvider({ children }) {
           // Keep activeId in sync if the promoted tab was the active one — otherwise
           // useMemo(active) will fall back to tabs[0] and the new tab will appear to "vanish".
           setActiveId((cur) => cur === oldId ? created.id : cur);
+          // Migrate any parser files that were uploaded against the transient
+          // local-tab id so they're still findable under the new draft id.
+          // (Bug fix 2026-02-15: files orphaned on save+reload.)
+          try { await reassignParserFiles(oldId, created.id); } catch (_) {}
         }
       } catch (_) {}
     }, 1500);

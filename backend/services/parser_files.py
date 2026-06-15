@@ -127,6 +127,27 @@ async def soft_delete_file(file_id: str) -> bool:
     return True
 
 
+async def reassign_quote_files(from_quote_id: str, to_quote_id: str) -> int:
+    """Re-key all parser_files from `from_quote_id` → `to_quote_id`.
+
+    Used by the frontend autosave + save-as-quote flows so files uploaded
+    against a transient local tab id (e.g. `local-abc123`) follow the quote
+    through to its persisted draft id and later its saved quote id. Returns
+    the number of records updated.
+
+    Disk paths are NOT moved — they're absolute and tracked per-doc, so the
+    download/preview handlers still resolve correctly. The orphaned dir
+    will be cleaned up by `purge_quote_files` when the quote is deleted.
+    """
+    if not from_quote_id or not to_quote_id or from_quote_id == to_quote_id:
+        return 0
+    res = await db[COL_PARSER_FILES].update_many(
+        {"quote_id": str(from_quote_id), "deleted_at": None},
+        {"$set": {"quote_id": str(to_quote_id)}},
+    )
+    return res.modified_count
+
+
 async def purge_quote_files(quote_id: str) -> int:
     """Hard-delete all files for a quote (called by quote/draft delete handler).
     Returns number of files purged."""

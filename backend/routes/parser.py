@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS
 from models.schemas import User
@@ -715,6 +716,22 @@ async def parse_rfq(
 async def list_files(quote_id: str, _u: User = Depends(get_current_user)):
     """List non-deleted RFQ files attached to a quote/draft."""
     return {"files": await _parser_files.list_parser_files(quote_id)}
+
+
+class ReassignBody(BaseModel):
+    from_id: str
+    to_id: str
+
+
+@router.post("/files/reassign")
+async def reassign_files(body: ReassignBody, _u: User = Depends(get_current_user)):
+    """Re-key parser_files from one quote_id to another. Called by the
+    frontend when (a) a local tab is first persisted as a draft (id changes
+    from `local-xxx` to a server UUID), and (b) when the draft is saved as
+    a Quote (state.quoteId is set). Without this, files uploaded against
+    the transient id are orphaned on reload."""
+    n = await _parser_files.reassign_quote_files(body.from_id, body.to_id)
+    return {"updated": n, "from_id": body.from_id, "to_id": body.to_id}
 
 
 @router.get("/files/{file_id}/download")

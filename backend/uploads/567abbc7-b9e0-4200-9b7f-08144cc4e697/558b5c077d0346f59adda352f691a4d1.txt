@@ -1,0 +1,3 @@
+TEST_e2e tiny RFQ stand-in content - bug verification
+line 2
+line 3

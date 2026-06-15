@@ -10,6 +10,11 @@ import FilePreviewModal from "./FilePreviewModal";
 export default function FilesSec() {
   const { active, sec, toggleSec, setManyFields, replaceState, pushToast } = useQuote();
   const s = active?.state || {};
+  // Stable file-ownership id — prefer the saved quote id (set after Save Quote)
+  // so files survive save/reload, fall back to the active tab/draft id during
+  // the pre-save phase. autoSave + Toolbar.onSave migrate file records when
+  // these ids change, so listParserFiles(filesQuoteId) always resolves.
+  const filesQuoteId = s.quoteId || active?.id || "";
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState([]);              // {filename, size, mime, class, file}
   const [busy, setBusy] = useState(false);
@@ -28,15 +33,17 @@ export default function FilesSec() {
 
   useEffect(() => { parserBudget().then(setBudget).catch(() => {}); }, []);
 
-  // Load saved RFQ files for this draft (quote-lifetime storage).
+  // Load saved RFQ files for this quote/draft (quote-lifetime storage).
+  // Re-fetch whenever the stable id changes (e.g. local→draft promotion,
+  // draft→saved quote migration, or loading a different quote).
   useEffect(() => {
-    if (!active?.id) { setSavedFiles([]); return; }
+    if (!filesQuoteId) { setSavedFiles([]); return; }
     let cancel = false;
-    listParserFiles(active.id)
+    listParserFiles(filesQuoteId)
       .then((arr) => { if (!cancel) setSavedFiles(arr); })
       .catch(() => { if (!cancel) setSavedFiles([]); });
     return () => { cancel = true; };
-  }, [active?.id]);
+  }, [filesQuoteId]);
 
   // Reset per-tab UI state when the active tab changes — files dropped on
   // tab A should not bleed into tab B (was a real bug, reported 2026-06-04).
@@ -80,13 +87,13 @@ export default function FilesSec() {
         customerCode: s.custCode || "",
         customerName: s.custName || "",
         estInitials:  s.estInitials || "",
-        quoteId:      active?.id || "",  // tie persisted files to this draft (2026-06-12)
+        quoteId:      filesQuoteId,  // saved quote id if available, else draft id
       });
       setParseResult(r);
       setReviewOpen(true);
       parserBudget().then(setBudget).catch(() => {});
       // Refresh saved-files list so the newly persisted uploads appear immediately.
-      if (active?.id) listParserFiles(active.id).then(setSavedFiles).catch(() => {});
+      if (filesQuoteId) listParserFiles(filesQuoteId).then(setSavedFiles).catch(() => {});
     } catch (e) {
       setParserError(e?.response?.data?.detail || e.message);
     } finally { setBusy(false); }

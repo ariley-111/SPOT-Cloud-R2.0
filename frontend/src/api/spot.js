@@ -174,6 +174,8 @@ export const sheetLibraryPriced = (body) =>
 // ─── Saved RFQ files (quote-lifetime persistence) ───────
 export const listParserFiles = (quoteId) =>
   api.get(`/parser/files?quote_id=${encodeURIComponent(quoteId)}`).then((r) => r.data.files || []);
+export const reassignParserFiles = (fromId, toId) =>
+  api.post("/parser/files/reassign", { from_id: fromId, to_id: toId }).then((r) => r.data);
 export const downloadParserFileUrl = (fileId) =>
   `${api.defaults.baseURL}/parser/files/${encodeURIComponent(fileId)}/download`;
 // Anchor href downloads fire a plain GET that doesn't carry the JWT
