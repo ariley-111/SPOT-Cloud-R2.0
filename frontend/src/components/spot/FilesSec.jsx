@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfq, listParserFiles, downloadParserFileUrl, deleteParserFile } from "../../api/spot";
+import { parserBudget, parseRfq, listParserFiles, downloadParserFile, deleteParserFile } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState } from "../../lib/mpSchema";
 
@@ -44,24 +44,17 @@ export default function FilesSec() {
   }, [active?.id]);
 
   const isRfqLike = (name) => /\.(pdf|docx?|xlsx?|csv|tsv|rtf|eml|msg|txt|jpg|jpeg|png|webp|heic|zip)$/i.test(name || "");
-  const isEmailFile = (name) => /\.(eml|msg)$/i.test(name || "");
   const ingestFiles = (list) => {
     const arr = Array.from(list || []).map((f) => ({
       filename: f.name, size: f.size, mime: f.type || "",
       class: isRfqLike(f.name) ? "rfq" : "file", file: f,
     }));
     setFiles((cur) => [...cur, ...arr]);
-    // Auto-parse on email-file drop — user requested behavior (2026-06-01).
-    // Email files usually have the spec PDF attached + body context, so kick the
-    // parser immediately so the estimator doesn't have to click Parse.
-    const hasEmail = arr.some((f) => isEmailFile(f.filename));
-    if (hasEmail) {
-      // Defer to next tick so setFiles flushes before runParse reads `files`.
-      setTimeout(() => {
-        const all = [...files, ...arr].filter((f) => f.class === "rfq").map((f) => f.file);
-        runParseDirect(all);
-      }, 50);
-    }
+    // Per user direction (2026-02-15): NO auto-parse on drop. The estimator
+    // loads all files first (email + attachments + extra docs), then clicks
+    // "Build Estimate" to launch the parser. Removes the surprise factor
+    // when the parser fires before the user has finished arranging their
+    // uploads, and avoids burning budget on unintended re-runs.
   };
 
   const onDrop = (e) => {
@@ -206,10 +199,18 @@ export default function FilesSec() {
                 </span>
                 <span style={{ fontSize: 10, color: "var(--spot-text3)",
                   minWidth: 52, textAlign: "right" }}>{fmtBytes(sf.bytes || 0)}</span>
-                <a href={downloadParserFileUrl(sf.id)} target="_blank" rel="noreferrer"
+                <button onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await downloadParserFile(sf.id, sf.filename);
+                    } catch (err) {
+                      pushToast(err?.response?.data?.detail || err.message || "Download failed", "err");
+                    }
+                  }}
                   data-testid={`saved-rfq-dl-${sf.id}`}
-                  style={{ fontSize: 10, color: "var(--spot-accent)", fontWeight: 700,
-                    padding: "2px 6px", textDecoration: "none" }}>↓</a>
+                  title="Download"
+                  style={{ all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                    color: "var(--spot-accent)", padding: "2px 6px" }}>↓</button>
                 <button onClick={async (e) => {
                     e.stopPropagation();
                     if (!window.confirm(`Delete saved file "${sf.filename}"?`)) return;

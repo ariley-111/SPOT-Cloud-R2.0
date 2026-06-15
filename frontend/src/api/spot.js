@@ -176,6 +176,24 @@ export const listParserFiles = (quoteId) =>
   api.get(`/parser/files?quote_id=${encodeURIComponent(quoteId)}`).then((r) => r.data.files || []);
 export const downloadParserFileUrl = (fileId) =>
   `${api.defaults.baseURL}/parser/files/${encodeURIComponent(fileId)}/download`;
+// Anchor href downloads fire a plain GET that doesn't carry the JWT
+// (axios interceptors set the header on XHR only). Use this helper to
+// fetch the blob with auth attached, then trigger a Save-As via a hidden
+// anchor pointing at an object URL.
+export const downloadParserFile = async (fileId, filename) => {
+  const r = await api.get(
+    `/parser/files/${encodeURIComponent(fileId)}/download`,
+    { responseType: "blob" },
+  );
+  const blobUrl = URL.createObjectURL(r.data);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename || `file-${fileId.slice(0, 8)}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+};
 export const deleteParserFile = (fileId) =>
   api.delete(`/parser/files/${encodeURIComponent(fileId)}`).then((r) => r.data);
 
