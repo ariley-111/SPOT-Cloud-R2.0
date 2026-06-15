@@ -507,6 +507,10 @@ export function QuoteProvider({ children }) {
         // Build from BOM Builder draft — each row gets a fresh item state,
         // seeded with shared common fields from the current intake so flute,
         // grade, liners, etc. carry through as defaults the estimator can tweak.
+        // If a row carries an `existingState` (re-saved from BOM Builder for
+        // an existing MP quote), preserve that state verbatim except for the
+        // default qtys override — so dimensions / rule inches / box style /
+        // print spec are kept across re-saves. (Bug fix 2026-02-15)
         const seed = {
           flute: snap.flute, boardGrade: snap.boardGrade,
           outsideLiner: snap.outsideLiner, insideLiner: snap.insideLiner, medium: snap.medium,
@@ -515,13 +519,30 @@ export function QuoteProvider({ children }) {
           cadDifficulty: snap.cadDifficulty,
           qtys: opts.defaultQtys || snap.qtys || ["", "", "", "", ""],
         };
-        items = bomDraft.map((row, i) => makeBomItem({
-          desc: row.desc || `Item ${i + 1}`,
-          type: row.type || "Manufactured",
-          pcsPerSet: row.pcsPerSet || row.pcs || 1,
-          custIdent: row.custIdent || "",
-          state: freshItemState({ ...seed, itemDesc: row.desc || `Item ${i + 1}` }),
-        }));
+        items = bomDraft.map((row, i) => {
+          let nextState;
+          if (row.existingState) {
+            // Preserve everything from the existing item state, but apply the
+            // new default-qtys array if the user changed it in the builder.
+            const qtysToUse = opts.defaultQtys
+              ? opts.defaultQtys.slice(0, 5)
+              : (row.existingState.qtys || ["", "", "", "", ""]);
+            nextState = {
+              ...row.existingState,
+              qtys: qtysToUse,
+              itemDesc: row.desc || row.existingState.itemDesc || `Item ${i + 1}`,
+            };
+          } else {
+            nextState = freshItemState({ ...seed, itemDesc: row.desc || `Item ${i + 1}` });
+          }
+          return makeBomItem({
+            desc: row.desc || `Item ${i + 1}`,
+            type: row.type || "Manufactured",
+            pcsPerSet: row.pcsPerSet || row.pcs || 1,
+            custIdent: row.custIdent || "",
+            state: nextState,
+          });
+        });
       } else {
         // Convert existing Simple intake to Item 1
         if (t.state.quoteType === "Multi-Part") return t;

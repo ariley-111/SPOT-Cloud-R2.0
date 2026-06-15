@@ -52,13 +52,18 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
     const items = s.bomItems || [];
     setProjectName(s.custRef || "");
     if (items.length > 0) {
-      // Existing BOM → manual view, prefilled
+      // Existing BOM → manual view, prefilled. Carry the per-item state so
+      // re-saving doesn't wipe dimensions/qtys/etc. (regression fixed
+      // 2026-02-15: editing default qtys in the builder used to call
+      // freshItemState() for every row, blowing away oneUpW/L/rule inches).
       setDraft(items.map((it) => ({
         desc: it.desc, type: it.type || "Manufactured",
         pcs: it.pcsPerSet || 1, on: true,
         custIdent: it.custIdent || "",
         // Dim summary if the saved item state has dims
         dimInfo: dimSummary(it.state),
+        // Preserve original state so Save BOM doesn't lose it
+        _existingState: it.state || null,
       })));
       setLocks({});
       setView("manual");
@@ -170,6 +175,11 @@ export default function BomBuilderModal({ open, onClose, initialView = "template
         desc: r.desc, type: r.type,
         pcsPerSet: parseInt(r.pcs, 10) || 1,
         custIdent: r.custIdent || "",
+        // Pass through existing state if this row was prefilled from an existing
+        // BOM item — preserves dimensions/rule inches/qtys/box style across
+        // re-saves. New rows from templates/manual leave this undefined so the
+        // seed flow runs as before.
+        existingState: r._existingState || null,
       })),
       { defaultQtys: defaultQtys.map((q) => String(q || "")) }
     );

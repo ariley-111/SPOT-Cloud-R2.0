@@ -1,0 +1,36 @@
+{
+  "summary": "Iter 21 - Verified BOM Builder re-edit dimension-preservation bug fix end-to-end via Playwright on the existing MP draft SA-260615-114115. Set known dims on all 3 items (Item1=10x20, Item2=15x25, Item3=7x14), opened Edit in BOM Builder, changed default qtys (500/1000/2500) AND pcs/set on row 0 (1->3), saved. After save: Item 1 = 10x20 PRESERVED, Item 2 = 15x25 PRESERVED, top-level qtys = [500,1000,2500,'',''] CORRECT, pcs/set row 0 = 3 CORRECT. Dim badges in the builder correctly reflect each row's per-item state (10x20, 15x25, 8.5x10.5). Core regression fix (existingState passed-through, freshItemState no longer wipes oneUpW/L) is WORKING. One edge-case observed: the CURRENTLY ACTIVE item's unsaved top-level edits are not snapshotted into bomItems[activeIdx].state before BOM Builder opens, so if user types dims and then clicks Edit-in-BOM-Builder without switching tabs first, the in-flight edits to the active item can be lost on save. Item 3 lost the just-typed 7x14 and reverted to its previously-persisted 8.5x10.5. Not part of the original review request scope (which focused on the wipe-everything bug), but worth flagging.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "BomBuilderModal useEffect prefill",
+        "issue": "When opening 'Edit in BOM Builder' for the active item with UNSAVED top-level dim edits (oneUpW/L typed but no tab switch since), the prefill reads stale bomItems[activeIdx].state instead of gathering current top-level. On Save BOM the active item's in-flight edits are silently lost / reverted to last-persisted snapshot. Repro: edit Item 3 dims -> click Edit-in-BOM-Builder -> change qtys -> Save -> Item 3 dims revert.",
+        "selector": "[data-testid='bom-edit-builder-btn']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Consider calling gatherItemState() and merging into bomItems[activeIdx].state when 'Edit in BOM Builder' is invoked (or in the modal's open-effect) so the currently active item's unsaved top-level edits are captured into _existingState before the prefill loop. See BomBuilderModal.jsx L49-81 and QuoteContext.jsx gatherItemState/switchBomItem pattern (L313-340)."
+  ],
+  "critical_code_review_comments": [
+    "BomBuilderModal.jsx L54-67 fix: correctly passes `_existingState: it.state || null` through draft rows on prefill. Verified live: 10x20 / 15x25 survive Save BOM after qty+pcs changes.",
+    "QuoteContext.jsx convertToMultiPart L522-545: correctly branches on row.existingState — preserves entire saved state and overrides only `qtys` (from opts.defaultQtys) and `itemDesc`. New-build path (row.existingState undefined) still calls freshItemState with shared seed fields. Code matches the fix description perfectly.",
+    "Edge case (not in fix scope): the active item's top-level oneUpW/L/etc are NOT mirrored into bomItems[activeItemIdx].state until the user switches BOM tabs. Opening BOM Builder bypasses that snapshot — recommend hooking BomSec.jsx's Edit button to first run a gatherItemState() sync, similar to switchBomItem's snap logic at QuoteContext.jsx L319-329."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only request)",
+    "frontend": "Bug fix re-save scenario: VERIFIED working for Items 1 & 2 (previously-persisted dims preserved). New BOM via templates was not retested in this iter but the convertToMultiPart code path with row.existingState=null is unchanged. Edge case: active item's unsaved edits lost (separate minor issue)."
+  },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 - working",
+  "seed_data_creation": "Modified existing draft SA-260615-114115 — set dims 10x20 / 15x25 on Items 1 & 2, qtys 500/1000/2500, pcs/set Item1=3. Persisted as draft.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Test ids confirmed: input-one-up-w, input-one-up-l, bom-item-{i}, bom-item-desc-{i}, bom-item-pcs-{i}, bom-edit-builder-btn, bom-builder-modal, bom-draft-diminfo-{i}, bom-draft-pcs-{i}, bom-default-qty-{i}, bom-save, input-qty-{i}. To switch BOM tabs reliably without triggering the type dropdown, click [data-testid=bom-item-desc-{i}] then Escape. The Edit-in-BOM-Builder button is bom-edit-builder-btn (not -btn-edit). Existing draft SA-260615-114115 has Items 1/2 with persisted 10x20 and 15x25 dims and pcs/set=3 on Item 1.",
+  "rca_of_the_issue": "Original bug: convertToMultiPart unconditionally called freshItemState({...seed, itemDesc}) for every draft row, blowing away oneUpW/L/qtys/rule inches across the entire BOM. Fix: BomBuilderModal now carries `_existingState: it.state` per draft row, passes it through onSaveBom as `existingState`, and convertToMultiPart now branches on row.existingState — preserving the full saved state object and overriding only qtys (from opts.defaultQtys if present) and itemDesc. Verified live: Items 1 & 2 dims survive Save BOM round-trip with default-qty changes AND pcs/set changes. Minor edge case noted above."
+}
