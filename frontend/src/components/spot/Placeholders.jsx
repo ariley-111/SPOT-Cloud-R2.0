@@ -661,7 +661,7 @@ export function BomSec() {
   const {
     active, sec, toggleSec,
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
-    reorderBomItem, updateBomItem, spinOffBomItem,
+    reorderBomItem, updateBomItem, spinOffBomItem, snapshotActiveItemState,
   } = useQuote();
   // ⚠️ ALL HOOKS BEFORE EARLY RETURN — rules of hooks
   const [dragIdx, setDragIdx] = React.useState(null);
@@ -757,7 +757,13 @@ export function BomSec() {
               border: "1px solid var(--spot-border)",
             }}>⎘ Duplicate</button>
           )}
-          <button onClick={() => window.dispatchEvent(new CustomEvent("spot:open-bom-builder"))}
+          <button onClick={() => {
+              // Snapshot any unsaved edits on the active item into bomItems
+              // before the builder reads them — otherwise top-level dim edits
+              // (typed but no tab switch since) are lost on Save BOM.
+              snapshotActiveItemState();
+              window.dispatchEvent(new CustomEvent("spot:open-bom-builder"));
+            }}
             data-testid="bom-edit-builder-btn" title="Reopen BOM Builder to add/edit components from templates"
             style={{
               all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,

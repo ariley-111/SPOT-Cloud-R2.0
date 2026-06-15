@@ -1,0 +1,27 @@
+{
+  "summary": "Iter 22 - Edge-case fix VERIFIED. Tested on existing MP draft SA-260615-114115 (3 items). Made Item 3 active via [data-testid=bom-item-desc-2], typed oneUpW=7/oneUpL=14 (NO tab switch), then immediately clicked bom-edit-builder-btn. Changed bom-default-qty-0 from 777->555 and clicked bom-save. After save: Item 1=10x20 PRESERVED, Item 2=15x25 PRESERVED, Item 3=7x14 PRESERVED (in-flight edits captured!). Builder draft-diminfo readout BEFORE save: [0]=10x20, [1]=15x25, [2]=7x14 — proving snapshotActiveItemState() correctly mirrored top-level oneUpW/L into bomItems[activeIdx].state before the modal's prefill loop ran. The original P0 fix (existingState round-trip) remains intact: previously-persisted Item 1 and Item 2 dims survived the BOM Builder save with default-qty changes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Console", "issues": ["Recurring React style-prop dev warning during BOM tab interactions: 'Updating a style property during rerender (X) when a conflicting property is set (Y) can lead to styling bugs. Don't mix shorthand and non-shorthand.' Not blocking, cosmetic, but indicates style props (likely border/borderColor or background/backgroundColor) being mixed in a styled component. Likely in Tile or BomSec hover/active styling."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "QuoteContext.jsx L657-677 snapshotActiveItemState(): clean, minimal, idempotent. Correctly noops if no bomItems or active idx missing. Mirrors switchBomItem's snap pattern (gatherItemState + sync desc/custIdent on the outgoing item) without changing activeItemIdx — perfect for this use case.",
+    "Placeholders.jsx L760-766 wiring: snapshotActiveItemState() is invoked synchronously BEFORE window.dispatchEvent. React state updates are batched, but the dispatched event handler in SpotApp.jsx will run after the current render cycle, so by the time BomBuilderModal's useEffect reads bomItems[i].state via _existingState, the snapshot has been applied. Verified live: diminfo-2 read 7x14 before the user changed any qty in the builder.",
+    "Minor (non-blocking): React dev console warning about mixing shorthand/non-shorthand style props fires on every BOM tab click. Worth a follow-up sweep but doesn't affect functionality.",
+    "No regressions observed in the original P0 fix path (convertToMultiPart row.existingState branch at L524-534) — Items 1 & 2 dims survive Save BOM."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "Edge case + original fix: 100% pass on the verified flow"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — working",
+  "seed_data_creation": "Modified draft SA-260615-114115: Items dims = 10x20 / 15x25 / 7x14; top-level qtys = 555/1000/2500. Item 3 now has 7x14 persisted (was 8.5x10.5 in iter21).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Test ids confirmed (still valid): input-one-up-w, input-one-up-l, bom-item-{i}, bom-item-desc-{i}, bom-item-pcs-{i}, bom-edit-builder-btn, bom-builder-modal, bom-draft-diminfo-{i}, bom-draft-pcs-{i}, bom-default-qty-{i}, bom-save, input-qty-{i}. CRITICAL TIP: to switch active BOM item reliably without opening a type/dropdown click [data-testid=bom-item-desc-{i}] then Escape. Clicking bom-item-{i} can land on the type select dropdown and NOT switch the active tab — caused a misread in this iter's first pass. Verified working on draft SA-260615-114115.",
+  "rca_of_the_issue": "Original P0 (iter21): convertToMultiPart unconditionally rebuilt every item state via freshItemState, wiping oneUpW/L. Fixed by carrying _existingState through BOM Builder draft rows and only overriding qtys+itemDesc in the existing-state branch. Edge case (this iter): the ACTIVE item's unsaved top-level oneUpW/L typed-but-not-switched-from-yet was not yet in bomItems[activeIdx].state, so the builder's prefill saw stale state. Fix: QuoteContext.snapshotActiveItemState() — runs gatherItemState(t.state) and writes it into bomItems[activeIdx].state before the BOM Builder open event is dispatched (wired into Placeholders.jsx bom-edit-builder-btn onClick). VERIFIED: in-flight edits to Item 3 are persisted as expected and previously-persisted Items 1 & 2 are NOT regressed."
+}

@@ -654,6 +654,28 @@ export function QuoteProvider({ children }) {
   const expandAll = useCallback(() => setSec((s) => Object.fromEntries(Object.keys(s).map((k) => [k, true]))), []);
   const collapseAll = useCallback(() => setSec((s) => Object.fromEntries(Object.keys(s).map((k) => [k, false]))), []);
 
+  /** Mirror the current top-level item-level fields into `bomItems[activeItemIdx].state`.
+   *  Called before opening the BOM Builder so any unsaved edits on the active
+   *  item (e.g. dimensions typed but no tab switch since) are captured in the
+   *  per-item state the builder reads from. (Bug fix 2026-02-15) */
+  const snapshotActiveItemState = useCallback(() => {
+    setTabs((cur) => cur.map((t) => {
+      if (t.id !== activeId) return t;
+      const items = t.state.bomItems || [];
+      if (items.length === 0) return t;
+      const idx = t.state.activeItemIdx ?? 0;
+      if (!items[idx]) return t;
+      const snap = gatherItemState(t.state);
+      const itemsNext = items.map((it, i) => i === idx ? {
+        ...it,
+        state: snap,
+        desc: snap.itemDesc || it.desc || "",
+        custIdent: snap.custIdent || it.custIdent || "",
+      } : it);
+      return { ...t, state: { ...t.state, bomItems: itemsNext }, updatedAt: Date.now() };
+    }));
+  }, [activeId]);
+
   const value = {
     tabs, activeId, active,
     setActiveId, newTab, closeTab, duplicateTab,
@@ -661,7 +683,7 @@ export function QuoteProvider({ children }) {
     // Multi-Part actions
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
     reorderBomItem, updateBomItem, updateBomItemState, convertToMultiPart, convertToSimple,
-    spinOffBomItem,
+    spinOffBomItem, snapshotActiveItemState,
     initials, initialsGateOpen, setInitialsGateOpen, commitInitials,
     sec, toggleSec, expandAll, collapseAll,
     toasts, pushToast,
