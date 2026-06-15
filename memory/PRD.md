@@ -554,7 +554,53 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 
 
+### 2026-02-15 (cont.) — Saved RFQ files persist across Save/Reload ✅ (Iter 23)
+- **User report (prod)**: After saving a quote and re-opening it later, the
+  attached RFQ files were not visible/loadable. Critical regression — files
+  must be accessible throughout the quote lifecycle.
+- **Root cause**: `parser_files.quote_id` was stamped with `active.id`
+  (the local React tab id like `local-abc123`). On first autosave the tab id
+  flipped to a server-generated draft uuid → files orphaned. On Save Quote
+  a fresh quote uuid was generated and written to `state.quoteId` → orphaned
+  again.
+- **Fix**:
+  - Backend: `services/parser_files.py::reassign_quote_files(from, to)` +
+    `POST /api/parser/files/reassign` endpoint (re-keys docs via update_many,
+    disk paths are absolute so preview/download still resolve).
+  - Frontend autosave (`QuoteContext.jsx`): on `local-xxx → draft-uuid`
+    promotion, calls `reassignParserFiles(oldId, created.id)`.
+  - Toolbar `onSave` (`Toolbar.jsx`): after `createQuote`, calls
+    `reassignParserFiles(active.id, saved.id)` so the saved quote owns the
+    files going forward.
+  - `FilesSec.jsx`: `filesQuoteId = state.quoteId || active.id` used for
+    both listing and upload, so a reloaded saved quote queries the right id.
+  - `FilesSec.runParseDirect`: refresh the saved-files panel in a `finally`
+    block — files are persisted BEFORE the Anthropic call, so even on parse
+    failure (budget/timeout) the file appears immediately.
+- **Tests**: `tests/test_parser_files_reassign.py` (2/2) +
+  `tests/test_parser_files_reassign_http.py` (created by testing agent, 5/5)
+  — full local→draft→quote lifecycle covered.
+
 ### 2026-02-15 (cont.) — BOM Builder qty-edit dimension-wipe fix ✅ (Iter 21+22)
+- **User report (prod)**: re-opening BOM Builder on an MP quote and changing
+  default qtys silently wiped every component's `oneUpW/L/totalRuleInches/
+  qtys/boxStyle`. Round-trip lost all per-item state.
+- **Root cause**: `convertToMultiPart` unconditionally rebuilt every item via
+  `freshItemState({...seed})` where seed only carried shared fields
+  (flute, grade, liners, print). The per-item dim/rule/qty fields were never
+  passed through the BOM Builder draft rows.
+- **Fix 1** (`BomBuilderModal.jsx`): on prefill, capture each existing item's
+  `state` into a new `_existingState` field on the draft row.
+- **Fix 2** (`QuoteContext.jsx::convertToMultiPart`): branch on
+  `row.existingState`: when present, preserve it verbatim and override only
+  `qtys` and `itemDesc`.
+- **Fix 3** (`QuoteContext.jsx` new `snapshotActiveItemState()` + wired into
+  Edit-in-BOM-Builder button): mirror unsaved top-level edits into
+  `bomItems[activeIdx].state` before the builder reads them.
+- **Verified live (iter22)**: persisted Items 1+2 dims (10x20, 15x25) survive
+  default-qty + pcs/set changes; in-flight Item 3 dims (7x14) preserved.
+
+
 - **User report (prod)**: re-opening BOM Builder on an MP quote and changing
   default qtys silently wiped every component's `oneUpW/L/totalRuleInches/
   qtys/boxStyle`. Round-trip lost all per-item state.

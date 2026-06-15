@@ -92,11 +92,15 @@ export default function FilesSec() {
       setParseResult(r);
       setReviewOpen(true);
       parserBudget().then(setBudget).catch(() => {});
-      // Refresh saved-files list so the newly persisted uploads appear immediately.
-      if (filesQuoteId) listParserFiles(filesQuoteId).then(setSavedFiles).catch(() => {});
     } catch (e) {
       setParserError(e?.response?.data?.detail || e.message);
-    } finally { setBusy(false); }
+    } finally {
+      // Always refresh the saved-files panel — files are persisted BEFORE the
+      // Anthropic call, so even on parse failure (budget/timeout) the file is
+      // already saved and should appear immediately.
+      if (filesQuoteId) listParserFiles(filesQuoteId).then(setSavedFiles).catch(() => {});
+      setBusy(false);
+    }
   };
   const runParse = async () => {
     const onlyRfq = files.filter((f) => f.class === "rfq").map((f) => f.file);
