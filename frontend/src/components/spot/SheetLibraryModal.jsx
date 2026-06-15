@@ -62,6 +62,10 @@ export default function SheetLibraryModal({ open = true, onClose }) {
   const _pps = Math.max(1, Number(_activeBom?.pcsPerSet) || 1);
   const activeQty = _isMP ? _rawQty * _pps : _rawQty;
   const overrideId = s.overrideSheetId || null;
+  // Legacy override format: "OVR-{w}x{l}". Match by dimensions (not raw row.id)
+  // since the canonical override id encodes W/L rather than the source sheet id.
+  const overrideMatchesRow = (row) =>
+    overrideId === `OVR-${Number(row.w)}x${Number(row.l)}`;
   const stockSheets = s.stockSheets || [];
 
   // Fetch enriched sheet rows whenever the modal opens or spec changes
@@ -126,7 +130,16 @@ export default function SheetLibraryModal({ open = true, onClose }) {
   };
 
   const handleUseThis = (row) => {
-    setField("overrideSheetId", row.id);
+    // LEGACY PARITY (spot_r1_5.jsx L3544-3570 / engine/runner.py L173-186):
+    // The engine recognizes `overrideSheetId` in the canonical format
+    // "OVR-{w}x{l}" — encoding the override sheet's dimensions. Approved
+    // sheet IDs ("SH-001") or stock IDs ("STK-1733422222") are not understood
+    // by the engine and the override is silently dropped. Translate here so
+    // every "Use This" click — approved or stock — produces a working override.
+    const w = Number(row.w) || 0;
+    const l = Number(row.l) || 0;
+    if (w <= 0 || l <= 0) return;
+    setField("overrideSheetId", `OVR-${w}x${l}`);
     onClose && onClose();
   };
   const handleRemoveOverride = () => setField("overrideSheetId", null);
@@ -150,12 +163,19 @@ export default function SheetLibraryModal({ open = true, onClose }) {
     pushToast && pushToast(`Added stock sheet ${w}×${l}`, "ok");
   };
   const handleDelStock = (id) => {
+    const cleared = stockMatchesOverride(id);
     setField("stockSheets", stockSheets.filter((x) => x.id !== id));
-    if (overrideId === id) setField("overrideSheetId", null);
+    if (cleared) setField("overrideSheetId", null);
   };
   const handleClearAllStock = () => {
     setField("stockSheets", []);
     if ((overrideId || "").startsWith(STOCK_PREFIX)) setField("overrideSheetId", null);
+  };
+  // Stock id no longer used directly as override (we use OVR-WxL). But if a
+  // stock sheet is the active override, removing it clears the override too.
+  const stockMatchesOverride = (id) => {
+    const ss = stockSheets.find((x) => x.id === id);
+    return ss && overrideId === `OVR-${Number(ss.w)}x${Number(ss.l)}`;
   };
 
   const stockCount = rows.filter((r) => r.isStock).length;
@@ -254,7 +274,7 @@ export default function SheetLibraryModal({ open = true, onClose }) {
                 </td></tr>
               )}
               {visibleRows.map((row, i) => {
-                const isOverride = row.id === overrideId;
+                const isOverride = overrideMatchesRow(row);
                 const isBest = row === bestRow;
                 const stripe = i % 2 === 1 ? "var(--spot-bg2)" : "transparent";
                 const dimmed = !row.specMatch;

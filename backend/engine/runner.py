@@ -214,11 +214,15 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         return {"error": "No sheet found", "uw": uw, "ul": ul, "qty": qty,
                 "boardGrade": board_spec["boardGrade"], "flute": board_spec["flute"]}
 
-    # STEP 3: Auto-route. Legacy parity (spot_r1_5.jsx L3578): route comparison
-    # ALWAYS runs even when the user overrode the sheet — the override only pins
-    # the CAD-side sheet; Crest and Bobst still evaluate with their own sheet
-    # picks.
-    auto_r = auto_route(best.get("cadHrs", 0), best, uw, ul, board_spec, qty, asmp)
+    # STEP 3: Auto-route. Legacy parity (spot_r1_5.jsx L3578): when a user
+    # override (or sheet-mode) is active, route is PINNED to CAD — we do not
+    # run autoRoute against Crest/Bobst sheets because the user explicitly
+    # picked the sheet they want to cut on. The override badge in the UI
+    # reads "ROUTE PINNED TO CAD" for this reason.
+    if override_active:
+        auto_r = {"route": "CAD", "sheet": best, "warning": None}
+    else:
+        auto_r = auto_route(best.get("cadHrs", 0), best, uw, ul, board_spec, qty, asmp)
 
     route_override = json.get("routeOverride") or None
     if route_override and route_override != "Auto":

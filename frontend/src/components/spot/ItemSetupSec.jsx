@@ -562,6 +562,30 @@ function BoardStatusBar({ s, r, setField }) {
             }}>
             {s.fscEnabled ? `✓ FSC $${s.fscFee || 25}` : "FSC"}
           </span>
+          {/* Override chip — legacy parity (spot_r1_5.jsx L5872-5878): when a
+              sheet override is active, show OVERRIDE: WxL with a small × so the
+              user can clear it without re-opening the Sheet Library modal. */}
+          {(() => {
+            const ov = s.overrideSheetId || "";
+            const m = /^OVR-(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/.exec(ov);
+            if (!m) return null;
+            return (
+              <span data-testid="board-override-chip"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 3,
+                  background: "#06b6d422", color: "#06b6d4",
+                  border: "1px solid #06b6d4", display: "inline-flex", alignItems: "center", gap: 4,
+                }}>
+                OVERRIDE: {m[1]}×{m[2]}
+                <button onClick={() => setField("overrideSheetId", null)}
+                  data-testid="board-override-clear"
+                  style={{ all: "unset", cursor: "pointer", fontWeight: 700,
+                    color: "#06b6d4", padding: "0 2px", fontSize: 13 }}
+                  title="Clear sheet override">×</button>
+              </span>
+            );
+          })()}
           {hasFb && isAccepted && (
             <span onClick={(e) => { e.stopPropagation(); forceSub(); }}
               data-testid="board-force-orig-link"
