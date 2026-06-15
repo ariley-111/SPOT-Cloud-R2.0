@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfq, listParserFiles, downloadParserFile, deleteParserFile } from "../../api/spot";
+import { parserBudget, parseRfq, listParserFiles, openParserFile, deleteParserFile } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
 
@@ -202,13 +202,13 @@ export default function FilesSec() {
                 <button onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      await downloadParserFile(sf.id, sf.filename);
+                      await openParserFile(sf.id, sf.filename);
                     } catch (err) {
-                      pushToast(err?.response?.data?.detail || err.message || "Download failed", "err");
+                      pushToast(err?.response?.data?.detail || err.message || "Open failed", "err");
                     }
                   }}
                   data-testid={`saved-rfq-dl-${sf.id}`}
-                  title="Download"
+                  title="Open file in a new tab"
                   style={{ all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 700,
                     color: "var(--spot-accent)", padding: "2px 6px" }}>↓</button>
                 <button onClick={async (e) => {

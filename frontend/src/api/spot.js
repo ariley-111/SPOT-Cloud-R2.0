@@ -178,21 +178,36 @@ export const downloadParserFileUrl = (fileId) =>
   `${api.defaults.baseURL}/parser/files/${encodeURIComponent(fileId)}/download`;
 // Anchor href downloads fire a plain GET that doesn't carry the JWT
 // (axios interceptors set the header on XHR only). Use this helper to
-// fetch the blob with auth attached, then trigger a Save-As via a hidden
-// anchor pointing at an object URL.
-export const downloadParserFile = async (fileId, filename) => {
+// fetch the blob with auth attached, then OPEN it in a new tab (so PDFs,
+// images, text preview inline) — the browser will offer Save As for
+// types it can't render (e.g. .msg, .docx). Matches the legacy ↓ UX
+// where clicking a saved RFQ row opens the file for the estimator to
+// review without forcing a download.
+export const openParserFile = async (fileId, filename) => {
   const r = await api.get(
     `/parser/files/${encodeURIComponent(fileId)}/download`,
     { responseType: "blob" },
   );
-  const blobUrl = URL.createObjectURL(r.data);
-  const a = document.createElement("a");
-  a.href = blobUrl;
-  a.download = filename || `file-${fileId.slice(0, 8)}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+  // Use the server's media type when available so the browser knows whether
+  // to render inline (PDF/image/text) vs prompt Save As (msg/docx/zip).
+  const mime = r.data?.type || r.headers?.["content-type"] || "application/octet-stream";
+  const blob = mime === r.data?.type ? r.data : new Blob([r.data], { type: mime });
+  const blobUrl = URL.createObjectURL(blob);
+  // Open in a new tab. The browser handles inline render vs Save As based on MIME.
+  const w = window.open(blobUrl, "_blank", "noopener,noreferrer");
+  // Some browsers ignore filename hints on object URLs — fall back to a hidden
+  // anchor with `download` attribute if window.open was blocked.
+  if (!w) {
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename || `file-${fileId.slice(0, 8)}`;
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  // Revoke after a delay so the new tab has time to load the blob.
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 };
 export const deleteParserFile = (fileId) =>
   api.delete(`/parser/files/${encodeURIComponent(fileId)}`).then((r) => r.data);
