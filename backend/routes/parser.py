@@ -733,37 +733,15 @@ async def download_file(file_id: str, _u: User = Depends(get_current_user)):
     )
 
 
-@router.get("/files/{file_id}/preview")
-async def preview_file(file_id: str, _u: User = Depends(get_current_user)):
-    """Return a structured preview payload so the front-end can render the
-    file inline without forcing a download. Legacy parity (R1.5+) — the
-    estimator opens any quote-attached file (PDF / image / email / Word /
-    Excel / text / CSV / zip listing) directly inside SPOT.
-
-    Response shape:
-      {
-        "kind":     "pdf" | "image" | "text" | "html" | "email" | "sheet" | "zip" | "binary",
-        "filename": "...",
-        "mime":     "...",
-        "bytes":    <int>,
-        // kind-specific payload:
-        "data":     <base64> | <string> | <dict>
-      }
+def _build_preview_payload(filename: str, mime: str, raw: bytes) -> Dict[str, Any]:
+    """Shared preview builder — given a filename + mime + raw bytes, return the
+    same kind-specific payload that GET /files/{id}/preview returns. Used by
+    both the saved-file preview endpoint AND the email-attachment preview
+    endpoint (so attachments inside .eml/.msg render with the same UI).
     """
-    doc = await _parser_files.get_parser_file(file_id)
-    if not doc:
-        raise HTTPException(404, "File not found")
-    path = doc.get("disk_path")
-    if not path or not os.path.exists(path):
-        raise HTTPException(410, "File blob missing on disk")
-    filename = doc.get("filename") or f"file-{file_id[:8]}"
-    mime = (doc.get("mime") or "").lower()
+    mime = (mime or "").lower()
     ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
-    bytes_size = doc.get("bytes") or os.path.getsize(path)
-    meta = {"filename": filename, "mime": mime, "bytes": bytes_size}
-
-    with open(path, "rb") as f:
-        raw = f.read()
+    meta = {"filename": filename, "mime": mime, "bytes": len(raw)}
 
     # PDFs render inline via blob/object URL — return base64 so the FE can build a data URL safely.
     if ext == ".pdf" or "pdf" in mime:
@@ -872,6 +850,74 @@ async def preview_file(file_id: str, _u: User = Depends(get_current_user)):
 
     # Unknown — let the FE prompt download
     return {**meta, "kind": "binary", "data": ""}
+
+
+@router.get("/files/{file_id}/preview")
+async def preview_file(file_id: str, _u: User = Depends(get_current_user)):
+    """Return a structured preview payload so the front-end can render the
+    file inline without forcing a download. Legacy parity (R1.5+) — the
+    estimator opens any quote-attached file (PDF / image / email / Word /
+    Excel / text / CSV / zip listing) directly inside SPOT.
+
+    Response shape:
+      {
+        "kind":     "pdf" | "image" | "text" | "html" | "email" | "sheet" | "zip" | "binary",
+        "filename": "...",
+        "mime":     "...",
+        "bytes":    <int>,
+        // kind-specific payload:
+        "data":     <base64> | <string> | <dict>
+      }
+    """
+    doc = await _parser_files.get_parser_file(file_id)
+    if not doc:
+        raise HTTPException(404, "File not found")
+    path = doc.get("disk_path")
+    if not path or not os.path.exists(path):
+        raise HTTPException(410, "File blob missing on disk")
+    filename = doc.get("filename") or f"file-{file_id[:8]}"
+    mime = doc.get("mime") or ""
+    with open(path, "rb") as f:
+        raw = f.read()
+    return _build_preview_payload(filename, mime, raw)
+
+
+@router.get("/files/{file_id}/attachment/{idx}/preview")
+async def preview_email_attachment(file_id: str, idx: int,
+                                   _u: User = Depends(get_current_user)):
+    """Preview attachment N inside a saved .eml/.msg file.
+
+    Lets the estimator click an attached PDF/image inside an email preview and
+    view it inline, without having to first download the .eml and open it in
+    Outlook. Returns the same preview payload shape as /files/{id}/preview
+    so the existing FilePreviewModal renderer handles it.
+    """
+    doc = await _parser_files.get_parser_file(file_id)
+    if not doc:
+        raise HTTPException(404, "File not found")
+    path = doc.get("disk_path")
+    if not path or not os.path.exists(path):
+        raise HTTPException(410, "File blob missing on disk")
+    filename = doc.get("filename") or ""
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    if ext not in {".eml", ".msg"}:
+        raise HTTPException(400, "Attachment preview only supported for .eml/.msg files")
+    with open(path, "rb") as f:
+        raw = f.read()
+    try:
+        from utils.email_extract import extract_email_file
+        extracted = extract_email_file(filename, raw)
+    except Exception as e:
+        raise HTTPException(500, f"Could not parse email: {e}")
+    attachments = extracted.get("attachments") or []
+    if idx < 0 or idx >= len(attachments):
+        raise HTTPException(404, f"Attachment index {idx} out of range (have {len(attachments)})")
+    att = attachments[idx]
+    return _build_preview_payload(
+        att.get("filename") or f"attachment-{idx}",
+        att.get("mime") or "application/octet-stream",
+        att.get("bytes") or b"",
+    )
 
 
 @router.delete("/files/{file_id}")

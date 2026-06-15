@@ -19,11 +19,19 @@ import { fmtBytes } from "../../lib/format";
  */
 export default function FilePreviewModal({ fileId, filename, onClose }) {
   const [state, setState] = useState({ status: "loading" });
+  // When the user clicks an email attachment, we push a new entry onto the
+  // stack and render it; close on the nested view pops back to the email.
+  // stack entry: { fileId | attachmentOf, idx?, filename, title }
+  const [stack, setStack] = useState([{ fileId, filename, title: filename, kind: "file" }]);
+  const current = stack[stack.length - 1];
 
   useEffect(() => {
     let alive = true;
     setState({ status: "loading" });
-    api.get(`/parser/files/${encodeURIComponent(fileId)}/preview`)
+    const url = current.kind === "attachment"
+      ? `/parser/files/${encodeURIComponent(current.parentId)}/attachment/${current.idx}/preview`
+      : `/parser/files/${encodeURIComponent(current.fileId)}/preview`;
+    api.get(url)
       .then((r) => { if (alive) setState({ status: "ok", payload: r.data }); })
       .catch((e) => {
         if (alive) setState({
@@ -32,14 +40,51 @@ export default function FilePreviewModal({ fileId, filename, onClose }) {
         });
       });
     return () => { alive = false; };
-  }, [fileId]);
+  }, [current.fileId, current.parentId, current.idx, current.kind]);
+
+  const openAttachment = (idx, attFilename) => {
+    setStack((s) => [...s, {
+      kind: "attachment",
+      parentId: s[s.length - 1].fileId || s[s.length - 1].parentId,
+      idx,
+      filename: attFilename,
+      title: attFilename,
+    }]);
+  };
+  const popStack = () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s);
+  const isNested = stack.length > 1;
 
   const downloadRaw = async () => {
     try {
-      const r = await api.get(`/parser/files/${encodeURIComponent(fileId)}/download`, { responseType: "blob" });
+      // For an attachment, we don't have an independent download endpoint —
+      // re-fetch the preview payload (already base64) and synthesize a blob.
+      if (current.kind === "attachment" && state.status === "ok" && state.payload?.data) {
+        const p = state.payload;
+        let blob;
+        if (p.kind === "pdf") {
+          const bin = atob(p.data); const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          blob = new Blob([arr], { type: "application/pdf" });
+        } else if (p.kind === "image") {
+          const bin = atob(p.data); const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          blob = new Blob([arr], { type: p.imgMime || "image/*" });
+        } else if (p.kind === "text") {
+          blob = new Blob([p.data || ""], { type: "text/plain" });
+        } else {
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = current.filename || "attachment";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        return;
+      }
+      const r = await api.get(`/parser/files/${encodeURIComponent(current.fileId)}/download`, { responseType: "blob" });
       const url = URL.createObjectURL(r.data);
       const a = document.createElement("a");
-      a.href = url; a.download = filename || `file-${fileId.slice(0, 8)}`;
+      a.href = url; a.download = current.filename || `file-${(current.fileId||"").slice(0, 8)}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (e) {
@@ -48,14 +93,23 @@ export default function FilePreviewModal({ fileId, filename, onClose }) {
   };
 
   const footer = (
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="sp-btn" onClick={downloadRaw} data-testid="file-preview-download">↓ Download original</button>
-      <button className="sp-btn" onClick={onClose} data-testid="file-preview-close">Close</button>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%" }}>
+      <div>
+        {isNested && (
+          <button className="sp-btn" onClick={popStack} data-testid="file-preview-back">
+            ← Back to {stack[stack.length - 2].title}
+          </button>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="sp-btn" onClick={downloadRaw} data-testid="file-preview-download">↓ Download original</button>
+        <button className="sp-btn" onClick={onClose} data-testid="file-preview-close">Close</button>
+      </div>
     </div>
   );
 
   return (
-    <Modal title={filename || "File preview"} onClose={onClose} footer={footer} width={1080}
+    <Modal title={current.title || "File preview"} onClose={onClose} footer={footer} width={1080}
       data-testid="file-preview-modal">
       <div style={{ minHeight: 320 }}>
         {state.status === "loading" && (
@@ -66,13 +120,13 @@ export default function FilePreviewModal({ fileId, filename, onClose }) {
             ⚠ {state.message}
           </div>
         )}
-        {state.status === "ok" && <PreviewBody p={state.payload} />}
+        {state.status === "ok" && <PreviewBody p={state.payload} onOpenAttachment={openAttachment} />}
       </div>
     </Modal>
   );
 }
 
-function PreviewBody({ p }) {
+function PreviewBody({ p, onOpenAttachment }) {
   if (!p) return null;
   const headerStrip = (
     <div style={{
@@ -151,15 +205,29 @@ function PreviewBody({ p }) {
           <div style={{ marginTop: 12 }}>
             <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 4,
               textTransform: "uppercase", letterSpacing: ".06em" }}>
-              Attachments — {d.attachments.length}
+              Attachments — {d.attachments.length}  <span style={{ color: "var(--spot-text3)",
+                textTransform: "none", letterSpacing: 0, fontSize: 10 }}>· click to preview</span>
             </div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {d.attachments.map((a, i) => (
-                <li key={i} data-testid={`file-preview-email-att-${i}`}>
-                  {a.filename} <span style={{ color: "var(--spot-text3)" }}>· {fmtBytes(a.bytes || 0)}</span>
-                </li>
+                <button key={i}
+                  onClick={() => onOpenAttachment && onOpenAttachment(i, a.filename || `attachment-${i}`)}
+                  data-testid={`file-preview-email-att-${i}`}
+                  style={{
+                    all: "unset", cursor: "pointer", display: "flex",
+                    alignItems: "center", gap: 8, padding: "5px 8px",
+                    background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
+                    borderRadius: 4, fontSize: 12,
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--spot-bg3)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "var(--spot-bg2)"}>
+                  <span style={{ fontSize: 10, color: "var(--spot-accent)", fontWeight: 700, minWidth: 16 }}>↗</span>
+                  <span style={{ flex: 1, color: "var(--spot-text)", overflow: "hidden",
+                    textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.filename}</span>
+                  <span style={{ color: "var(--spot-text3)", fontSize: 11 }}>{fmtBytes(a.bytes || 0)}</span>
+                </button>
               ))}
-            </ul>
+            </div>
           </div>
         )}
       </>

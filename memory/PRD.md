@@ -552,7 +552,23 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 
 
-### 2026-02-15 — Matched Set Sell column toggle parity + Bug D ✅
+### 2026-02-15 (cont.) — Email attachment preview parity ✅
+- Refactored `/app/backend/routes/parser.py::preview_file` into a shared
+  `_build_preview_payload(filename, mime, raw)` helper so any byte blob can
+  be rendered with the same kind-switch (pdf/image/text/email/sheet/zip/docx/rtf).
+- New endpoint `GET /api/parser/files/{file_id}/attachment/{idx}/preview`
+  re-opens a saved .eml/.msg, extracts attachment N, and returns the same
+  preview payload — lets estimators view email attachments (CAD pdf,
+  customer-supplied spec sheets, etc.) inline without first downloading the .eml.
+- `FilePreviewModal.jsx` now keeps a navigation stack — clicking an attachment
+  in an email preview pushes a new entry, footer gains a "← Back to {parent}"
+  button. Single Close still dismisses the entire modal stack.
+- Attachment list in the email preview restyled from `<ul>` to clickable
+  rows (↗ icon, hover state) and tagged with `data-testid="file-preview-email-att-{i}"`.
+- Tests: `/app/backend/tests/test_email_attachment_preview.py` (4/4 PASS) —
+  validates extract→PDF payload, CSV payload, unknown-kind fallback.
+
+
 **Quote Table Sell/Ea + Sell/M toggles (P0)** — Fix `/app/frontend/src/components/spot/QuoteTableSec.jsx::FlatLayout.computeSellDisp`.
 - In Matched Set mode, aggregated rows have `r.qty == setQty` and `r.itemSell == job_sell`, so the previous `perEa = r.itemSell / r.qty` gave the *set aggregate price* for all three cycle modes (Sell/Set, Sell/Ea, Sell/M became indistinguishable to the user).
 - Legacy reference (spot_r1_5.jsx L6223): Sell/Ea and Sell/M pull the ACTIVE component's per-piece values (`w.itemSell / r.totalQty`), Sell/Set pulls `setTotals.sellPerSet`. After fix, cloud reads `r.perComponent[activeItemIdx].itemSell / .totalQty` for Ea/M in Matched Set — switching the active BOM item now correctly changes Sell/Ea while Sell/Set remains the set aggregate.
