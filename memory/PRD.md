@@ -550,3 +550,17 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 **Test summary (this session): 11/11 PASS** — test_matched_set_parity (2), test_matched_set_pdf (2), test_preview_pdf (5), test_parser_zip (1), plus existing test_pre_buy_min_snapshot from prior session. No regressions.
 
+
+
+### 2026-02-15 — Matched Set Sell column toggle parity + Bug D ✅
+**Quote Table Sell/Ea + Sell/M toggles (P0)** — Fix `/app/frontend/src/components/spot/QuoteTableSec.jsx::FlatLayout.computeSellDisp`.
+- In Matched Set mode, aggregated rows have `r.qty == setQty` and `r.itemSell == job_sell`, so the previous `perEa = r.itemSell / r.qty` gave the *set aggregate price* for all three cycle modes (Sell/Set, Sell/Ea, Sell/M became indistinguishable to the user).
+- Legacy reference (spot_r1_5.jsx L6223): Sell/Ea and Sell/M pull the ACTIVE component's per-piece values (`w.itemSell / r.totalQty`), Sell/Set pulls `setTotals.sellPerSet`. After fix, cloud reads `r.perComponent[activeItemIdx].itemSell / .totalQty` for Ea/M in Matched Set — switching the active BOM item now correctly changes Sell/Ea while Sell/Set remains the set aggregate.
+- L'Oreal fixture verification: with Bot Disk 1 active, Sell/Ea = $7.5016/pc (vs. the old buggy $234.74 which equalled Sell/Set); cycling through 12 components yields 12 distinct per-piece values matching legacy.
+- Header tooltip updated to reflect the actual cycle path (Ea → M → Set in Matched mode, Ea ↔ M otherwise).
+- Single-Part path unchanged (verified live by testing agent iter 20: Ea↔M cycle only).
+
+**Bug D — Board cost dimensions (P1)** — Audited `engine/core.py::calc_board` vs legacy `spot_engine.js::calcBoard`: both use `(lengthIn * widthIn) / 144` on full-precision floats. No rounding regression existed. Tightened `engine/routing.py::select_override_sheet` to format the `OVR-{w}x{l}` id with `{:g}` so fractional sheet dims (e.g., 63.5×126.25) round-trip through MongoDB without precision loss — previously `int()` truncation was display-only but could trip a future caller that parses the id back to dims.
+
+**Test status**: 110/113 backend pass (3 pre-existing failures: 2 Entra config tests expecting 503 in unconfigured env + 1 admin RBAC test). Engine parity suite (matched_set_parity, multi_part, route_parity, pre_buy_min_snapshot, below_min) — 33/33 PASS. Browser verification: Matched Set tile-pricing toggle confirmed working; Quote Table cycle confirmed (Set $0.93 → Ea $0.93 → M $926.20 on a single-component-priced quote, identical because only the active component had a non-zero sell).
+
