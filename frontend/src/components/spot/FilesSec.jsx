@@ -4,7 +4,7 @@ import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
 import { parserBudget, parseRfq, listParserFiles, downloadParserFile, deleteParserFile } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
-import { makeBomItem, applyItemStateTo, freshItemState } from "../../lib/mpSchema";
+import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
 
 export default function FilesSec() {
   const { active, sec, toggleSec, setManyFields, replaceState, pushToast } = useQuote();
@@ -405,8 +405,16 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
 
       // Apply the active item's state into the top-level (mirror item 0)
       let next = applyItemStateTo(activeState, items[0]?.state || freshItemState());
-      // Overlay job-level fields from the patch (custName, custRef, poNumber, etc.)
-      next = { ...next, ...patch };
+      // Overlay JOB-LEVEL fields from the patch only (custName, custRef,
+      // poNumber, dueDate, notes, FOB, destZip, etc.). Item-level fields
+      // in the patch (oneUpW/L, qtys, flute, boardGrade, etc.) come from
+      // the parser's TOP-LEVEL fields which historically represented the
+      // first component or a union/best-guess. Letting them overlay
+      // `next` here would clobber items[0]'s own per-component state.
+      // Job-level filter via JOB_LEVEL_KEYS keeps MP imports clean.
+      const jobLevelPatch = {};
+      Object.keys(patch).forEach((k) => { if (JOB_LEVEL_KEYS.has(k)) jobLevelPatch[k] = patch[k]; });
+      next = { ...next, ...jobLevelPatch };
       // Always set MP markers (even if patch didn't include them)
       next.quoteType = "Multi-Part";
       next.pricingMode = p.pricingMode || "Matched Set";
