@@ -2,9 +2,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfq, listParserFiles, openParserFile, deleteParserFile } from "../../api/spot";
+import { parserBudget, parseRfq, listParserFiles, deleteParserFile } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
+import FilePreviewModal from "./FilePreviewModal";
 
 export default function FilesSec() {
   const { active, sec, toggleSec, setManyFields, replaceState, pushToast } = useQuote();
@@ -19,6 +20,9 @@ export default function FilesSec() {
   // Saved (quote-lifetime) parser files for this draft — fetched from
   // /api/parser/files on mount + after each successful parse.
   const [savedFiles, setSavedFiles] = useState([]);
+  // Inline preview modal — clicking the ↓ on a saved file opens it here
+  // instead of bouncing to a new browser tab. Legacy parity (R1.5+).
+  const [previewFile, setPreviewFile] = useState(null);   // {id, filename} | null
   const inputRef = useRef(null);
   const folderName = s.estNum && s.custName ? `${s.custName}_${s.estNum}` : null;
 
@@ -199,16 +203,12 @@ export default function FilesSec() {
                 </span>
                 <span style={{ fontSize: 10, color: "var(--spot-text3)",
                   minWidth: 52, textAlign: "right" }}>{fmtBytes(sf.bytes || 0)}</span>
-                <button onClick={async (e) => {
+                <button onClick={(e) => {
                     e.stopPropagation();
-                    try {
-                      await openParserFile(sf.id, sf.filename);
-                    } catch (err) {
-                      pushToast(err?.response?.data?.detail || err.message || "Open failed", "err");
-                    }
+                    setPreviewFile({ id: sf.id, filename: sf.filename });
                   }}
                   data-testid={`saved-rfq-dl-${sf.id}`}
-                  title="Open file in a new tab"
+                  title="Open in preview"
                   style={{ all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 700,
                     color: "var(--spot-accent)", padding: "2px 6px" }}>↓</button>
                 <button onClick={async (e) => {
@@ -278,6 +278,17 @@ export default function FilesSec() {
       {/* Inline spinner moved into section header (FilesSec label, see top).
           Full-screen ProgressModal was removed 2026-06-12 per user feedback
           ("don't take up the entire screen"). */}
+
+      {/* Inline file preview — legacy parity (R1.5+). Opens any allowed
+          attachment (pdf/image/text/csv/docx/xlsx/email/zip) directly
+          inside SPOT without bouncing to a new browser tab. */}
+      {previewFile && (
+        <FilePreviewModal
+          fileId={previewFile.id}
+          filename={previewFile.filename}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
     </Sec>
   );
 }

@@ -733,6 +733,147 @@ async def download_file(file_id: str, _u: User = Depends(get_current_user)):
     )
 
 
+@router.get("/files/{file_id}/preview")
+async def preview_file(file_id: str, _u: User = Depends(get_current_user)):
+    """Return a structured preview payload so the front-end can render the
+    file inline without forcing a download. Legacy parity (R1.5+) — the
+    estimator opens any quote-attached file (PDF / image / email / Word /
+    Excel / text / CSV / zip listing) directly inside SPOT.
+
+    Response shape:
+      {
+        "kind":     "pdf" | "image" | "text" | "html" | "email" | "sheet" | "zip" | "binary",
+        "filename": "...",
+        "mime":     "...",
+        "bytes":    <int>,
+        // kind-specific payload:
+        "data":     <base64> | <string> | <dict>
+      }
+    """
+    doc = await _parser_files.get_parser_file(file_id)
+    if not doc:
+        raise HTTPException(404, "File not found")
+    path = doc.get("disk_path")
+    if not path or not os.path.exists(path):
+        raise HTTPException(410, "File blob missing on disk")
+    filename = doc.get("filename") or f"file-{file_id[:8]}"
+    mime = (doc.get("mime") or "").lower()
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    bytes_size = doc.get("bytes") or os.path.getsize(path)
+    meta = {"filename": filename, "mime": mime, "bytes": bytes_size}
+
+    with open(path, "rb") as f:
+        raw = f.read()
+
+    # PDFs render inline via blob/object URL — return base64 so the FE can build a data URL safely.
+    if ext == ".pdf" or "pdf" in mime:
+        return {**meta, "kind": "pdf", "data": base64.b64encode(raw).decode("ascii")}
+
+    # Images — base64 + mime
+    img_exts = {".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif", ".gif"}
+    if ext in img_exts or mime.startswith("image/"):
+        img_mime = mime if mime.startswith("image/") else f"image/{ext.lstrip('.')}"
+        return {**meta, "kind": "image", "data": base64.b64encode(raw).decode("ascii"), "imgMime": img_mime}
+
+    # Plain text / CSV / TSV
+    if ext in {".txt", ".csv", ".tsv", ".log", ".md", ".json", ".xml"} or mime.startswith("text/"):
+        try:
+            txt = raw.decode("utf-8", errors="replace")
+        except Exception:
+            txt = raw.decode("latin-1", errors="replace")
+        # Cap at 500KB of text — anything longer the user should download.
+        if len(txt) > 500_000:
+            txt = txt[:500_000] + "\n\n… (truncated — download for full text)"
+        return {**meta, "kind": "text", "data": txt}
+
+    # Email (.eml / .msg)
+    if ext in {".eml", ".msg"}:
+        try:
+            from utils.email_extract import extract_email_file
+            extracted = extract_email_file(filename, raw)
+            return {**meta, "kind": "email", "data": {
+                "subject": extracted.get("subject") or "",
+                "from": extracted.get("from") or "",
+                "body": extracted.get("body") or "",
+                "attachments": [
+                    {"filename": a.get("filename"), "mime": a.get("mime"),
+                     "bytes": len(a.get("bytes") or b"")}
+                    for a in (extracted.get("attachments") or [])
+                ],
+            }}
+        except Exception as e:
+            return {**meta, "kind": "binary", "data": f"Could not parse email: {e}"}
+
+    # Word (.docx) — extract paragraphs + table rows as plain text
+    if ext == ".docx":
+        try:
+            from io import BytesIO
+            import docx as _docx
+            d = _docx.Document(BytesIO(raw))
+            lines: List[str] = []
+            for para in d.paragraphs:
+                t = (para.text or "").strip()
+                if t:
+                    lines.append(t)
+            for tbl in d.tables:
+                for row in tbl.rows:
+                    cells = [(c.text or "").strip() for c in row.cells]
+                    if any(cells):
+                        lines.append(" | ".join(cells))
+            txt = "\n".join(lines) or "(empty document)"
+            return {**meta, "kind": "text", "data": txt}
+        except Exception as e:
+            return {**meta, "kind": "binary", "data": f"Could not render docx: {e}"}
+
+    # Excel (.xlsx / .xls) — first 50 rows of every sheet as table data
+    if ext in {".xlsx", ".xlsm", ".xls"}:
+        try:
+            from io import BytesIO
+            import openpyxl as _xl
+            wb = _xl.load_workbook(BytesIO(raw), read_only=True, data_only=True)
+            sheets = []
+            for ws in wb.worksheets:
+                rows = []
+                for ri, row in enumerate(ws.iter_rows(values_only=True)):
+                    if ri >= 50:
+                        break
+                    rows.append(["" if v is None else str(v) for v in row])
+                sheets.append({"name": ws.title, "rows": rows,
+                               "truncated": (ws.max_row or 0) > 50})
+            return {**meta, "kind": "sheet", "data": {"sheets": sheets}}
+        except Exception as e:
+            return {**meta, "kind": "binary", "data": f"Could not render xlsx: {e}"}
+
+    # Zip — list members
+    if ext == ".zip" or mime == "application/zip":
+        try:
+            from io import BytesIO
+            import zipfile
+            with zipfile.ZipFile(BytesIO(raw)) as zf:
+                members = []
+                for zi in zf.infolist():
+                    if zi.is_dir():
+                        continue
+                    members.append({"name": zi.filename, "bytes": zi.file_size})
+            return {**meta, "kind": "zip", "data": {"members": members}}
+        except Exception as e:
+            return {**meta, "kind": "binary", "data": f"Could not read zip: {e}"}
+
+    # RTF — strip control words to plain text
+    if ext == ".rtf" or mime == "application/rtf":
+        try:
+            from striprtf.striprtf import rtf_to_text  # type: ignore
+            txt = rtf_to_text(raw.decode("latin-1", errors="replace"))
+            return {**meta, "kind": "text", "data": txt or "(empty)"}
+        except Exception:
+            # Fallback: naive strip
+            txt = raw.decode("latin-1", errors="replace")
+            return {**meta, "kind": "text", "data": txt[:200_000]}
+
+    # Unknown — let the FE prompt download
+    return {**meta, "kind": "binary", "data": ""}
+
+
 @router.delete("/files/{file_id}")
 async def delete_file(file_id: str, _u: User = Depends(get_current_user)):
     """Soft-delete + remove the blob from disk."""

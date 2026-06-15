@@ -45,6 +45,7 @@ EMBEDDED_QUOTING_RULES = "\n".join([
     "8. Default print finish is **Satin**. NEVER default to Gloss. If RFQ says nothing, set null + ask.",
     "9. FOB: `\"Origin\"` (ZIP 44704) unless customer explicitly requests Destination.",
     "10. PDF quotes come from SPOT Preview Quote ONLY. No external PDF generation in scope.",
+    "11. **FSC/SFI must default to OFF.** Set `fscEnabled: false` (or omit the field) unless the RFQ, customer note, attached CAD, spec sheet, or PO **explicitly mentions** FSC/SFI/Chain-of-Custody/certified-paper requirements. Common signals that DO require FSC on: the strings \"FSC\", \"SFI\", \"FSC-COC\", \"FSC certified\", \"chain of custody\", customer is FSC-listed in priors, or the CAD title block carries an FSC logo/mark. Do NOT infer FSC from generic sustainability language (\"recyclable\", \"green\", \"eco\"). When unset, the FSC fee is $0 — adding it silently is a $25/job hidden uplift the estimator did not request.",
 ])
 
 EMBEDDED_BOARD_LIBRARY = "\n".join([

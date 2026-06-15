@@ -23,6 +23,15 @@ export const fmtNum = (n, dec = 2) => {
   return v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 };
 
+export const fmtBytes = (b) => {
+  const v = Number(b);
+  if (!isFinite(v) || v < 0) return "—";
+  if (v < 1024) return `${v} B`;
+  if (v < 1024 * 1024) return `${(v / 1024).toFixed(1)} KB`;
+  if (v < 1024 * 1024 * 1024) return `${(v / 1048576).toFixed(2)} MB`;
+  return `${(v / 1073741824).toFixed(2)} GB`;
+};
+
 export const generateEstNum = (initials) => {
   // Allow empty initials — fall back to "SPC" so the est# is always generated.
   // The backfill effect in QuoteContext re-stamps with real initials once they resolve.
