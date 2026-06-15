@@ -446,6 +446,11 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   (so CAD PDF inside an .eml shows in the saved-files panel without drilling into the email)
 - "📎 N files" pill on each Load Quote modal row — **P3**
   (estimators see at a glance which quotes have attached RFQs before opening)
+- Saved-quote categorization & filters in Load Quote modal — **P2**
+  (filter/group by: Multi-Part vs Individual quote type, Customer, Project Name,
+  status, owner — faster lookup as the quote library grows. Builds on the
+  existing scope/owner filters; add quoteType + custName + custRef filter chips
+  plus an optional groupBy selector.)
 
 ### 2026-06-12 — Die UX + Route Comparison legacy parity (Iter 22)
 - **Die row in Item Setup → always visible** on EVERY route (no more `anyDieRoute` gate). Estimator can set None/Line/Amort + cost + markup per component regardless of routing.
