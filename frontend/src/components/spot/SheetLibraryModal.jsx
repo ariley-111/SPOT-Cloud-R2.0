@@ -35,8 +35,8 @@ const Th = ({ children, right, col, sortCol, sortDir, onSort }) => (
   </th>
 );
 
-export default function SheetLibraryModal({ open, onClose }) {
-  const { active, setField } = useQuote();
+export default function SheetLibraryModal({ open = true, onClose }) {
+  const { active, setField, pushToast } = useQuote();
   const s = active?.state || {};
 
   const [rows, setRows] = useState([]);
@@ -83,11 +83,14 @@ export default function SheetLibraryModal({ open, onClose }) {
   }, [open, oneUpW, oneUpL, activeQty, s.boardGrade, s.flute,
       s.outsideLiner, s.insideLiner, s.medium, stockKey]);
 
-  // Search + spec-mode filter
+  // Search + spec-mode filter. Stock sheets always visible (legacy parity —
+  // they're added with the current spec at add-time, so they're by definition
+  // relevant; never hide them in "Current Spec" mode even if the spec is
+  // partially empty on a freshly-loaded quote).
   const visibleRows = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
     let r = rows;
-    if (!showAll) r = r.filter((x) => x.specMatch);
+    if (!showAll) r = r.filter((x) => x.specMatch || x.isStock);
     if (q) {
       r = r.filter((x) => {
         const hay = `${x.w}x${x.l} ${x.g} ${x.f} ${x.ol} ${x.il} ${x.md}`.toLowerCase();
@@ -96,6 +99,9 @@ export default function SheetLibraryModal({ open, onClose }) {
     }
     const dir = sortDir === "asc" ? 1 : -1;
     return [...r].sort((a, b) => {
+      // Stock first, then spec matches, then by chosen column
+      if (a.isStock !== b.isStock) return a.isStock ? -1 : 1;
+      if (a.specMatch !== b.specMatch) return a.specMatch ? -1 : 1;
       const ka = a[sortCol] ?? 0, kb = b[sortCol] ?? 0;
       if (sortCol === "sheet") return dir * (`${a.w}×${a.l}`.localeCompare(`${b.w}×${b.l}`));
       return dir * (Number(ka) - Number(kb));
@@ -117,16 +123,22 @@ export default function SheetLibraryModal({ open, onClose }) {
   const handleRemoveOverride = () => setField("overrideSheetId", null);
   const handleAddStock = () => {
     const w = parseFloat(stkW), l = parseFloat(stkL);
-    if (!(w > 0 && l > 0)) return;
-    const nextId = `${STOCK_PREFIX}${w}x${l}`;
-    const exists = stockSheets.some((x) => x.id === nextId);
-    if (exists) return;
-    setField("stockSheets", [...stockSheets, {
-      id: nextId, w, l,
-      g: s.boardGrade, f: s.flute, ol: s.outsideLiner, il: s.insideLiner,
+    if (!(w > 0 && l > 0)) {
+      pushToast && pushToast("Enter both W and L (>0)", "warn");
+      return;
+    }
+    // LEGACY PARITY (spot_r1_5.jsx L2470): id = "STK-" + Date.now(). Always
+    // unique; legacy permits same-dimension stock entries (estimator decision).
+    const newRow = {
+      id: `${STOCK_PREFIX}${Date.now()}`,
+      w, l,
+      g: s.boardGrade || "", f: s.flute || "",
+      ol: s.outsideLiner || "None", il: s.insideLiner || "None",
       md: s.medium || "None", isStock: true,
-    }]);
+    };
+    setField("stockSheets", [...stockSheets, newRow]);
     setStkW(""); setStkL("");
+    pushToast && pushToast(`Added stock sheet ${w}×${l}`, "ok");
   };
   const handleDelStock = (id) => {
     setField("stockSheets", stockSheets.filter((x) => x.id !== id));
@@ -141,7 +153,7 @@ export default function SheetLibraryModal({ open, onClose }) {
   const matchCount = rows.filter((r) => r.specMatch).length;
 
   return (
-    <Modal open={open} onClose={onClose} title="" maxWidth={1100} accent="#06b6d4">
+    <Modal onClose={onClose} title="" width={1100} data-testid="sheet-library-modal-backdrop">
       <div data-testid="sheet-library-modal">
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between",
@@ -284,7 +296,7 @@ export default function SheetLibraryModal({ open, onClose }) {
                     </td>
                     <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}
                       onClick={(e) => e.stopPropagation()}>
-                      {row.specMatch && !isOverride && (
+                      {(row.specMatch || row.isStock) && !isOverride && (
                         <button onClick={() => handleUseThis(row)}
                           data-testid={`sheetlib-use-${row.id}`}
                           style={{ all: "unset", cursor: "pointer", fontSize: 10, fontWeight: 700,
