@@ -1,0 +1,41 @@
+{
+  "summary": "Tested board-substitution warning persistence for ECT 32 / B / 42# Kemi-Lite. SIMPLE quote: warning DOES persist (no flash). MULTI-PART: could not reach a calculated component (BOM Builder modal flow blocks fully entering MP). Also discovered a secondary UX gap: after clicking 'Accept substitution' in SIMPLE, the persistent green 'board-accepted-flag' does NOT render — likely the bug the user perceives as a flash.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ItemSetupSec.jsx — acceptSub() / board-accepted-flag",
+        "issue": "After clicking 'Accept substitution' in a SIMPLE ECT 32·B·Kemi-Lite quote, the substitution warning disappears (correct) but the persistent green '✓ Substitution approved — 200# meets ECT 32 spec' flag (data-testid='board-accepted-flag') NEVER renders. Polled +0..+4400ms post-Accept — both decision-needed=false AND accepted-flag=false. Root cause: acceptSub() writes patch.boardGrade = r.gradeFallback (= '200') back to state. The next engine call therefore sees boardGrade='200' (already the stock grade) and returns gradeFallback=null → hasFb=false. The flag's render guard is `{isAccepted && hasFb && ...}` (line 525) — with hasFb=false the flag is suppressed. From the user's POV the warning vanishes and nothing replaces it; this is plausibly what the bug reporter calls 'flashes briefly then disappears'.",
+        "selector": "[data-testid=\"board-accepted-flag\"]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "tile-quote-multipart / BOM Builder modal",
+        "issue": "Could not finish a reproducible MP test path through the UI: clicking toolbar-toggle-mp (or tile-quote-multipart implicitly) opens a BOM Builder modal that does not dismiss after clicking 'Save BOM (2 items)' — modal stays mounted and Item Setup remains the previously active SIMPLE item. No tile-grade-ECT32 surfaces while the modal is up. This blocks the MP repro path for substitution warning testing.",
+        "selector": "[data-testid=\"bom-save\"], [data-testid=\"bom-builder-modal\"]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_25.json"],
+  "action_items": [
+    "Investigate acceptSub() in /app/frontend/src/components/spot/ItemSetupSec.jsx (L367-376). Two viable fixes: (a) DON'T overwrite boardGrade with the fallback — keep spec grade so hasFb stays true on next calc and the accepted-flag persists; or (b) change accepted-flag guard from `isAccepted && hasFb` to `isAccepted && (hasFb || s.fallbackAccepted)` and also remember the original spec grade in state so the message text still reads correctly. Same logic applies to forceSub() / mediumFallback. This is almost certainly the 'flash' the user reports — the warning disappears on Accept and no green confirmation pill renders to take its place.",
+    "Verify the same Accept→no-flag behavior in MP via /app/frontend/src/components/spot/RightDashboard.jsx (econ-board-sub-banner L1221-1231) — same hasFb guard pattern probably applies there.",
+    "Fix BOM Builder modal close-after-save so MP path can be UI-tested (clicking 'Save BOM' should dismiss modal and route into the MP item editor).",
+    "MP-mode polling for the specific 'Void Fillers' / per-component scenario still needs validation once BOM modal flow is testable — main agent should confirm by configuring a MP component manually and re-checking decision-needed persistence over 10s."
+  ],
+  "critical_code_review_comments": [
+    "ItemSetupSec.jsx acceptSub/forceSub mutate boardGrade/medium to the fallback value, which silently invalidates the very render condition (hasFb) that the accepted/forced confirmation pills depend on. Consider preserving the spec values and tracking acceptance via the s.boardSubstitution flag + a derived runGrade only.",
+    "Render guard `{isAccepted && hasFb && ...}` (ItemSetupSec.jsx L525) and analogous code at L538 for forced state both share this flaw — both the accepted and forced flags will silently fail to display once the user clicks Accept/Force."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "Simple-flow polling 100% passes (warning persists); Accept-flow has UX bug; MP flow blocked"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — works via /api/auth/login (Microsoft SSO 500s in preview as expected)",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "SIMPLE-quote substitution-warning PERSISTENCE is CONFIRMED CORRECT (25/25 ticks across 10s, both board-decision-needed and econ-board-sub-banner stay visible). Warning text and running-row text both match spec. The REAL issue is post-Accept: the board-accepted-flag never renders because acceptSub() writes the fallback grade onto s.boardGrade, which causes the next engine response to have gradeFallback=null → hasFb=false → flag guard fails. MP testing was blocked by BOM Builder modal not closing after 'Save BOM'; test_ids exist for the MP path (tile-quote-multipart, bom-* modal pieces, tab-<uuid> components) but the modal flow needs a working save→close transition.",
+  "rca of the issue": "ItemSetupSec.jsx::acceptSub (L367-376) sets patch.boardGrade = r.gradeFallback before applying state. Next engine recompute sees spec===running===200 and returns no gradeFallback, so hasFb=false. board-accepted-flag is guarded by `isAccepted && hasFb` (L525) — guard fails, flag never paints. Same defect for forceSub (L377-385) and the mediumFallback branch. Recommended fix: do NOT overwrite boardGrade/medium in the patch; instead persist the acceptance through s.boardSubstitution and derive runGrade in the UI from that flag, so hasFb continues to evaluate true on subsequent calcs. Reproduction: Login → Simple quote → W=48 L=24 Qty=150 → Edit board → tile-grade-ECT32, tile-flute-B, tile-outside-42KemiLite → confirm warning persists (good) → click board-accept-sub-btn → observe NEITHER warning NOR accepted-flag is on the page for the next 5s+."
+}
