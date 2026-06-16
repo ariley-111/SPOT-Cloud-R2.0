@@ -1,0 +1,57 @@
+{
+  "summary": "Frontend-only test of the Route Comparison panel in /app/frontend/src/components/spot/RightDashboard.jsx. Logged in as admin, opened a new Simple quote tab, entered One-Up W=10 / L=12 / Qty=5000 against the default 200 C Kemi-Lite board, expanded the route-comparison panel and exercised every Switch button (Crest, Reset to Auto, CAD). All 10 acceptance criteria from the review request pass — labels, table layout, verdict/breakeven strings, auto-die, panel collapse, toasts, forced-state confirmation, and Reset to Auto all behave 1:1 with legacy spot_r1_5.jsx.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Right-dashboard panel headers",
+        "issues": [
+          "Winner badge textContent in the DOM is correctly 'CAD wins' / 'Crest wins' / 'Bobst wins' (verified via JS getComputedStyle/textContent), BUT the parent panelHeader applies CSS text-transform:uppercase so the user visually sees 'CAD WINS'. This is consistent across all panel headers in the right dashboard (FREIGHT, ECONOMICS, ROUTE COMPARISON) and matches the legacy spot_r1_5.jsx panel-header treatment, so it is legacy-parity behavior. Flagging as a soft note only: if the PM wants the badge specifically rendered mixed-case while keeping the rest of the header uppercase, the badge span needs an inline style of textTransform:'none'. NOT a functional bug."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional) Decide whether the winner badge should override panelHeader's text-transform:uppercase so 'CAD wins' renders mixed-case visually. Current behavior is legacy-parity (uppercase) and the DOM text itself is mixed-case as the review request requires."
+  ],
+  "critical_code_review_comments": [
+    "RouteComparison component is solid: setManyFields used for atomic patch on Crest/Bobst switch (avoids double engine recompute), useEffect dependency list correctly includes all engine inputs, panel auto-clears stale comp data on tab/input invalidation (L930-935), and the panel correctly hides entirely when CAD or Crest is not viable (L1012) — matching legacy spot_r1_5.jsx L6909.",
+    "Die auto-fill logic on Crest switch (L974-977) uses Math.round(comp.crest.die) when dieEstimated is true and falls back to 1200 — correct legacy parity. Bobst switch uses 1800 fallback as spec'd.",
+    "Reset-to-Auto does NOT clear the die that was auto-filled by a prior Crest/Bobst switch — this is consistent with legacy (the estimator may want to keep the die value). If product wants it to revert, add a second branch on routeOverride change. Not a bug.",
+    "No data-testid issue: route-comparison / route-comparison-toggle / route-winner-badge / route-switch-crest / route-switch-cad / route-switch-bobst / route-switch-auto / route-forced-label are all present and selectable."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "skipped", "frontend": "100%" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "Created one transient Simple quote tab during testing (auto-saved as SA-260616-165853). No cleanup required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login flow: must use the bottom blue 'Sign in' button, NOT the Microsoft SSO button (the MS SSO endpoint /api/auth/entra/login currently 500s because ENTRA_TENANT_ID env is misconfigured — preview tenant id is set to 'spot-multi-user' which msal rejects; unrelated to the Route Comparison feature). Use JS-side button lookup: Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Sign in').click(). Bobst switch is NOT shown for the default B-flute board because Bobst is not viable for C flute — to test the Bobst auto-die $1800 path, switch Item Setup flute to 'E' before entering dims. All other behaviors verified end-to-end.",
+  "rca of the issue": "N/A — no functional issues found. The only observation (badge appears visually uppercase) is rooted in panelHeader CSS text-transform:uppercase which is intentional legacy parity.",
+  "verified_acceptance_criteria": {
+    "panel_renders_for_10x12_5000": true,
+    "winner_badge_text_mixed_case_in_DOM": true,
+    "winner_badge_text_value": "CAD wins (textContent verified)",
+    "table_sheet_one_decimal": "63.0×126.0 / 60.0×120.0",
+    "table_rows_present": "Sheet, Layout, Sheets, Board, Press, Cutting (with hrs), Die (with (est.)), Total, Per piece — ALL present for CAD and Crest",
+    "verdict_string": "CAD is $1,139.26 cheaper than Crest at 5,000 pcs",
+    "breakeven_qty": "Crest breaks even at 98,778 pcs",
+    "breakeven_die": "Crest wins if die < $60.74",
+    "saber_warning": "CAD sheet exceeds Crest max — Saber needed to switch routes later (orange, present because CAD sheet 63x126 exceeds Crest 60x120 max)",
+    "bobst_not_viable_note": "Bobst not viable: C flute exceeds Bobst's 0.060\" caliper limit (italic)",
+    "switch_to_crest_toast": "Route forced to Crest — verify die cost",
+    "switch_to_crest_panel_collapses": "true (height dropped from full table to 34px, no table/btns rendered)",
+    "switch_to_crest_forced_label": "✓ Route forced to Crest",
+    "switch_to_crest_auto_die_filled": "1200 (was None) — dieTreatment set to 'Separate Line' (Line tile highlighted with +15% markup shown)",
+    "switch_to_crest_quote_total_changed": "$2,962.30 (CAD) -> $3,776.19 (Crest + $1,380 die line item)",
+    "reset_to_auto_toast": "Route reset to auto",
+    "reset_to_auto_restores_switch_buttons": "true (Crest/CAD switch btns visible again)",
+    "switch_to_cad_toast": "Route forced to CAD",
+    "switch_to_cad_forced_label": "✓ Route forced to CAD",
+    "switch_to_cad_no_die_autofill_required": "confirmed — CAD switch does not change die",
+    "bobst_switch_button_visible_when_bobst_viable": "not tested — Bobst not viable for B/C flute default; logic exists at L1140-1145 with $1800 fallback at L991, and code path is identical to Crest pattern"
+  }
+}

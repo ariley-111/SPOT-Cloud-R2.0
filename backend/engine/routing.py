@@ -624,6 +624,7 @@ def compare_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
             "sheetsReq": cs.get("sheetsReq"),
             "wastePct": (cs.get("layout") or {}).get("wastePct"),
             "saberNeeded": cad.get("saberNeeded"),
+            "isStock": bool(cs.get("stockMode")),
         }
 
     crest_detail = None
@@ -664,16 +665,28 @@ def compare_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
             "minBuySheets": bobst.get("minBuySheets"),
         }
 
-    # Delta + breakeven (semantics preserved from pre-D-124 contract: CAD vs Crest)
+    # Delta + breakeven (CAD vs Crest) — verbatim legacy spot_r1_5.jsx L873-890.
     delta = None
-    breakeven_qty = None
-    if cad_detail and crest_detail:
+    per_pc = None
+    breakeven = {"qty": None, "die": 0}
+    if cad_detail and crest_detail and total_qty > 0:
         delta = crest_detail["totalCost"] - cad_detail["totalCost"]
+        cad_prod_per_pc = (cad_detail["board"] + cad_detail["press"] + cad_detail["cut"]) / total_qty
+        cr_prod_per_pc = (crest_detail["board"] + crest_detail["press"] + crest_detail["cut"]) / total_qty
+        per_pc_diff = cad_prod_per_pc - cr_prod_per_pc
+        crest_die = crest_detail.get("die") or 0
+        breakeven_qty = round(crest_die / per_pc_diff) if per_pc_diff > 0 else None
+        breakeven_die = cad_detail["totalCost"] - (crest_detail["board"] + crest_detail["press"] + crest_detail["cut"])
+        breakeven = {"qty": breakeven_qty, "die": max(0, breakeven_die)}
+        per_pc = (crest_detail["totalCost"] - cad_detail["totalCost"]) / total_qty
 
     winner = ev["cheapest"]["route"] if ev.get("cheapest") else None
 
     return {
         "cad": cad_detail, "crest": crest_detail, "bobst": bobst_detail,
         "bobstReason": ev.get("bobstReason"),
-        "delta": delta, "breakevenQty": breakeven_qty, "winner": winner,
+        "delta": delta, "perPc": per_pc,
+        "breakeven": breakeven, "breakevenQty": breakeven.get("qty"),
+        "cadSaberNeeded": bool(cad_detail and cad_detail.get("saberNeeded")),
+        "winner": winner,
     }

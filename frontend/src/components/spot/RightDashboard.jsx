@@ -914,7 +914,7 @@ function FreightPanel({ s }) {
 }
 
 function RouteComparison({ s, primary }) {
-  const { active, setField } = useQuote();
+  const { active, setField, setManyFields, pushToast } = useQuote();
   const tabId = active?.id;
   // LEGACY PARITY (spot_r1_5.jsx L3686): showRouteComp defaults to FALSE.
   // Estimator clicks the header to expand the comparison table.
@@ -957,9 +957,47 @@ function RouteComparison({ s, primary }) {
       s.printReq, s.printMode, s.dieTreatment, s.cuttingDieCost, s.totalRuleInches,
       s.crestComplexity, s.cadDifficulty]);
 
-  const winner = comp?.winner;
-  const winnerLabel = winner ? `${winner.toUpperCase()} ${forced ? "FORCED" : "WINS"}` : (primary?.route ? `${primary.route} AUTO` : "");
-  const winnerColor = forced ? "sp-badge-warn" : "sp-badge-green";
+  const winner = comp?.winner;  // auto cheapest route (legacy parity — header always shows auto winner)
+  const forcedRoute = forced ? s.routeOverride : null;
+  // Legacy badge color: CAD green / Bobst purple / else (Crest) blue (spot_r1_5.jsx L6914)
+  const winnerBadgeColor = winner === "CAD" ? "#22c55e" : winner === "Bobst" ? "#a855f7" : "#3b82f6";
+  const dieNone = !s.dieTreatment || s.dieTreatment === "None";
+
+  // Switch handlers — 1:1 with legacy spot_r1_5.jsx L6976-6978: force the route,
+  // auto-fill a die cost on Crest/Bobst when none is set, collapse the panel, toast.
+  const applyPatch = (patch) => {
+    if (setManyFields) setManyFields(patch);
+    else Object.entries(patch).forEach(([k, v]) => setField(k, v));
+  };
+  const switchToCrest = () => {
+    const patch = { routeOverride: "Crest" };
+    if (dieNone && comp?.crest) {
+      patch.dieTreatment = "Separate Line";
+      patch.cuttingDieCost = String(comp.crest.dieEstimated ? Math.round(comp.crest.die || 0) : (comp.crest.die || 1200));
+    }
+    applyPatch(patch);
+    setOpen(false);
+    pushToast && pushToast("Route forced to Crest — verify die cost", "ok");
+  };
+  const switchToCad = () => {
+    setField("routeOverride", "CAD");
+    setOpen(false);
+    pushToast && pushToast("Route forced to CAD", "ok");
+  };
+  const switchToBobst = () => {
+    const patch = { routeOverride: "Bobst" };
+    if (dieNone && comp?.bobst) {
+      patch.dieTreatment = "Separate Line";
+      patch.cuttingDieCost = String(comp.bobst.dieEstimated ? Math.round(comp.bobst.die || 0) : (comp.bobst.die || 1800));
+    }
+    applyPatch(patch);
+    setOpen(false);
+    pushToast && pushToast(`Route forced to Bobst${comp?.bobst?.dieEstimated ? " — verify die cost" : ""}`, "ok");
+  };
+  const resetToAuto = () => {
+    setField("routeOverride", "Auto");
+    pushToast && pushToast("Route reset to auto", "ok");
+  };
 
   // Build column data for visible routes
   const cols = [];
@@ -973,19 +1011,17 @@ function RouteComparison({ s, primary }) {
   // grades like 275 DW B/C, Crest is typically not viable → panel hidden entirely.
   if (!comp || !comp.cad || !comp.crest) return null;
 
-  const switchTo = (rt) => {
-    setField("routeOverride", s.routeOverride === rt ? "Auto" : rt);
-  };
-
   return (
     <div data-testid="route-comparison" style={panelStyle("#22c55e")}>
       <div style={{ ...panelHeader("#22c55e"), cursor: "pointer", userSelect: "none" }}
         onClick={() => setOpen((v) => !v)} data-testid="route-comparison-toggle">
         <span>Route Comparison{qty ? ` — Qty ${fmtInt(qty)}` : ""}</span>
         <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {winnerLabel && (
-            <span className={`sp-badge ${winnerColor}`} data-testid="route-winner-badge">
-              {winnerLabel}
+          {winner && (
+            <span data-testid="route-winner-badge"
+              style={{ fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 3,
+                background: winnerBadgeColor + "18", color: winnerBadgeColor }}>
+              {winner} wins
             </span>
           )}
           <span style={{ fontSize: 11, transform: open ? "rotate(90deg)" : "rotate(0deg)",
@@ -1010,7 +1046,7 @@ function RouteComparison({ s, primary }) {
                   </tr>
                 </thead>
                 <tbody style={{ color: "var(--spot-text2)" }}>
-                  <CmpRow label="Sheet" cols={cols} get={(d) => (d.sheetW && d.sheetL) ? `${fmtNum(d.sheetW, 0)}×${fmtNum(d.sheetL, 0)}` : "—"} />
+                  <CmpRow label="Sheet" cols={cols} get={(d) => (d.sheetW && d.sheetL) ? `${fmtNum(d.sheetW, 1)}×${fmtNum(d.sheetL, 1)}` : "—"} />
                   <CmpRow label="Layout" cols={cols} get={(d) => d.pcsPerSheet ? `${d.pcsPerSheet} out` : "—"} />
                   <CmpRow label="Sheets" cols={cols} get={(d) => d.sheetsReq ? fmtInt(d.sheetsReq) : "—"} />
                   <CmpRow label="" cols={cols} get={() => ""} sep />
@@ -1032,64 +1068,83 @@ function RouteComparison({ s, primary }) {
                 </tbody>
               </table>
 
-              {/* Verdict + warnings (legacy L7800 messaging) */}
-              <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--spot-line)" }}>
-                {winner && comp.cad && comp.crest && (() => {
-                  const delta = Math.abs(comp.cad.totalCost - comp.crest.totalCost);
-                  const winnerCost = winner === "CAD" ? comp.cad.totalCost : comp.crest.totalCost;
-                  const loser = winner === "CAD" ? "Crest" : "CAD";
-                  const loserCost = winner === "CAD" ? comp.crest.totalCost : comp.cad.totalCost;
+              {/* Verdict + breakeven + notes — 1:1 legacy spot_r1_5.jsx L6945-6964 */}
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--spot-line)", fontSize: 12 }}>
+                {(() => {
+                  const totals = [{ n: "CAD", v: comp.cad.totalCost }, { n: "Crest", v: comp.crest.totalCost }];
+                  if (comp.bobst) totals.push({ n: "Bobst", v: comp.bobst.totalCost });
+                  totals.sort((a, b) => a.v - b.v);
+                  const diff = Math.abs(totals[0].v - totals[1].v);
                   return (
-                    <div style={{ fontWeight: 700, color: "var(--spot-green)", marginBottom: 4 }}>
-                      {winner === "Bobst" ? winner : winner} is {fmtMoney(delta)} cheaper than {loser} at {fmtInt(qty)} pcs
+                    <div style={{ fontWeight: 700, color: "var(--spot-green)", marginBottom: 2 }}>
+                      {diff < 1 ? "Routes are equal at this quantity"
+                        : `${totals[0].n} is ${fmtMoney(diff)} cheaper than ${totals[1].n} at ${fmtInt(qty)} pcs`}
                     </div>
                   );
                 })()}
-                {comp.bobstReason && (
-                  <div style={{ fontSize: 11, color: "var(--spot-text3)", fontStyle: "italic", marginTop: 4 }}>
-                    {comp.bobstReason}
+                {comp.breakeven?.qty > 0 && (
+                  <div style={{ color: "var(--spot-text2)", marginBottom: 2 }}>
+                    {winner === "CAD"
+                      ? `Crest breaks even at ${fmtInt(comp.breakeven.qty)} pcs`
+                      : `CAD wins below ${fmtInt(comp.breakeven.qty)} pcs`}
                   </div>
                 )}
-                {comp.crest?.warning && (
-                  <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
-                    ⚠ {comp.crest.warning}
-                  </div>
+                {comp.breakeven && (
+                  <div style={{ color: "var(--spot-text3)" }}>Crest wins if die {"<"} {fmtMoney(comp.breakeven.die)}</div>
                 )}
-                {comp.cad?.saberNeeded && (
-                  <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
+                {comp.cadSaberNeeded && (
+                  <div style={{ color: "#f59e0b", fontWeight: 600, marginTop: 4 }}>
                     ⚠ CAD sheet exceeds Crest max — Saber needed to switch routes later
+                  </div>
+                )}
+                {comp.crest?.isStock && !comp.cad?.isStock && (
+                  <div style={{ color: "var(--spot-green)", marginTop: 2 }}>✓ Crest path uses stock sheets</div>
+                )}
+                {!comp.bobst && comp.bobstReason && (
+                  <div style={{ color: "var(--spot-text3)", marginTop: 2, fontStyle: "italic" }}>
+                    Bobst not viable: {comp.bobstReason}
+                  </div>
+                )}
+                {comp.bobst?.isMillMinScaled && (
+                  <div style={{ color: "#a855f7", marginTop: 2, fontStyle: "italic" }}>
+                    Bobst pays mill min — actual sheets {fmtInt(comp.bobst.sheetsReq)}, billed {fmtInt(comp.bobst.minBuySheets || 0)}
                   </div>
                 )}
               </div>
 
-              {/* Switch buttons */}
-              <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {cols.map((c) => {
-                  if (c.key === winner) return null;
-                  return (
-                    <button key={c.key} onClick={() => switchTo(c.key)}
-                      data-testid={`route-switch-${c.key.toLowerCase()}`}
-                      style={{
-                        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                        padding: "4px 10px", borderRadius: 3,
-                        background: s.routeOverride === c.key ? "var(--spot-accent-soft)" : "transparent",
-                        color: c.key === "CAD" ? "#3b82f6" : c.key === "Crest" ? "#f59e0b" : "#a855f7",
-                        border: `1px solid ${c.key === "CAD" ? "#3b82f6" : c.key === "Crest" ? "#f59e0b" : "#a855f7"}`,
-                      }}>
-                      Switch to {c.label}
-                    </button>
-                  );
-                })}
-                {forced && (
-                  <button onClick={() => setField("routeOverride", "Auto")}
-                    data-testid="route-switch-auto"
-                    style={{
-                      all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                      padding: "4px 10px", borderRadius: 3,
-                      color: "var(--spot-green)", border: "1px solid var(--spot-green)",
-                    }}>Back to Auto</button>
-                )}
-              </div>
+              {/* Action buttons — 1:1 legacy spot_r1_5.jsx L6966-6980 */}
+              {forced ? (
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ flex: 1, fontSize: 11, fontWeight: 700,
+                    color: forcedRoute === "CAD" ? "var(--spot-green)" : forcedRoute === "Bobst" ? "#a855f7" : "#3b82f6" }}
+                    data-testid="route-forced-label">
+                    ✓ Route forced to {forcedRoute}
+                  </span>
+                  <button onClick={resetToAuto} data-testid="route-switch-auto"
+                    style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                      padding: "5px 10px", borderRadius: 4, border: "1px solid var(--spot-line)",
+                      color: "var(--spot-text3)", background: "var(--spot-bg2)" }}>
+                    Reset to Auto
+                  </button>
+                </div>
+              ) : (
+                <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                  <button onClick={switchToCrest} data-testid="route-switch-crest"
+                    style={{ all: "unset", cursor: "pointer", flex: 1, textAlign: "center", fontSize: 11,
+                      fontWeight: 700, padding: "5px 0", borderRadius: 4, border: "1px solid #3b82f644",
+                      color: "#3b82f6", background: "#3b82f60a" }}>Switch to Crest</button>
+                  <button onClick={switchToCad} data-testid="route-switch-cad"
+                    style={{ all: "unset", cursor: "pointer", flex: 1, textAlign: "center", fontSize: 11,
+                      fontWeight: 700, padding: "5px 0", borderRadius: 4, border: "1px solid #22c55e44",
+                      color: "#22c55e", background: "#22c55e0a" }}>Switch to CAD</button>
+                  {comp.bobst && (
+                    <button onClick={switchToBobst} data-testid="route-switch-bobst"
+                      style={{ all: "unset", cursor: "pointer", flex: 1, textAlign: "center", fontSize: 11,
+                        fontWeight: 700, padding: "5px 0", borderRadius: 4, border: "1px solid #a855f744",
+                        color: "#a855f7", background: "#a855f70a" }}>Switch to Bobst</button>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
