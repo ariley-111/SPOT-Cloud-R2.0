@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft, reassignParserFiles } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
 import {
@@ -271,6 +271,25 @@ export function QuoteProvider({ children }) {
   useEffect(() => {
     if (!activeId && tabs.length > 0) setActiveId(tabs[0].id);
   }, [tabs, activeId]);
+
+  // Delete a draft by id (works whether or not it's an open tab). Removes the
+  // backend draft + its parser files, and drops the tab from the bar if open.
+  const deleteDraftById = useCallback(async (id) => {
+    try { await deleteDraft(id); } catch (_) {}
+    setTabs((cur) => {
+      const next = cur.filter((t) => t.id !== id);
+      return next.length === 0 ? [makeBlankTab("New Quote", initials)] : next;
+    });
+    setActiveId((cur) => (cur === id ? null : cur));
+  }, [initials]);
+
+  // Delete ALL of the user's drafts and reset to a single blank tab.
+  const clearAllDrafts = useCallback(async () => {
+    try { await deleteAllDrafts(); } catch (_) {}
+    const blank = makeBlankTab("New Quote", initials);
+    setTabs([blank]);
+    setActiveId(blank.id);
+  }, [initials]);
 
   // Defensive backfill: if any tab is missing an est#, stamp one. This catches
   // the rare case (reported by Rich in prod, Edge browser) where a tab was
@@ -683,6 +702,7 @@ export function QuoteProvider({ children }) {
   const value = {
     tabs, activeId, active,
     setActiveId, newTab, closeTab, duplicateTab,
+    deleteDraftById, clearAllDrafts,
     setField, setManyFields, replaceState, setPricingMode,
     // Multi-Part actions
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,

@@ -86,6 +86,21 @@ async def update_draft(draft_id: str, body: QuoteDraftUpdate, user: User = Depen
     return QuoteDraft(**result)
 
 
+@drafts_router.delete("")
+async def delete_all_drafts(user: User = Depends(get_current_user)) -> dict:
+    """Delete ALL of the current user's drafts (and purge their parser files)."""
+    ids = [d["id"] async for d in db[COL_QUOTE_DRAFTS].find(
+        {"owner_id": user.id}, {"_id": 0, "id": 1})]
+    result = await db[COL_QUOTE_DRAFTS].delete_many({"owner_id": user.id})
+    try:
+        from services.parser_files import purge_quote_files
+        for did in ids:
+            await purge_quote_files(did)
+    except Exception:
+        pass
+    return {"status": "ok", "deleted": result.deleted_count}
+
+
 @drafts_router.delete("/{draft_id}")
 async def delete_draft(draft_id: str, user: User = Depends(get_current_user)) -> dict:
     result = await db[COL_QUOTE_DRAFTS].delete_one({"id": draft_id, "owner_id": user.id})

@@ -68,7 +68,7 @@ function TakeOverConfirm({ row, onCancel, onConfirm }) {
 
 // ─── Main modal ────────────────────────────────────────────────────────
 export default function LoadQuoteModal({ onClose }) {
-  const { replaceState, pushToast } = useQuote();
+  const { replaceState, pushToast, deleteDraftById, clearAllDrafts } = useQuote();
   const { user: currentUser } = useAuth();
   const [tab, setTab] = useState("drafts");            // drafts | saved
   const [scope, setScope] = useState("mine");          // mine | team
@@ -164,6 +164,29 @@ export default function LoadQuoteModal({ onClose }) {
     }
   };
 
+  const onDeleteDraft = async (it, e) => {
+    e?.stopPropagation();
+    if (!window.confirm(`Delete draft "${it.est_num || it.label || "(untitled)"}"? This cannot be undone.`)) return;
+    try {
+      await deleteDraftById(it.id);
+      setItems((cur) => cur.filter((x) => x.id !== it.id));
+      pushToast("Draft deleted", "ok");
+    } catch (err) {
+      pushToast(`Delete failed: ${err?.response?.data?.detail || err.message}`, "err");
+    }
+  };
+
+  const onDeleteAllDrafts = async () => {
+    if (!window.confirm(`Delete ALL ${filtered.length} draft(s)? This cannot be undone.`)) return;
+    try {
+      await clearAllDrafts();
+      setItems([]);
+      pushToast("All drafts deleted", "ok");
+    } catch (err) {
+      pushToast(`Delete failed: ${err?.response?.data?.detail || err.message}`, "err");
+    }
+  };
+
   return (
     <Modal title="Load Quote / Draft" onClose={onClose} width={920} data-testid="modal-load-quote">
       {/* Top controls row */}
@@ -201,6 +224,16 @@ export default function LoadQuoteModal({ onClose }) {
         <input className="sp-input" placeholder="Search est#, customer, owner…"
           value={q} onChange={(e) => setQ(e.target.value)}
           data-testid="load-search-input" style={{ flex: 1, minWidth: 200 }} />
+
+        {tab === "drafts" && filtered.length > 0 && (
+          <button className="sp-btn sp-btn-sm" onClick={onDeleteAllDrafts}
+            data-testid="load-delete-all-drafts"
+            title="Delete all of your drafts"
+            style={{ background: "rgba(239,68,68,0.12)", color: "var(--spot-err)",
+                     border: "1px solid rgba(239,68,68,0.4)", fontWeight: 700 }}>
+            Delete all
+          </button>
+        )}
       </div>
 
       {/* Body */}
@@ -310,8 +343,17 @@ export default function LoadQuoteModal({ onClose }) {
                     {" · "}{(it.state || {}).itemDesc || ""}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-                  {it.updated_at ? new Date(it.updated_at).toLocaleString() : ""}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
+                    {it.updated_at ? new Date(it.updated_at).toLocaleString() : ""}
+                  </div>
+                  <button onClick={(e) => onDeleteDraft(it, e)}
+                    data-testid={`load-draft-delete-${it.id}`}
+                    title="Delete draft"
+                    style={{ all: "unset", cursor: "pointer", fontSize: 16, lineHeight: 1,
+                      color: "var(--spot-text3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--spot-err)"; e.stopPropagation(); }}
+                    onMouseLeave={(e) => e.currentTarget.style.color = "var(--spot-text3)"}>×</button>
                 </div>
               </div>
             );

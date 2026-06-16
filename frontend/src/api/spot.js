@@ -114,6 +114,8 @@ export const updateDraft = (id, body) =>
   api.put(`/drafts/${id}`, body).then((r) => r.data);
 export const deleteDraft = (id) =>
   api.delete(`/drafts/${id}`).then((r) => r.data);
+export const deleteAllDrafts = () =>
+  api.delete(`/drafts`).then((r) => r.data);
 
 // ─── Quotes ─────────────────────────────────────────────
 export const listQuotes = (params = {}) =>
