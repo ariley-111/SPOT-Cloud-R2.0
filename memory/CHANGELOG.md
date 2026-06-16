@@ -11,6 +11,22 @@ Append-only log of shipped features and fixes.
 Append-only log of shipped features and fixes.
 
 
+## 2026-06-16 — Bug 3: attach RFQ files without parsing
+- **Gap:** files only persisted to the backend when the user ran the Anthropic parser
+  ("Build Estimate"). Files uploaded for a manually-built quote stayed client-side and were
+  lost on save/reload.
+- **Backend:** new `POST /api/parser/files/upload` (parser.py) — persists uploaded files via
+  `parser_files.save_parser_file(source="upload")` with NO Anthropic call. Curl-verified.
+- **Frontend:** `api/spot.js` `uploadParserFiles()`; `FilesSec.jsx` `attachFiles()` + an
+  "⤓ Attach to quote" button (data-testid `btn-attach-files`, shown when files are staged).
+  Uploads to the same `filesQuoteId` stream the parser uses, so the draft→quote reassign
+  migration carries them through Save Quote.
+- Verified by testing agent (iteration_29.json) 100%: attach (0 parse-rfq calls), persists
+  across save + reload, inline preview, delete, and Build Estimate regression all pass.
+- Note (hygiene, backlog): FilesSec.jsx is now ~734 lines; `ReviewParseModal` could be split
+  into its own file.
+
+
 ## 2026-06-16 — Bug 2: corr-flip "going rogue" (overrode manual input) + amber dots
 - **Amber dots removed** (green kept): grade/flute tiles now show ONLY a green dot for
   directly-stocked grades; the cloud-only amber "via Mullen fallback" dot is gone
