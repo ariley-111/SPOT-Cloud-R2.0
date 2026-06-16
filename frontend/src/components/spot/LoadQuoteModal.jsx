@@ -7,6 +7,7 @@ import {
 } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
 import { useAuth } from "../../context/AuthContext";
+import { Paperclip } from "lucide-react";
 
 // ─── Owner color dots — stable hash → tint ─────────────────────────────
 const OWNER_TINTS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#3b82f6","#84cc16"];
@@ -233,8 +234,19 @@ export default function LoadQuoteModal({ onClose }) {
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--spot-bg3)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                <div style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 13 }}>
+                <div style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 13,
+                  display: "flex", alignItems: "center", gap: 6 }}>
                   {it.est_num || "(no est#)"}
+                  {it.file_count > 0 && (
+                    <span data-testid={`load-files-badge-${it.id}`}
+                      title={`${it.file_count} attached file${it.file_count === 1 ? "" : "s"}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                        fontSize: 10, fontWeight: 700, color: "#06b6d4",
+                        background: "#06b6d418", border: "1px solid #06b6d455",
+                        borderRadius: 10, padding: "1px 6px" }}>
+                      <Paperclip size={11} /> {it.file_count}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--spot-text2)" }}>
                   {it.customer_name || (it.state || {}).custName || "—"}

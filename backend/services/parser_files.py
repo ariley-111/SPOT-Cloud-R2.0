@@ -101,6 +101,18 @@ async def list_parser_files(quote_id: str) -> List[Dict[str, Any]]:
     return [d async for d in cur]
 
 
+async def count_files_by_quote(quote_ids: List[str]) -> Dict[str, int]:
+    """Return {quote_id: non-deleted file count} for the given quote ids (one query)."""
+    ids = [str(q) for q in quote_ids if q]
+    if not ids:
+        return {}
+    cur = db[COL_PARSER_FILES].aggregate([
+        {"$match": {"quote_id": {"$in": ids}, "deleted_at": None}},
+        {"$group": {"_id": "$quote_id", "n": {"$sum": 1}}},
+    ])
+    return {d["_id"]: d["n"] async for d in cur}
+
+
 async def get_parser_file(file_id: str) -> Optional[Dict[str, Any]]:
     """Fetch one file's metadata (including disk_path, for download handler)."""
     doc = await db[COL_PARSER_FILES].find_one(

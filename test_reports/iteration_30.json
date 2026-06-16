@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the new paperclip file-count badge on Saved Quotes list in LoadQuoteModal. Backend API correctly returns file_count (TESTE2E1 -> 1, others -> 0). Frontend renders the saved-quotes list, but the badge does NOT appear next to TESTE2E1's Est# (data-testid `load-files-badge-<id>` is absent from the DOM). RCA: a race condition in LoadQuoteModal's data-loading useEffect causes the stale listDrafts() promise to resolve AFTER listQuotes() and overwrite the `items` state with draft objects that lack file_count.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "LoadQuoteModal.jsx (Saved Quotes tab)",
+        "issue": "Paperclip file-count badge never renders. TESTE2E1 row (with backend file_count=1) shows only the Est# text — no `load-files-badge-*` element exists in the DOM. Other zero-file rows correctly show no badge, but only because no badge ever renders at all.",
+        "selector": "[data-testid^='load-files-badge-']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Open Load modal -> click 'Saved Quotes' tab",
+        "issue": "useEffect at LoadQuoteModal.jsx:83 races. Initial mount fires listDrafts() (tab='drafts'). User clicks Saved Quotes -> setTab('saved') re-runs the effect, firing listQuotes(). Captured network shows order: GET /api/drafts (initial), GET /api/quotes?scope=mine (200, returns 6 items incl. TESTE2E1 with file_count=1), then a SECOND GET /api/drafts (200) resolves last and overwrites items. Confirmed by reading React state: items has 15 entries (matching drafts list length) and every item has `file_count: undefined / hasFc: False`, including TESTE2E1. Because drafts have no file_count field, `it.file_count > 0` is false for every row and the badge never renders.",
+        "affected_selectors": ["[data-testid='load-quote-list']", "[data-testid^='load-row-']", "[data-testid^='load-files-badge-']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix race condition in /app/frontend/src/components/spot/LoadQuoteModal.jsx useEffect (lines 82-95). Use an `ignore` flag or AbortController so that only the latest promise updates `items`. Example pattern: `let ignore=false; promise.then(d => { if(!ignore) setItems(d); }); return () => { ignore = true; };`",
+    "After fix: verify GET /api/quotes response wins when tab='saved', so TESTE2E1 row contains `<span data-testid='load-files-badge-<id>'>` with Paperclip icon + text '1'. Confirm zero-file rows have no badge.",
+    "Also investigate why /api/drafts is being called a second time after the saved tab is clicked (possible auto-save side effect refetching). Cancelling the in-flight drafts promise via ignore-flag will mask the symptom but the root cause of the extra fetch is worth checking."
+  ],
+  "critical_code_review_comments": [
+    "LoadQuoteModal.jsx useEffect (lines 82-95): no cancellation/ignore flag on promises. Any time tab/scope/ownerFilter changes while a previous fetch is in-flight, the late response overwrites state. Standard React anti-pattern.",
+    "Badge JSX itself (lines 240-249) is correct: checks `it.file_count > 0`, renders cyan paperclip + count with proper `data-testid='load-files-badge-${it.id}'`."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "0% (badge feature non-functional due to state race)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (used JWT login, NOT Microsoft SSO)",
+  "seed_data_creation": "None. Used existing seeded quote 'TESTE2E1' which the backend correctly reports as file_count=1.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reproduce by: login as admin -> click toolbar 'Load' -> click 'Saved Quotes' tab -> inspect React state on `[data-testid=modal-load-quote]`. items will contain 15 entries (drafts) instead of 6 (quotes). Also visible in network: a GET /api/drafts call resolves AFTER GET /api/quotes?scope=mine. Fix is a one-line ignore flag in useEffect. After fix, verify TESTE2E1 row has `[data-testid^='load-files-badge-']` with text containing '1' and cyan styling (#06b6d4).",
+  "rca of the issue": "STEP 1 (reproduction): Logged in as admin, opened Load modal, switched to Saved Quotes tab, looked for `[data-testid^='load-files-badge-']` -> 0 elements found. STEP 2 (backend verify): curl GET /api/quotes?limit=100&scope=mine -> TESTE2E1 has `file_count: 1`. STEP 3 (frontend network verify): Captured GET /api/quotes?scope=mine response in Playwright -> body is a 6-element list including TESTE2E1 with file_count=1 (type int). STEP 4 (state inspection): Walked React fiber on modal to read items hook state -> 15 items, ALL with `file_count: undefined`, including TESTE2E1. STEP 5 (root cause): Network trace after clicking Saved Quotes shows order [drafts(200), quotes(200), drafts(200)]. The trailing drafts call resolves last and overwrites items with draft objects which lack file_count. Mitigation: add ignore flag to useEffect at LoadQuoteModal.jsx:83-95 so stale promises do not call setItems."
+}

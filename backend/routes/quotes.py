@@ -134,7 +134,13 @@ async def list_quotes(
     cursor = db[COL_QUOTES].find(query, {"_id": 0}).sort("updated_at", -1).limit(limit)
     docs = await cursor.to_list(length=limit)
     quotes = [Quote(**d) for d in docs]
-    return await _attach_owner_names(quotes)
+    result = await _attach_owner_names(quotes)
+    # Attach attached-file counts (📎 badge in the Load Quote list) — one query.
+    from services.parser_files import count_files_by_quote
+    counts = await count_files_by_quote([q.get("id") for q in result])
+    for q in result:
+        q["file_count"] = counts.get(q.get("id"), 0)
+    return result
 
 
 @quotes_router.post("", response_model=Quote)
