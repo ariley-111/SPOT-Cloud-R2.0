@@ -11,6 +11,27 @@ Append-only log of shipped features and fixes.
 Append-only log of shipped features and fixes.
 
 
+## 2026-06-16 — Bug 2: corr-flip "going rogue" (overrode manual input) + amber dots
+- **Amber dots removed** (green kept): grade/flute tiles now show ONLY a green dot for
+  directly-stocked grades; the cloud-only amber "via Mullen fallback" dot is gone
+  (`ItemSetupSec.jsx` grade tile render). Legacy parity — green dots only.
+- **Corr-flip root cause:** the auto-flip `useEffect` (ItemSetupSec L148+) had no memory of
+  manual intent. ~1s after the user typed a dimension OR clicked "Flip Corr", the debounced
+  engine recompute returned and the effect re-fired, swapping W/L back and re-setting
+  `corrFlipped` (toast "Corr direction auto-flipped"). This fought BOTH manual typing and the
+  flip button — confirmed via timed repro (iteration_27.json).
+- **Fix:** added a persistent `corrManual` flag to item state (`defaults.js`). It is set true
+  by `onFlipCorr` and by the Width/Length `onChange` handlers (per keystroke). The auto-flip
+  effect now early-returns when `corrFlipped || s.corrManual`. The engine still gets ONE
+  auto-suggest pass on FRESH (parser-entered/untouched) dims — so the helpful behavior is
+  preserved, but it never overrides explicit user intent. Persists with the saved quote.
+- Verified by testing agent (iteration_28.json) 100%: typed spec dims persist (+1s/+2.5s/+5s),
+  Flip Corr persists across clicks, no auto-revert, no toast, one-time fresh-dim auto-flip
+  still fires, 0 console errors. (MP uses the same shared component/state.)
+- The parser entering dims backwards (the upstream cause) is logged separately under
+  `PARSER_IMPROVEMENTS_BACKLOG.md` (P1) per user.
+
+
 ## 2026-06-16 — Bug: board-substitution warning "flashed then disappeared"
 - **Root cause:** cloud `acceptSub`/`forceSub` in `ItemSetupSec.jsx` overwrote `boardGrade`
   (and `medium`) with the fallback value (e.g. ECT 32 → 200). The next engine calc then saw
