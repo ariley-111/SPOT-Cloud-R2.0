@@ -1,0 +1,23 @@
+{
+  "summary": "RETEST of iteration_25 fix for board substitution. CONFIRMED: acceptSub/forceSub no longer overwrite boardGrade — both the persistent green '✓ Substitution approved' flag and the persistent blue 'ℹ Spec'd board' flag now render and stay (verified 11/11 polls across 5000ms). Economics-panel banner switches to '✓ Stock substitution approved' / 'ℹ Spec'd board — custom order' and persists. SPEC row keeps ECT 32 (not overwritten to 200); RUNNING row correctly shows 200. Zero console errors. MP path: BOM Builder modal opens and is functional but Save is disabled with 0 items (not a regression).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_26.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix in ItemSetupSec.jsx acceptSub (L367-375) / forceSub (L376-382) matches legacy spot_r1_5.jsx parity: state-flags only, no boardGrade/medium overwrite. This correctly preserves hasFb on the next engine call so the render guard `{isAccepted && hasFb}` (L522) and `{isForced && hasFb}` (L533) both evaluate true and the confirmation pills persist.",
+    "BOM Builder modal in MP flow has UX gap: user must select a Display Style template OR click '+ Add component' before 'Save BOM' becomes enabled. Saving with 0 items silently no-ops. Consider disabling/hiding 'Save BOM (0 items)' more prominently or showing a hint. Not a substitution-fix regression — separate UX issue."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% — Simple Accept (11/11 polls), Simple Force (11/11 polls), 0 errors, all spec/running/banner assertions match"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (blue Sign in, not MS SSO)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Board substitution fix is fully confirmed. SIMPLE Accept and Force flows both render persistent confirmation pills. acceptSub/forceSub in /app/frontend/src/components/spot/ItemSetupSec.jsx L367-382 correctly set ONLY state flags (boardSubstitution + fallbackAccepted, plus buyMinBoard='Yes' for Force) without overwriting boardGrade/medium. Render guards `isAccepted && hasFb` and `isForced && hasFb` evaluate true because the next engine recompute still sees the spec grade and still returns gradeFallback. Verified with playwright: 11/11 polls over 5000ms show flags+banners stay visible, decision-needed goes away, SPEC row shows ECT 32 preserved, RUNNING shows 200, 0 page errors, 0 console errors. MP-path BOM Builder modal opens with display-style template picker — Save disabled until items added; this is expected UX, not the substitution-fix bug.",
+  "rca of the issue": "Original bug (iter 25): acceptSub() / forceSub() mutated patch.boardGrade = r.gradeFallback before applying state. Next engine recompute saw boardGrade='200' === stock grade, returned no gradeFallback, so hasFb went false. The render guards `isAccepted && hasFb` (L525) and `isForced && hasFb` (L538) suppressed the confirmation pills, producing the user-perceived 'flash then disappear'. Fix in this iteration: removed the patch.boardGrade/medium writes; setManyFields now only sets boardSubstitution + fallbackAccepted (+ buyMinBoard:'Yes' for Force). Verified: SPEC row keeps ECT 32; RUNNING row correctly shows 200; pills render and stay; banners persist; no console errors; legacy spot_r1_5.jsx L5918-5919 parity restored."
+}

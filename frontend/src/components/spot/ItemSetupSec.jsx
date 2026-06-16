@@ -365,22 +365,19 @@ function BoardStatusBar({ s, r, setField }) {
   const exceedsSheetLib = !!(r?.exceedsSheetLibrary);
 
   const acceptSub = () => {
-    // Write the substituted grade/medium back to the selectors so the UI
-    // tiles reflect what the engine is actually running. Without this the
-    // selectors stay on the spec values and the user sees a desync.
-    const patch = { boardSubstitution: "accepted", fallbackAccepted: true };
-    if (r?.gradeFallback) patch.boardGrade = r.gradeFallback;
-    if (r?.mediumFallback?.medium) patch.medium = r.mediumFallback.medium;
-    setManyFields(patch);
+    // Legacy parity (spot_r1_5.jsx L5918): just acknowledge the substitution.
+    // Do NOT overwrite boardGrade/medium with the fallback — keep the SPEC
+    // values so the engine keeps reporting gradeFallback (hasFb stays true)
+    // and the green "✓ Substitution approved" confirmation flag renders
+    // persistently. The RUNNING row already shows the substituted grade.
+    setManyFields({ boardSubstitution: "accepted", fallbackAccepted: true });
     setTilesOpen(false);
   };
   const forceSub = () => {
-    // Same write-back; "forced" additionally requires Buy Min mode for the
-    // stock to be ordered at mill-min quantities.
-    const patch = { boardSubstitution: "forced", fallbackAccepted: true, buyMinBoard: "Yes" };
-    if (r?.gradeFallback) patch.boardGrade = r.gradeFallback;
-    if (r?.mediumFallback?.medium) patch.medium = r.mediumFallback.medium;
-    setManyFields(patch);
+    // Legacy parity (spot_r1_5.jsx L5919): force the SPEC'd board as a custom
+    // order at mill-min qty. Keep the spec grade — overwriting it to the
+    // fallback would force the wrong (substituted) board.
+    setManyFields({ boardSubstitution: "forced", fallbackAccepted: true, buyMinBoard: "Yes" });
     setTilesOpen(false);
   };
   const revertToStock = () => { setField("boardSubstitution", "accepted"); setField("buyMinBoard", "Auto"); setTilesOpen(false); };
