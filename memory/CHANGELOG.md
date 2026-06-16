@@ -10,6 +10,25 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+
+## 2026-06-16 — Route Comparison panel 1:1 legacy parity
+- **Backend** `routing.py::compare_routes`: now returns `breakeven {qty, die}`, `perPc`,
+  `cadSaberNeeded`, and `isStock` on the CAD detail (Crest already had it) — verbatim
+  legacy `spot_r1_5.jsx` L835-890. Locked by `tests/test_route_comparison_parity.py` (3/3).
+- **Frontend** `RightDashboard.jsx::RouteComparison`: rebuilt to match legacy exactly —
+  winner badge "{route} wins" with per-route colors (CAD #22c55e / Crest #3b82f6 / Bobst
+  #a855f7), all-routes verdict + "Routes are equal" case, breakeven lines ("Crest breaks
+  even at N pcs" / "CAD wins below N pcs" / "Crest wins if die < $X"), "✓ Crest path uses
+  stock sheets", "Bobst not viable: <reason>", and "Bobst pays mill min" notes; sheet dims
+  now 1-decimal.
+- **Switch buttons** now fully functional & legacy-parity: Switch to Crest/CAD/Bobst force
+  the route, auto-fill a die ($1,200 Crest / $1,800 Bobst) when none is set, collapse the
+  panel, and toast; forced state shows "✓ Route forced to X" + "Reset to Auto".
+- Verified by testing agent (iteration_24.json): 10/10 acceptance criteria, frontend 100%.
+- Note (unrelated): Entra SSO `/api/auth/entra/login` 500s in PREVIEW because
+  ENTRA_TENANT_ID is set to "spot-multi-user" (invalid tenant). Use email/password login in
+  preview. Prod env should set a valid tenant id.
+
 ## 2026-02-10 — MP-Individual UX polish (auto-scroll, qty selection, freight treatment, Job Totals)
 
 User feedback after the per-component layout shipped: (a) auto-scroll on every
