@@ -11,6 +11,19 @@ Append-only log of shipped features and fixes.
 Append-only log of shipped features and fixes.
 
 
+## 2026-06-16 — Delete drafts (individual + all)
+- **Backend:** new `DELETE /api/drafts` (delete all of the user's drafts + purge their parser
+  files); existing `DELETE /api/drafts/{id}` for one. Both curl-verified.
+- **Context:** `QuoteContext` `deleteDraftById(id)` (deletes backend draft + drops the tab if
+  open) and `clearAllDrafts()` (deletes all + resets to one blank tab); exposed in value.
+- **Frontend:** `LoadQuoteModal` Drafts tab — per-row `×` delete (data-testid
+  `load-draft-delete-<id>`, stopPropagation so it doesn't open the draft) + a drafts-only
+  "Delete all" button (`load-delete-all-drafts`). Both guarded by window.confirm.
+- Verified by testing agent (iteration_32.json) 100%, 6/6 scenarios, 0 console errors:
+  individual delete (accept + cancel), delete-all (correct count, empty state, tab-bar reset
+  to blank), button hidden on Saved tab + when empty, Saved tab unaffected.
+
+
 ## 2026-06-16 — Saved-quote attached-files badge (📎 N)
 - **Backend:** `quotes.py` list_quotes now returns `file_count` per quote via new
   `parser_files.count_files_by_quote()` (single aggregation).

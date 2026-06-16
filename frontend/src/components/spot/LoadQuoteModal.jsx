@@ -352,7 +352,7 @@ export default function LoadQuoteModal({ onClose }) {
                     title="Delete draft"
                     style={{ all: "unset", cursor: "pointer", fontSize: 16, lineHeight: 1,
                       color: "var(--spot-text3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--spot-err)"; e.stopPropagation(); }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--spot-err)"; }}
                     onMouseLeave={(e) => e.currentTarget.style.color = "var(--spot-text3)"}>×</button>
                 </div>
               </div>
