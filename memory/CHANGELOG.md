@@ -11,6 +11,19 @@ Append-only log of shipped features and fixes.
 Append-only log of shipped features and fixes.
 
 
+## 2026-06-16 — Saved-quote attached-files badge (📎 N)
+- **Backend:** `quotes.py` list_quotes now returns `file_count` per quote via new
+  `parser_files.count_files_by_quote()` (single aggregation).
+- **Frontend:** `LoadQuoteModal.jsx` saved-quote rows show a cyan lucide-Paperclip badge with
+  the attached-file count next to the Est# (data-testid `load-files-badge-<id>`); hidden when 0.
+- **Also fixed (pre-existing):** a fetch race in the modal's load `useEffect` — a stale
+  `listDrafts()` could resolve after `listQuotes()` and overwrite the list with drafts (which
+  lack file_count), hiding the badge. Added an ignore-flag cleanup so only the latest fetch
+  updates state.
+- Verified by testing agent (iteration_31.json) 100%: badge renders with correct count,
+  absent on zero-file quotes, survives rapid tab toggles, 0 console errors.
+
+
 ## 2026-06-16 — Bug 3: attach RFQ files without parsing
 - **Gap:** files only persisted to the backend when the user ran the Anthropic parser
   ("Build Estimate"). Files uploaded for a manually-built quote stayed client-side and were
