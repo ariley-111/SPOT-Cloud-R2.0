@@ -631,8 +631,10 @@ function BoardStatusBar({ s, r, setField }) {
                 {getGradesForFlute(s.flute).map((g) => {
                   const directStock = gradeAvail.stocked.has(g);
                   const viaFallback = gradeAvail.viaFallback.has(g);
-                  const stockColor = directStock ? "var(--spot-green)"
-                    : viaFallback ? "#f59e0b" : null;
+                  // Legacy parity: ONLY a green dot for grades directly stocked
+                  // for this flute. The amber "via Mullen fallback" dot was a
+                  // cloud-only addition — removed 2026-06-16 per user request.
+                  const stockColor = directStock ? "var(--spot-green)" : null;
                   const stockTitle = directStock ? `${g} (in stock for ${s.flute} flute)`
                     : viaFallback ? `${g} (substitutes to Mullen equiv — in stock)`
                     : `${g} (not stocked for ${s.flute} flute — custom order)`;

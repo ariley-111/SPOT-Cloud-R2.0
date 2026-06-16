@@ -1,0 +1,53 @@
+{
+  "summary": "DIAGNOSTIC RUN ONLY (no fix attempted). Reproduced the user's reported bug end-to-end in Simple-quote mode: both (a) manually typing the spec orientation (72.625 × 49.25) and (b) clicking the 'Flip Corr' button get auto-overridden within ~1-2 seconds by the auto-flip useEffect at ItemSetupSec.jsx L148-172. The engine response that arrives ~1-2s after the manual change is what triggers the revert (async race). Multi-Part repro was skipped because the bug was already definitively confirmed in Simple mode and the trigger (auto-flip effect on engine pipeline state) is shared code.",
+  "rca of the issue": {
+    "root_cause": "The auto-flip useEffect at /app/frontend/src/components/spot/ItemSetupSec.jsx L148-172 fires whenever r._pipeline.{exceedsSheetLibrary, preBuyMinHasPrice, preBuyMinMeetMin, preBuyMinPricable, flipWouldHelp} or corrFlipped changes. When the user types the SPEC orientation (e.g. 72.625 × 49.25), the engine recomputes /api/engine/calculate-all (~1-1.5s round-trip), returns flipWouldHelp=True (because the OTHER orientation 49.25 × 72.625 IS the one that fits the sheet library at the parsed grade), the effect then swaps W↔L back and sets corrFlipped=true. Net effect: user's typed values get yanked back and the red 'CORR FLIPPED' badge appears.",
+    "evidence_timeline_test1": [
+      "t=0 baseline: W=49.25 L=72.625 flip='⇄ Flip Corr' (14 prior calc responses)",
+      "t≈0 typed W=72.625 → W=72.625 L=72.625 flip='⇄ Flip Corr' (calc not yet returned)",
+      "t+1.5s after typing W only: W=72.625 L=72.625 flip='⇄ Flip Corr' (2 new calc responses fired, but no flip yet because W==L)",
+      "t≈3s typed L=49.25 → W=72.625 L=49.25 flip='⇄ Flip Corr' (THE SPEC ORIENTATION IS BRIEFLY SHOWN)",
+      "t+1.5s after typing L: SWAPPED BACK to W=49.25 L=72.625 flip='⇄ CORR FLIPPED' (4 new calc responses fired in between — the auto-flip effect fired in response)",
+      "t+4s final: W=49.25 L=72.625 flip='⇄ CORR FLIPPED' (sticks reverted)",
+      "Toast visible at bottom right: 'Corr direction auto-flipped — piece fits stock sheets. Verify with customer.'"
+    ],
+    "evidence_timeline_test2_flip_button": [
+      "baseline: W=49.25 L=72.625 flip='⇄ CORR FLIPPED' (already auto-flipped from test 1)",
+      "Click btn-flip-corr → IMMEDIATE: W=72.625 L=49.25 flip='⇄ Flip Corr' (onFlipCorr ran, corrFlipped now false, W/L swapped)",
+      "t+1s: REVERTED to W=49.25 L=72.625 flip='⇄ CORR FLIPPED' (4 new calc responses, auto-flip effect fired again)",
+      "t+2.5s, +5s: still reverted",
+      "Second click: same pattern — immediate flip, then reverts ~1s later"
+    ],
+    "why_legacy_parity_logic_still_breaks_user_intent": "Per the code comment at L44-54: 'manual flip simply toggles corrFlipped + swaps W/L. No persistent manual-override flag — legacy didn't have one, and the auto-flip useEffect re-evaluates on the new dimensions just like it would after any other edit.' This is the design problem: corrFlipped goes false after the user clicks Flip Corr (because they just flipped FROM the auto-flipped state back to spec), and then the auto-flip effect's `if (corrFlipped) return` guard at L149 NO LONGER blocks it — so the effect re-fires and re-applies the auto-flip. The same applies to typing: when the user types spec orientation, corrFlipped is false (they never clicked the button) so the guard does not protect their manual edit.",
+    "user_scenario_oversize_caveat": "User reported the actual case is 3 oversize trays where main agent's curl tests showed flipWouldHelp=False in both orientations. In that case the effect's `if (!pip.flipWouldHelp) return` guard at L168 SHOULD prevent the revert. This testing run used a non-oversize parse (49.25 × 72.625 / 33# Kla-White → engine substituted to Kemi-Lite/Kraft with a 60×120 stock sheet found, so flipWouldHelp=True for the spec orientation). Recommend main agent (1) instrument the user's actual MP quote to log r._pipeline.flipWouldHelp values when the revert occurs and (2) decide whether to add a manual-override flag that disables the auto-flip effect after any user-initiated W/L edit OR Flip Corr click.",
+    "calc_response_correlation": "Manual change at t≈3s (typing L). Calc responses fired at t≈4.5s (2x), then again at t≈5.2s (2x). The auto-flip swap occurred at the snapshot taken at t≈4.5s (T+1.5s after L). So the revert coincides 1:1 with the arrival of a calc response containing flipWouldHelp=True for the just-typed orientation."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ItemSetupSec auto-flip useEffect", "issue": "Auto-flip effect overrides manually-typed dims and manually-clicked Flip Corr button within ~1s of any user edit, because it re-evaluates on every engine recalc and has no persistent manual-override memory. User loses ability to set spec orientation.", "selector": "[data-testid=\"input-one-up-w\"], [data-testid=\"input-one-up-l\"], [data-testid=\"btn-flip-corr\"]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Type spec dims OR click Flip Corr in Simple quote (and almost certainly Multi-Part as well — shared component)", "issue": "Async race: calc API responds ~1-1.5s after user edit. Auto-flip useEffect at L148-172 re-fires on the new r._pipeline state and swaps W/L back + sets corrFlipped=true. Toast 'Corr direction auto-flipped' appears confirming the override.", "affected_selectors": ["[data-testid=\"input-one-up-w\"]", "[data-testid=\"input-one-up-l\"]", "[data-testid=\"btn-flip-corr\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Add a persistent manual-override flag (e.g., s.userTouchedDims or s.manualOrientation) that the auto-flip useEffect honors — once set, the effect must early-return regardless of pipeline state. Set the flag in onFlipCorr (L44-54) and in the Width/Length onChange handlers (L214-215).",
+    "Alternative: re-arm corrFlipped to TRUE in onFlipCorr only when going FROM auto-flipped state, but ALSO record a 'manual intent' timestamp; auto-flip effect must not fire within N seconds of manual intent OR for the lifetime of the active item.",
+    "Verify the fix against the user's actual MP quote (Tray 1/2/3 oversize ECT 44/250 · B · Kla-White/Kraft) where flipWouldHelp=False — the bug there may be a DIFFERENT trigger (e.g., near-square reset effect at L138-146, or the MP pipeline returning stale flipWouldHelp=True briefly before recalc). The main agent should add temporary console.log of pip.flipWouldHelp and pip.exceedsSheetLibrary inside the effect when reproducing the user's exact data to confirm."
+  ],
+  "critical_code_review_comments": [
+    "ItemSetupSec.jsx L44-54 onFlipCorr's comment explicitly admits 'No persistent manual-override flag — legacy didn't have one, and the auto-flip useEffect re-evaluates on the new dimensions just like it would after any other edit.' This is the design defect — strict legacy parity here directly causes the user-reported bug. Departing from legacy with a manual-override flag is required.",
+    "ItemSetupSec.jsx L148-172 auto-flip effect deps include r?._pipeline?.flipWouldHelp etc. — every engine recalc that flips this value will fire the effect. Combined with the absence of a manual flag, any post-edit calc response will undo the user's edit if flipWouldHelp=True for that orientation.",
+    "ItemSetupSec.jsx L138-146 near-square reset effect ALSO mutates corrFlipped silently — confirm this isn't the trigger in the oversize-tray case (49.25 vs 72.625 are not near-square so it shouldn't be, but 41.375 × 73.625 / 48.3125 × 73.625 are also not near-square, so this effect is likely innocent here)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested)", "frontend": "bug 100% reproduced"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Repro is deterministic in Simple quote with W=49.25 L=72.625 / ECT 44 / B / Kemi-Lite (or whatever liner the system substitutes to). Type spec orientation (swap W and L) OR click btn-flip-corr — within ~1-1.5s a calc response arrives, the auto-flip useEffect (ItemSetupSec.jsx L148-172) fires, swaps W↔L back, and sets corrFlipped=true. Toast 'Corr direction auto-flipped' confirms. The Multi-Part case with the user's oversize trays was not tested in this iteration; if main agent's fix only adds a manual-override flag, retest BOTH Simple and Multi-Part. If oversize-tray case still reverts after the manual-override flag, investigate whether r._pipeline.flipWouldHelp is briefly True before settling False (stale pre-Buy-Min calc) — that would still trigger the effect even with the gate at L168."
+}
