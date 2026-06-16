@@ -11,6 +11,24 @@ Append-only log of shipped features and fixes.
 Append-only log of shipped features and fixes.
 
 
+## 2026-06-16 — Bug: board-substitution warning "flashed then disappeared"
+- **Root cause:** cloud `acceptSub`/`forceSub` in `ItemSetupSec.jsx` overwrote `boardGrade`
+  (and `medium`) with the fallback value (e.g. ECT 32 → 200). The next engine calc then saw
+  the stock grade and returned NO `gradeFallback` → `hasFb=false` → the green/blue
+  confirmation pills (guarded by `isAccepted && hasFb` / `isForced && hasFb`) never rendered.
+  User perceived this as the warning flashing then vanishing. Also: "Force spec'd board" was
+  wrongly forcing the *substituted* board (200) instead of the *spec* board (ECT 32).
+- **Fix (1:1 legacy spot_r1_5.jsx L5918-5919):** acceptSub/forceSub now set ONLY state flags
+  (`boardSubstitution` + `fallbackAccepted`, plus `buyMinBoard:'Yes'` for Force); no
+  `boardGrade`/`medium` overwrite. SPEC keeps ECT 32, RUNNING shows 200, pills persist.
+  Verified by testing agent (iteration_26.json) 100%, 11/11 polls, both flows, 0 errors.
+- **Confirmed:** engine substitution RULES already match legacy — `/api/engine/calculate`
+  for ECT 32·B·Kemi-Lite returns `gradeFallback="200"`, `stockMode=true` (ECT 32→200, Rule 4).
+- **Note:** the green/amber dots on grade/flute tiles are a CLOUD-ONLY availability hint
+  (green = stocked for that flute, amber = stocked via Mullen fallback) from the
+  `gradeAvailability` API; legacy has none. Left in place pending user decision.
+
+
 ## 2026-06-16 — Route Comparison panel 1:1 legacy parity
 - **Backend** `routing.py::compare_routes`: now returns `breakeven {qty, die}`, `perPc`,
   `cadSaberNeeded`, and `isStock` on the CAD detail (Crest already had it) — verbatim
