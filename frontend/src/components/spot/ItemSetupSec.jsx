@@ -149,11 +149,12 @@ export default function ItemSetupSec({ result }) {
 
   useEffect(() => {
     if (corrFlipped) return;
-    // Manual-override guard: once the estimator has manually flipped corr or
-    // typed a dimension (corrManual), NEVER auto-flip for this item again.
-    // This is the key fix for the "auto-flip fights manual input" bug — the
-    // engine may SUGGEST an orientation on fresh (e.g. parser-entered) dims,
-    // but it must not override explicit user intent on every recompute.
+    // Manual-override guard: once the estimator has manually clicked Flip Corr
+    // (corrManual), NEVER auto-flip for this item again — they've taken explicit
+    // control of orientation. Plain typing does NOT set corrManual, so auto-flip
+    // still fires on freshly-typed dims (legacy parity, spot_r1_5.jsx L3941-3957);
+    // the 400ms engine debounce (useEngine.js) means it fires on SETTLED dims,
+    // not per-keystroke, so it doesn't yank the dims while you type.
     if (s.corrManual) return;
     const w = String(s.oneUpW || "");
     const l = String(s.oneUpL || "");
@@ -219,8 +220,8 @@ export default function ItemSetupSec({ result }) {
             </div>
             {s.quoteMode !== "Sheet Size" ? (
               <>
-                <F l="Width"><Num value={s.oneUpW} onChange={(v) => setManyFields({ oneUpW: v, corrManual: true })} step="0.0001" min="0" data-testid="input-one-up-w" /></F>
-                <F l="Length"><Num value={s.oneUpL} onChange={(v) => setManyFields({ oneUpL: v, corrManual: true })} step="0.0001" min="0" data-testid="input-one-up-l" /></F>
+                <F l="Width"><Num value={s.oneUpW} onChange={(v) => setManyFields({ oneUpW: v })} step="0.0001" min="0" data-testid="input-one-up-w" /></F>
+                <F l="Length"><Num value={s.oneUpL} onChange={(v) => setManyFields({ oneUpL: v })} step="0.0001" min="0" data-testid="input-one-up-l" /></F>
                 {/* Flip Corr — ALWAYS visible per legacy spot_r1_5.jsx */}
                 <button onClick={onFlipCorr} data-testid="btn-flip-corr"
                   title="Swap Width ↔ Length (changes corrugation direction — requires customer approval)"

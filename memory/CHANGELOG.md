@@ -10,6 +10,29 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-16 — Corr auto-flip parity (option A): restore legacy auto-flip on typed dims
+- **Gap found (via legacy source diff, not docs):** cloud auto-flip effect was a faithful
+  port of legacy `spot_r1_5.jsx` L3941-3957 EXCEPT it added `if (s.corrManual) return;`
+  AND set `corrManual:true` on EVERY width/length keystroke (`ItemSetupSec.jsx` L222-223).
+  Net effect: once a user hand-typed any dim, auto-flip was permanently disabled — so
+  "CORR FLIPPED" never auto-lit red the way legacy does. This was the sole behavioral
+  divergence the user identified on the ECT 44 · B · Kla-White/Kraft · 76.625×49.25 case.
+- **Fix (option A — auto-flip ON, debounced):** stopped setting `corrManual` on plain typing;
+  it is now set ONLY by the manual Flip Corr button (L54). Auto-flip therefore fires on
+  freshly-typed dims again (legacy parity), and the existing 400ms engine debounce
+  (`useEngine.js` L23) means it fires on SETTLED dims — avoiding legacy's per-keystroke
+  dim-bouncing jank. Manual Flip Corr still sets `corrManual` so it never gets fought.
+- **Verified:** engine confirms unflipped 76.625×49.25 → exceedsSheetLibrary+flipWouldHelp+
+  Buy Min; flipped 49.25×76.625 → stock 60×120, no Buy Min. Live UI smoke test: typing the
+  dims auto-swaps W/L, lights "⇄ CORR FLIPPED" red, board flips to IN STOCK, toast fires.
+- **Confirmed NOT a bug (1:1 with legacy source):** `computeLayout` does not rotate in either
+  app (legacy L261-272 ≡ cloud); ECT 44 → 275 Mullen fallback (legacy L197); inside "Kraft"
+  stored as `"None"` and only DISPLAYED as Kraft (legacy L1218/L2104 ≡ cloud); custom-order
+  Buy Min on oversized pieces; Route Comparison hidden when Crest not viable. No board/grade
+  substitution fires for this scenario (correct). Registry doc's "ECT 44 → 200#" is loose
+  wording; code authority is 275#.
+
+
 
 ## 2026-06-16 — Delete drafts (individual + all)
 - **Backend:** new `DELETE /api/drafts` (delete all of the user's drafts + purge their parser
