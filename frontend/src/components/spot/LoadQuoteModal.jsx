@@ -82,6 +82,7 @@ export default function LoadQuoteModal({ onClose }) {
   // Load list whenever tab/scope/owner filter changes
   useEffect(() => {
     setBusy(true);
+    let ignore = false;
     let promise;
     if (tab === "drafts") {
       // Drafts stay personal per design — no scope toggle wired through.
@@ -91,7 +92,14 @@ export default function LoadQuoteModal({ onClose }) {
       if (ownerFilter) params.owner_id = ownerFilter;
       promise = listQuotes(params);
     }
-    promise.then(setItems).catch(() => setItems([])).finally(() => setBusy(false));
+    // Ignore-flag guards against a stale in-flight fetch (e.g. the initial
+    // drafts load) resolving AFTER a newer one and overwriting `items` —
+    // that race was dropping the per-quote file_count on the Saved tab.
+    promise
+      .then((d) => { if (!ignore) setItems(d); })
+      .catch(() => { if (!ignore) setItems([]); })
+      .finally(() => { if (!ignore) setBusy(false); });
+    return () => { ignore = true; };
   }, [tab, scope, ownerFilter]);
 
   // Owner dropdown options — only meaningful when in team scope
