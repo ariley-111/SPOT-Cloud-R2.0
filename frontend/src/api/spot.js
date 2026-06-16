@@ -174,6 +174,16 @@ export const sheetLibraryPriced = (body) =>
 // ─── Saved RFQ files (quote-lifetime persistence) ───────
 export const listParserFiles = (quoteId) =>
   api.get(`/parser/files?quote_id=${encodeURIComponent(quoteId)}`).then((r) => r.data.files || []);
+// Attach files to a quote for reference WITHOUT running the parser.
+export const uploadParserFiles = (files, quoteId) => {
+  const fd = new FormData();
+  for (const f of files || []) fd.append("files", f);
+  fd.append("quote_id", quoteId);
+  return api.post("/parser/files/upload", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 120000,
+  }).then((r) => r.data);
+};
 export const reassignParserFiles = (fromId, toId) =>
   api.post("/parser/files/reassign", { from_id: fromId, to_id: toId }).then((r) => r.data);
 export const downloadParserFileUrl = (fileId) =>

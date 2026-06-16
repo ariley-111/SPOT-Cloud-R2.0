@@ -734,6 +734,46 @@ async def reassign_files(body: ReassignBody, _u: User = Depends(get_current_user
     return {"updated": n, "from_id": body.from_id, "to_id": body.to_id}
 
 
+@router.post("/files/upload")
+async def upload_reference_files(
+    files: List[UploadFile] = File(default=[]),
+    quote_id: str = Form(...),
+    u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Persist RFQ/reference files to a quote WITHOUT running the parser.
+
+    Lets estimators attach files for reference even when they build the
+    quote manually (no Anthropic parse). Files are stored exactly like
+    parse-rfq's persisted uploads (source='upload') so they appear in the
+    Saved RFQ files list and survive save/reload + the draft→quote reassign
+    migration."""
+    qid = (quote_id or "").strip()
+    if not qid:
+        raise HTTPException(400, "quote_id is required")
+    if not files:
+        raise HTTPException(400, "No files provided")
+    saved: List[Dict[str, Any]] = []
+    for f in files:
+        try:
+            content = await f.read()
+            if not content:
+                continue
+            meta = await _parser_files.save_parser_file(
+                quote_id=qid,
+                filename=f.filename or "file",
+                mime=f.content_type or "application/octet-stream",
+                content=content,
+                uploaded_by=getattr(u, "email", "") or "",
+                source="upload",
+            )
+            saved.append({"id": meta["id"], "filename": meta["filename"], "bytes": meta["bytes"]})
+        except Exception as e:
+            logger.warning(f"reference file persist failed for {getattr(f, 'filename', '?')}: {e}")
+    if not saved:
+        raise HTTPException(400, "No files could be saved")
+    return {"persistedFiles": saved, "count": len(saved)}
+
+
 @router.get("/files/{file_id}/download")
 async def download_file(file_id: str, _u: User = Depends(get_current_user)):
     """Stream the original bytes back to the user."""

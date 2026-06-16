@@ -1,0 +1,69 @@
+{
+  "summary": "End-to-end UI testing of the new 'Attach to quote' parse-free upload flow (FilesSec.jsx + POST /api/parser/files/upload). All 5 acceptance criteria pass: attach-without-parse works, files persist across save+reload via the draft→quote reassign migration, preview modal opens with correct content, delete works, and the existing Build Estimate parser flow remains unaffected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "attach_without_parse": {
+      "status": "PASS",
+      "evidence": {
+        "POST /api/parser/files/upload calls": 1,
+        "POST /api/parser/parse-rfq calls": 0,
+        "parser-inline-spinner shown": false,
+        "parse-review-modal shown": false,
+        "files-list cleared after attach": true,
+        "saved-rfq-files visible after attach": true,
+        "saved file rows": 1
+      }
+    },
+    "persistence_after_save_reload": {
+      "status": "PASS",
+      "evidence": {
+        "saved-rfq-files visible after reload": true,
+        "saved-rfq-dl- buttons after reload": 1,
+        "note": "Draft→quote reassign migration confirmed working — file survived Save Quote + full page reload."
+      }
+    },
+    "preview_open": {
+      "status": "PASS",
+      "evidence": {
+        "FilePreviewModal opened on ↓ click": true,
+        "preview rendered correct text content": "This is a test RFQ reference file for SPOT corrugated quoting. / Customer: TestCo / Qty: 1000",
+        "shows metadata": "text/plain · 90 B · text"
+      }
+    },
+    "delete": {
+      "status": "PASS",
+      "evidence": {
+        "saved-rfq-dl count before delete": 1,
+        "saved-rfq-dl count after delete (confirm accepted)": 0
+      }
+    },
+    "regression_build_estimate": {
+      "status": "PASS",
+      "evidence": {
+        "btn-build-estimate exists": true,
+        "disabled when no staged RFQ file": true,
+        "button label": "Build Estimate — no RFQ file",
+        "comment": "Build Estimate flow unchanged; existing parser code path unaffected."
+      }
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FilesSec.jsx now 734 lines (above the 700-line guideline) — the ReviewParseModal sub-component (~380 lines starting L353) could be split into its own file for maintainability. Not a bug, just hygiene.",
+    "attachFiles() uses filesQuoteId = s.quoteId || active?.id — the same id stream the parser uses, so the draft→quote reassign hook in autoSave/Toolbar.onSave naturally covers attach-without-parse files. Implementation is clean and reuses the proven persistence path."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (curl-verified by main agent, plus the upload+list path exercised here via UI)", "frontend": "100%"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (verified, JWT login works)",
+  "seed_data_creation": "Used estimate SA-260616-183745 (default new tab). Attached file test_attach_rfq.txt (90 B). Deleted at end of test — no lingering test data in saved files. Customer ident field was filled with TEST_AttachCo (in CUSTOMER IDENT input; the top-level CUSTOMER field requires the customer-search picker — not blocking since the quote/estimate id used is the active draft id which already persists files server-side).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug 3 (attach RFQ files without parsing) is fully working end-to-end through the UI. Network-level verification: exactly one POST /api/parser/files/upload fires on Attach to quote, zero POST /api/parser/parse-rfq calls (parser correctly skipped). Saved file persists after page reload, proving the draft→quote id reassign migration in Toolbar.onSave handles parse-free uploads identically to parser-persisted files. FilePreviewModal renders text content inline. All testids (sec-files, files-drop-zone, files-browse-input, files-list, btn-attach-files, saved-rfq-files, saved-rfq-<id>, saved-rfq-dl-<id>, saved-rfq-rm-<id>, btn-build-estimate, parser-inline-spinner, parse-review-modal) are present and selectable.",
+  "rca of the issue": "N/A — feature already implemented correctly by main agent. Verified: FilesSec.attachFiles() → uploadParserFiles(raw, filesQuoteId) → POST /parser/files/upload → server persists with source='upload' (NO Anthropic call) → listParserFiles refreshes savedFiles → staged list cleared. On Save Quote, the draft id is reassigned to the persistent quote id via /parser/files/reassign, so the uploaded files survive reload."
+}

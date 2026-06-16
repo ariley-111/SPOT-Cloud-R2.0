@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfq, listParserFiles, deleteParserFile } from "../../api/spot";
+import { parserBudget, parseRfq, listParserFiles, deleteParserFile, uploadParserFiles } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
 import FilePreviewModal from "./FilePreviewModal";
@@ -18,6 +18,7 @@ export default function FilesSec() {
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState([]);              // {filename, size, mime, class, file}
   const [busy, setBusy] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   const [parseResult, setParseResult] = useState(null);
   const [parserError, setParserError] = useState("");
   const [budget, setBudget] = useState(null);
@@ -74,6 +75,28 @@ export default function FilesSec() {
   };
   const onBrowse = (e) => ingestFiles(e.target.files);
   const removeFile = (name) => setFiles((cur) => cur.filter((f) => f.filename !== name));
+
+  // Attach staged files to the quote for reference WITHOUT parsing. Persists
+  // them as saved RFQ files (survive save/reload via the same draft→quote
+  // reassign migration the parser uses), then clears the staging list.
+  const attachFiles = async () => {
+    if (!files.length || attaching) return;
+    if (!filesQuoteId) { pushToast("Could not determine quote — try again.", "err"); return; }
+    setAttaching(true);
+    try {
+      const raw = files.map((f) => f.file);
+      const res = await uploadParserFiles(raw, filesQuoteId);
+      setFiles([]);
+      const arr = await listParserFiles(filesQuoteId);
+      setSavedFiles(arr);
+      const n = res?.count ?? raw.length;
+      pushToast(`${n} file${n === 1 ? "" : "s"} saved to quote`, "ok");
+    } catch (e) {
+      pushToast(e?.response?.data?.detail || e.message, "err");
+    } finally {
+      setAttaching(false);
+    }
+  };
 
   const hasRfq = files.some((f) => f.class === "rfq");
   const hasCached = !!parseResult;
@@ -179,6 +202,23 @@ export default function FilesSec() {
                   color: "var(--spot-err)", padding: "2px 4px", fontWeight: 700 }}>×</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Attach-to-quote (no parse) — save staged files for reference */}
+      {files.length > 0 && (
+        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={attachFiles} disabled={attaching}
+            data-testid="btn-attach-files"
+            title="Save these files with the quote for reference (no parsing)"
+            style={{
+              all: "unset", cursor: attaching ? "not-allowed" : "pointer",
+              fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 4,
+              background: "#06b6d418", color: "#06b6d4",
+              border: "1px solid #06b6d455", opacity: attaching ? 0.7 : 1,
+            }}>
+            {attaching ? "↻ Saving…" : "⤓ Attach to quote"}
+          </button>
         </div>
       )}
 
