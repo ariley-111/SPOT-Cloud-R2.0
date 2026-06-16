@@ -43,13 +43,15 @@ export default function ItemSetupSec({ result }) {
 
   const onFlipCorr = () => {
     const w = s.oneUpW, l = s.oneUpL;
-    // Legacy parity (spot_r1_5.jsx L5858): manual flip simply toggles
-    // corrFlipped + swaps W/L. No persistent manual-override flag —
-    // legacy didn't have one, and the auto-flip useEffect re-evaluates
-    // on the new dimensions just like it would after any other edit.
+    // Manual flip swaps W/L and toggles corrFlipped. We ALSO set `corrManual`
+    // so the auto-flip useEffect permanently backs off for this item — the
+    // estimator has taken explicit control of orientation. Without this flag
+    // the debounced engine recompute would re-fire the auto-flip ~1s later and
+    // yank the dims back (the "Flip Corr won't stick / keeps flipping" bug).
     setManyFields({
       oneUpW: l, oneUpL: w,
       corrFlipped: !corrFlipped,
+      corrManual: true,
     });
   };
 
@@ -147,6 +149,12 @@ export default function ItemSetupSec({ result }) {
 
   useEffect(() => {
     if (corrFlipped) return;
+    // Manual-override guard: once the estimator has manually flipped corr or
+    // typed a dimension (corrManual), NEVER auto-flip for this item again.
+    // This is the key fix for the "auto-flip fights manual input" bug — the
+    // engine may SUGGEST an orientation on fresh (e.g. parser-entered) dims,
+    // but it must not override explicit user intent on every recompute.
+    if (s.corrManual) return;
     const w = String(s.oneUpW || "");
     const l = String(s.oneUpL || "");
     if (!w || !l || w === "0" || l === "0") return;
@@ -169,7 +177,7 @@ export default function ItemSetupSec({ result }) {
     setManyFields({ oneUpW: l, oneUpL: w, corrFlipped: true });
     pushToast && pushToast("Corr direction auto-flipped — piece fits stock sheets. Verify with customer.", "ok");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r?._pipeline?.exceedsSheetLibrary, r?._pipeline?.preBuyMinHasPrice, r?._pipeline?.preBuyMinMeetMin, r?._pipeline?.preBuyMinPricable, r?._pipeline?.flipWouldHelp, corrFlipped]);
+  }, [r?._pipeline?.exceedsSheetLibrary, r?._pipeline?.preBuyMinHasPrice, r?._pipeline?.preBuyMinMeetMin, r?._pipeline?.preBuyMinPricable, r?._pipeline?.flipWouldHelp, corrFlipped, s.corrManual]);
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
@@ -211,8 +219,8 @@ export default function ItemSetupSec({ result }) {
             </div>
             {s.quoteMode !== "Sheet Size" ? (
               <>
-                <F l="Width"><Num value={s.oneUpW} onChange={(v) => setField("oneUpW", v)} step="0.0001" min="0" data-testid="input-one-up-w" /></F>
-                <F l="Length"><Num value={s.oneUpL} onChange={(v) => setField("oneUpL", v)} step="0.0001" min="0" data-testid="input-one-up-l" /></F>
+                <F l="Width"><Num value={s.oneUpW} onChange={(v) => setManyFields({ oneUpW: v, corrManual: true })} step="0.0001" min="0" data-testid="input-one-up-w" /></F>
+                <F l="Length"><Num value={s.oneUpL} onChange={(v) => setManyFields({ oneUpL: v, corrManual: true })} step="0.0001" min="0" data-testid="input-one-up-l" /></F>
                 {/* Flip Corr — ALWAYS visible per legacy spot_r1_5.jsx */}
                 <button onClick={onFlipCorr} data-testid="btn-flip-corr"
                   title="Swap Width ↔ Length (changes corrugation direction — requires customer approval)"

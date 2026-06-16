@@ -34,6 +34,10 @@ export const DEFAULT_STATE = Object.freeze({
   sheetSizeL: "",
   sheetPcsPerSheet: "",
   corrFlipped: false,
+  // Manual-override flag: set true when the estimator manually flips corr or
+  // types a dimension. Disables the auto-flip suggestion for this item so it
+  // never overrides explicit user intent.
+  corrManual: false,
   overrideSheetId: null,
 
   qtys: ["", "", "", "", ""],
