@@ -29,6 +29,15 @@ Append-only log of shipped features and fixes.
   ENTRA_TENANT_ID is set to "spot-multi-user" (invalid tenant). Use email/password login in
   preview. Prod env should set a valid tenant id.
 
+
+## 2026-06-16 — A1: restored legacy "Separate Line" die default (user decision)
+- `runner.build_prod_inputs`: missing/empty `dieTreatment` now defaults to "Separate Line"
+  (was "None"), matching legacy `spot_r1_5.jsx` L3782 exactly. A non-zero saved
+  `cuttingDieCost` with no explicit treatment again shows as a separate die line.
+- Verified: full engine/MP/route test suite green (63 passed) — no parity regressions.
+- B1 (color substitution), B6 (F-flute), B3/B2 (CAD labels / matched-set toggle): left
+  unchanged — confirmed these are NOT in legacy, so cloud already matches legacy.
+
 ## 2026-02-10 — MP-Individual UX polish (auto-scroll, qty selection, freight treatment, Job Totals)
 
 User feedback after the per-component layout shipped: (a) auto-scroll on every

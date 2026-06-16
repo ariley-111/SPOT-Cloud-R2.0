@@ -88,15 +88,12 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
     resolved_route = route_result.get("route") or ""
     any_die_route = resolved_route in ("Crest", "Bobst")
     die_cost_in = pn(json.get("cuttingDieCost", "0"))
-    # Cloud parity choice (diverges from legacy spot_r1_5.jsx L3782 which defaults
-    # missing dieTreatment to "Separate Line"): in cloud we default to "None"
-    # when the key is missing. Rationale — legacy's "Separate Line" default was
-    # safe only because cost values were paired with treatments in saved state;
-    # cloud's saved drafts have stale `cuttingDieCost: "1200"` values from prior
-    # Crest auto-die sessions even when the estimator no longer wants a die.
-    # Defaulting to "None" gives the estimator explicit control via the Item
-    # Setup Die row tiles. Auto-apply still fires for Crest/Bobst routes below.
-    die_treat_in = json.get("dieTreatment", "None")
+    # Legacy parity (spot_r1_5.jsx L3782: `dieTreatment: s.dieTreatment || "Separate Line"`).
+    # Restored 2026-06-16 per user decision (A1) — match legacy exactly: when the
+    # dieTreatment key is missing/empty, default to "Separate Line". A non-zero
+    # cuttingDieCost in saved state will therefore show as a separate die line just
+    # as it did in legacy. Auto-apply still fires for Crest/Bobst routes below.
+    die_treat_in = json.get("dieTreatment") or "Separate Line"
     die_cost_eff: Any = json.get("cuttingDieCost", "0")
     die_treat_eff = die_treat_in
     die_auto_applied = False
