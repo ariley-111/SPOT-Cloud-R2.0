@@ -60,3 +60,40 @@ app to apply the vendor's board price increase.
 All mutations route through the existing override + baseline-snapshot + audit pattern so the
 engine stays a faithful read-by-reference consumer and "1:1 legacy math" is untouched —
 we are only changing the *values*, never the formulas.
+
+## 4. FINALIZED design decisions (user-confirmed 2026-06-16)
+
+**Pricing-version model:**
+- **Drafts use CURRENT pricing always.** Only **SAVED quotes** pin a price-book version.
+- The price-book version is **stamped at SAVE time** (the active snapshot id).
+- **Reopen a saved quote → re-price against its PINNED snapshot.** Original prices are
+  preserved for ALL edits (route change, add die, different liner combo, etc.). There is
+  **NO "re-price to current" button** on a saved quote.
+- If the estimator wants current pricing, they **Duplicate** the quote. The duplicate is a
+  new draft → current pricing.
+- **No validity cutoff / no auto re-price prompt.** Pricing is preserved indefinitely on
+  reopen.
+- **Messaging:** when reopening a saved quote whose pinned version ≠ current, show an inline
+  note: *"Original pricing preserved in this quote. To use current pricing, duplicate it."*
+  When the user clicks **Duplicate** on such a quote, show a confirm:
+  *"Prices have been updated since this quote was last saved. Creating a copy will use the
+  updated pricing."* → [Cancel] / [OK].
+
+**Dropped:** the global one-time post-update login banner (#4) — redundant now that the
+warning is contextual at reopen/duplicate.
+
+**Snapshots:** auto-save a full labeled snapshot before any price change; one-click Restore.
+
+**Importer:** spreadsheet (XLSX/CSV) upload mapped to `base_matrix`, with a diff preview
+(old → new, %Δ) and auto-snapshot before apply. No JSON editing. PDF = reference only.
+
+**Implementation note:** engine must accept a per-request price book (thread the pinned
+snapshot through `run_estimate`) — concurrency-safe, no global mutation.
+
+## 5. Sequencing (recommended)
+Bugs from today's testing FIRST (fast, stabilizing), THEN board-engine pricing as a
+dedicated phase:
+- **Phase 1:** price-book snapshot model + spreadsheet importer + diff preview + Restore
+  (lets the vendor increase be applied safely).
+- **Phase 2:** pin-at-save + reopen-preserves-pinned + duplicate-uses-current + contextual
+  warnings (engine price-book threading).
