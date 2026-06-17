@@ -1,0 +1,77 @@
+{
+  "summary": "PASS — Right-rail Cost Buildup 'ONE-TIME LINE ITEMS > Freight' is now JOB-scoped in MP Per-Job mode on SA-260604-165816-COPY (FOB=Ship, scope=Per Job, ship-to 19446, qtys 100/150/300). After live 'Update All' (UTS wait ~139s, R&L CARRIERS INC active), for each qty tier the Cost Buildup One-Time Freight EQUALS the right-rail Per-Job Freight card AND the Quote Table footer Freight; Cost Buildup 'Items (job)' EQUALS QT footer Items; Cost Buildup 'Quote Total (job)' EQUALS QT footer Order Total. Regression: switching freight scope to Per Item correctly reverts the Cost Buildup One-Time section to component-scoped (active Header component) — labels drop the '(job)' / '(per-job)' suffixes and show the active component's per-item freight.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "00_setup": {"quote": "SA-260604-165816-COPY", "fob": "Ship", "type": "Per Job", "treatment": "Line", "ship_to": "19446", "markup": "15%", "components": 3, "set_qtys": [100, 150, 300], "active_carrier": "R&L CARRIERS INC", "update_all_wait_s": 138.8},
+    "01_tier_qty_300_per_job": {
+      "status": "PASS",
+      "qt_row_selected": "qt-row-2",
+      "cost_buildup_items_job": "$8,689.93",
+      "cost_buildup_freight_per_job": "$299.89 (base $260.77 + 15% markup)",
+      "cost_buildup_quote_total_job": "$8,989.81",
+      "per_job_freight_card": "$299.89",
+      "quote_table_footer_freight": "$299.89",
+      "quote_table_footer_items": "$8,689.93",
+      "quote_table_footer_order_total": "$8,989.81",
+      "all_three_displays_match": true,
+      "previously_buggy_value_33_88_NOT_shown": true
+    },
+    "02_tier_qty_150_per_job": {
+      "status": "PASS",
+      "qt_row_selected": "qt-row-1",
+      "cost_buildup_items_job": "$5,329.35",
+      "cost_buildup_freight_per_job": "$230.64",
+      "cost_buildup_quote_total_job": "$5,559.99",
+      "per_job_freight_card": "$230.64",
+      "all_three_displays_match": true
+    },
+    "03_tier_qty_100_per_job": {
+      "status": "PASS",
+      "qt_row_selected": "qt-row-0",
+      "cost_buildup_items_job": "$4,024.03",
+      "cost_buildup_freight_per_job": "$185.79",
+      "cost_buildup_quote_total_job": "$4,209.82",
+      "per_job_freight_card": "$185.79",
+      "quote_table_footer_freight": "$185.79",
+      "quote_table_footer_items": "$4,024.03",
+      "quote_table_footer_order_total": "$4,209.82",
+      "all_three_displays_match": true
+    },
+    "04_per_tier_distinctness_and_monotonic": {"status": "PASS", "per_tier_freight": {"100": 185.79, "150": 230.64, "300": 299.89}, "monotonic_increasing": true},
+    "05_regression_switch_to_Per_Item": {
+      "status": "PASS",
+      "qt_row_selected_during_switch": "qt-row-2 (qty 300)",
+      "cost_buildup_items_label": "Items (no '(job)' suffix)",
+      "cost_buildup_items_value": "$957.95 (active component Header sell, NOT job sell $8,689.93)",
+      "cost_buildup_freight_label": "Freight (no '(per-job)' suffix)",
+      "cost_buildup_freight_value": "$185.79 (active component Header per-item freight)",
+      "cost_buildup_quote_total_label": "Quote Total (no '(job)' suffix)",
+      "cost_buildup_quote_total_value": "$1,143.75",
+      "active_component_card_freight": "$185.79",
+      "component_scoped_correctly": true,
+      "no_job_labels_present": true
+    }
+  },
+  "test_report_links": [
+    "/app/test_reports/iter44_qty300_cb.png",
+    "/app/test_reports/iter44_qty100.png",
+    "/app/test_reports/iter44_per_item_correct.png",
+    "/app/test_reports/iter44_settled.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RightDashboard.jsx CostBuildup IIFE (~L1627) cleanly toggles src = isMpPerJob ? aggregate : r, so when MP+PerJob the One-Time section pulls Items/Freight/Die/Prepress/Misc/Total from the job-level aggregate slot and labels become 'Items (job)' / 'Freight (per-job)' / 'Quote Total (job)'. Per-Item mode falls through to component (r) and labels drop the (job)/(per-job) suffixes — verified live.",
+    "Per-Item freight Cost Buildup correctly reads the active component (Header) freight $185.79 rather than the aggregate job freight, matching the active-component card. The 'ITEM 3 · FREIGHT · QTY 300' replacement card appears in place of the 'Per-Job Freight' card, consistent with scope change.",
+    "Engine aggregate slot freightLine in Per-Job mode equals jobFreightBySlot[slot] * (1+markup) for the selected tier — confirmed by Cost Buildup showing 'Freight (per-job) $260.77 + 15% markup' = $299.89 at qty 300 (= 260.77*1.15), and matching the Per-Job Freight card + Quote Table footer Freight column ($299.89/$230.64/$185.79 per tier).",
+    "No regressions vs iteration_43: Per-Component Breakdown chips at qty 300 still show $145.15 / $120.86 / $33.88 (component allocated shares) summing to $299.89 — that allocation behavior is preserved and separate from the now job-scoped Cost Buildup."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (frontend only per request)", "frontend": "100% (3/3 Per-Job tier checks PASS, 1/1 Per-Item regression PASS)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None - reused existing SA-260604-165816-COPY draft.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To retest this specific behavior: login admin, open SA-260604-165816-COPY tab (already on FOB=Ship, Type=Per Job, qtys 100/150/300, ship-to 19446, markup 15%), click 'Update All' in the FREIGHT panel and wait ~120-150s for UTS to settle (look for [data-testid='freight-uts-spinner'] to disappear and the 'UTS · quoting freight' status to clear). Then for each qt-row-{0,1,2}: click the row, scroll to [data-testid='cost-buildup'] and verify the 'ONE-TIME LINE ITEMS' section shows 'Items (job)' = QT footer Items, 'Freight (per-job) $base + 15% markup' = $X matching [data-testid='freight-per-job-amount'] AND the Quote Table FREIGHT column for that tier, and 'Quote Total (job)' = QT footer Order Total. To verify the regression: with qty-300 selected, click [data-testid='tile-freight-scope-per-item'] (NOT the Prepress 'Per Item' button — they have similar labels) and confirm the Cost Buildup labels drop '(job)'/'(per-job)' and the freight value equals the active component card's freight, not the aggregate job freight.",
+  "rca of the issue": "Pre-fix: Cost Buildup 'One-Time Line Items > Freight' always read r.freightLine (active component slot's allocated freight share). In MP+PerJob the allocation produced e.g. Header=$33.88 at qty 300, which contradicted everywhere else on the screen (Per-Job card $299.89, QT footer $299.89). Fix at RightDashboard.jsx ~L1634: const isMpPerJob = isMultiPart && s?.freightScope === 'Per Job'; const src = isMpPerJob ? (aggregate || r) : r; — and freight/die/prepress/misc/items/sellTotal pulled from src. Labels updated to 'Items (job)', 'Freight (per-job)', 'Quote Total (job)' in Per-Job mode. Verified live on all 3 tiers and confirmed Per-Item still reads the component slot (regression). No code changes required by testing agent."
+}

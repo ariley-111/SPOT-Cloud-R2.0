@@ -1625,14 +1625,20 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
           value={fmtMoney(r.sellPc, 2)} />
 
         {(() => {
-          // Cost Buildup is COMPONENT-SCOPED: every line shows the ACTIVE
-          // component's costs, not the job total.
-          const freight = r.freightLine || 0;
-          const die = r.dieLineCost || 0;
-          const prepress = r.prepressLineCost || 0;
-          const misc = r.miscLineCost || 0;
-          const itemsSell = r.itemSell || 0;
-          const grandTotal = r.sellTotal || (itemsSell + freight + die + prepress + misc);
+          // Cost Buildup is COMPONENT-SCOPED by default (every line shows the
+          // ACTIVE component's costs). EXCEPTION: in MP Per-Job mode freight is
+          // a JOB-level charge, so the One-Time Line Items section mirrors the
+          // job rollup (Items = job sell, Freight = full per-job freight for the
+          // selected tier, Quote Total = order total) — matching the Quote Table
+          // footer. Otherwise it stays component-scoped.
+          const isMpPerJob = isMultiPart && s?.freightScope === "Per Job";
+          const src = isMpPerJob ? (aggregate || r) : r;
+          const freight = src.freightLine || 0;
+          const die = src.dieLineCost || 0;
+          const prepress = src.prepressLineCost || 0;
+          const misc = src.miscLineCost || 0;
+          const itemsSell = src.itemSell || 0;
+          const grandTotal = src.sellTotal || (itemsSell + freight + die + prepress + misc);
           const hasAnyLine = freight > 0 || die > 0 || prepress > 0 || misc > 0;
           return (
             <>
@@ -1640,7 +1646,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 <>
                   <SubHead label="One-Time Line Items" color="#3b82f6" />
                   {isMultiPart && (
-                    <Row label={<span style={{ color: "var(--spot-text3)" }}>Items</span>}
+                    <Row label={<span style={{ color: "var(--spot-text3)" }}>Items{isMpPerJob ? " (job)" : ""}</span>}
                       value={<span style={{ color: "var(--spot-text3)" }}>{fmtMoney(itemsSell)}</span>} />
                   )}
                   {freight > 0 && (() => {
@@ -1650,12 +1656,8 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 const zone = s?.localDeliveryZone || "";
                 const freightLabel = isLocal
                   ? `Freight — Local Delivery${zone ? ` · ${zone}` : ""}`
-                  : "Freight";
-                // Component-share breakdown: "$<component freight> + <markup>% markup".
-                // In MP-Per-Job, r.freightLine already includes markup, so the
-                // pre-markup base = r.freightLine / (1+markup). For Local
-                // Delivery (markup=0) base == r.freightLine.
-                const isMpPerJob = isMultiPart && s?.freightScope === "Per Job";
+                  : (isMpPerJob ? "Freight (per-job)" : "Freight");
+                // freight already includes markup; derive the pre-markup base.
                 const markupPct = isLocal
                   ? 0
                   : (isMpPerJob
@@ -1684,9 +1686,14 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 );
               })()}
               {die > 0 && (() => {
-                // Component-scoped: use the active component's die cost & markup.
-                const baseCost = Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
-                const markupPct = Number(s?.dieMarkup || r.dieMarkup || 0);
+                // Component-scoped: active component's die. Job-scoped (Per-Job):
+                // aggregate die base/markup across the set.
+                const baseCost = isMpPerJob
+                  ? Number(src.dieBaseTotal || 0)
+                  : Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
+                const markupPct = isMpPerJob
+                  ? Number(src.dieMarkupAvg || 0)
+                  : Number(s?.dieMarkup || r.dieMarkup || 0);
                 const showBreakdown = baseCost > 0 && markupPct > 0;
                 return (
                   <Row label={
@@ -1702,7 +1709,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                 );
               })()}
               {prepress > 0 && (() => {
-                const baseCost = Number(s?.prepressCost || r.prepressCost || 0);
+                const baseCost = isMpPerJob ? 0 : Number(s?.prepressCost || r.prepressCost || 0);
                 const markupPct = Number(s?.prepressMarkup || r.prepressMarkup || 0);
                 const showBreakdown = baseCost > 0 && markupPct > 0;
                 return (
@@ -1720,13 +1727,13 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
               })()}
               {/* Named misc items — one row per user-typed name, with markup */}
               {(() => {
-                // Component-scoped: show only the active component's misc items.
-                const miscItems = r.miscLineItems || [];
+                // Component-scoped by default; job-scoped in Per-Job mode.
+                const miscItems = src.miscLineItems || [];
                 const miscMarkup = Number(s?.miscMarkup || r.miscMarkup || 0);
                 const miscCharges = s?.miscCharges || [];
                 return miscItems.filter((li) => (li.amt || 0) > 0).map((li, mi) => {
                   const baseEntry = miscCharges.find((mc) => (mc.name || "") === (li.name || ""));
-                  const baseCost = baseEntry ? Number(baseEntry.cost || 0) : 0;
+                  const baseCost = (!isMpPerJob && baseEntry) ? Number(baseEntry.cost || 0) : 0;
                   const showBreakdown = baseCost > 0 && miscMarkup > 0;
                   return (
                     <Row key={`mli-${mi}`} label={
@@ -1742,7 +1749,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                   );
                 });
               })()}
-                  <RowTotal label="Quote Total" value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
+                  <RowTotal label={isMpPerJob ? "Quote Total (job)" : "Quote Total"} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
                 </>
               )}
               {!hasAnyLine && (
