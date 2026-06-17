@@ -411,10 +411,55 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
       </table>
     );
   }
-  const showChargesCol = hasLineItems && chargeMode !== "Lump Sum";
   const qtyLabel = isMP ? "Sets" : "Qty";
   const eachLabel = isMP ? "Per Set" : "Each";
   const perMLabel = isMP ? "Per/M Sets" : "Per/M";
+
+  // ─── Charge-mode column model ──────────────────────────────────────────
+  //  • By Type  → single "Charges" column = sum of all one-time charges / row
+  //  • By Part  → one column per charge TYPE present (Die | Freight | Prepress
+  //               | <each misc name>), each summing into Quote Total
+  //  • Lump Sum → no charge column; a per-qty descriptive list is shown below
+  const byPart = hasLineItems && chargeMode === "By Part";
+  const byType = hasLineItems && chargeMode === "By Type";
+  // Per-row charge extraction helper.
+  const rowCharges = (r) => {
+    const die = Number(r.dieLineCost || 0);
+    const freight = Number(r.freightLine || 0);
+    const prep = Number(r.prepressLineCost || 0);
+    const miscItems = (r.miscLineItems || []).filter((li) => (li.amt || 0) > 0);
+    const miscFallback = Number(r.miscLineCost || 0);
+    return { die, freight, prep, miscItems, miscFallback };
+  };
+  // Discover which type-columns to render for By Part (only present ones).
+  const colDie = byPart && rows.some((r) => Number(r.dieLineCost || 0) > 0);
+  const colFrt = byPart && rows.some((r) => Number(r.freightLine || 0) > 0);
+  const colPrep = byPart && rows.some((r) => Number(r.prepressLineCost || 0) > 0);
+  const miscNames = [];
+  if (byPart) {
+    rows.forEach((r) => (r.miscLineItems || []).forEach((li) => {
+      if ((li.amt || 0) > 0 && !miscNames.includes(li.name || "Misc")) miscNames.push(li.name || "Misc");
+    }));
+    // Fallback unnamed misc → a single "Misc" column
+    if (miscNames.length === 0 && rows.some((r) => Number(r.miscLineCost || 0) > 0)) miscNames.push("Misc");
+  }
+  const miscAmt = (r, name) => {
+    const li = (r.miscLineItems || []).find((x) => (x.name || "Misc") === name && (x.amt || 0) > 0);
+    if (li) return Number(li.amt || 0);
+    if (name === "Misc" && (!r.miscLineItems || r.miscLineItems.length === 0)) return Number(r.miscLineCost || 0);
+    return 0;
+  };
+  // Build the descriptive label for a row's combined charges (Lump Sum list).
+  const chargeLabel = (r) => {
+    const c = rowCharges(r);
+    const parts = [];
+    if (c.freight > 0) parts.push("Freight");
+    if (c.die > 0) parts.push("Die");
+    if (c.prep > 0) parts.push("Prepress");
+    c.miscItems.forEach((li) => parts.push(li.name || "Misc"));
+    if (parts.length === 0 && c.miscFallback > 0) parts.push("Misc");
+    return parts.join(" + ");
+  };
   return (
     <>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
@@ -424,32 +469,22 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
             <th style={thS}>{eachLabel}</th>
             <th style={thS}>{perMLabel}</th>
             <th style={thS}>Total</th>
-            {showChargesCol && <th style={thS}>Charges</th>}
+            {byType && <th style={thS}>Charges</th>}
+            {colDie && <th style={thS}>Die</th>}
+            {colFrt && <th style={thS}>Freight</th>}
+            {colPrep && <th style={thS}>Prepress</th>}
+            {miscNames.map((n) => <th key={n} style={thS}>{n}</th>)}
             <th style={{ ...thS, color: "#1e40af" }}>Quote Total</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => {
             const sellPc = r.qty > 0 ? r.itemSell / r.qty : 0;
-            const lineCharges = [];
-            const die = Number(r.dieLineCost || 0);
-            const freight = Number(r.freightLine || 0);
-            const prep = Number(r.prepressLineCost || 0);
-            const misc = Number(r.miscLineCost || 0);
-            if (die > 0) lineCharges.push(`Die: ${fmtMoney(die)}`);
-            if (freight > 0) lineCharges.push(`Freight: ${fmtMoney(freight)}`);
-            if (prep > 0) lineCharges.push(`Prepress: ${fmtMoney(prep)}`);
-            // Named misc items — show what the user typed, not generic "Misc"
-            const miscItems = (r.miscLineItems || []).filter((li) => (li.amt || 0) > 0);
-            if (miscItems.length > 0) {
-              miscItems.forEach((li) => {
-                lineCharges.push(`${li.name || "Misc"}: ${fmtMoney(li.amt)}`);
-              });
-            } else if (misc > 0) {
-              lineCharges.push(`Misc: ${fmtMoney(misc)}`);
-            }
-            const chargesTotal = die + freight + prep + misc;
+            const c = rowCharges(r);
+            const chargesTotal = c.die + c.freight + c.prep
+              + (c.miscItems.length > 0 ? c.miscItems.reduce((a, li) => a + Number(li.amt || 0), 0) : c.miscFallback);
             const quoteTotal = Number(r.itemSell || 0) + chargesTotal;
+            const DASH = "—";
             return (
               <tr key={r.slot ?? i} style={{ borderBottom: "1px solid #e5e7eb",
                 background: i % 2 === 0 ? "#fff" : "#f9fafb" }}>
@@ -459,13 +494,18 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
                   {fmtMoney(sellPc * 1000)}
                 </td>
                 <td style={{ padding: "8px 10px", textAlign: "right" }}>{fmtMoney(r.itemSell)}</td>
-                {showChargesCol && (
+                {byType && (
                   <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>
-                    {chargeMode === "By Part"
-                      ? (lineCharges.join(", ") || "—")
-                      : (chargesTotal > 0 ? fmtMoney(chargesTotal) : "—")}
+                    {chargesTotal > 0 ? fmtMoney(chargesTotal) : DASH}
                   </td>
                 )}
+                {colDie && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.die > 0 ? fmtMoney(c.die) : DASH}</td>}
+                {colFrt && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.freight > 0 ? fmtMoney(c.freight) : DASH}</td>}
+                {colPrep && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.prep > 0 ? fmtMoney(c.prep) : DASH}</td>}
+                {miscNames.map((n) => {
+                  const v = miscAmt(r, n);
+                  return <td key={n} style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{v > 0 ? fmtMoney(v) : DASH}</td>;
+                })}
                 <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#1e40af" }}>
                   {fmtMoney(quoteTotal)}
                 </td>
@@ -475,16 +515,32 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
         </tbody>
       </table>
       {hasLineItems && chargeMode === "Lump Sum" && (() => {
-        const r = rows[0] || {};
-        const lump = Number(r.dieLineCost || 0) + Number(r.freightLine || 0)
-          + Number(r.prepressLineCost || 0) + Number(r.miscLineCost || 0);
-        return lump > 0 ? (
+        // One descriptive line PER qty tier (not just the first row). Each line
+        // names the charge types that apply at that qty and shows the combined sum.
+        const lines = rows.map((r) => {
+          const c = rowCharges(r);
+          const sum = c.die + c.freight + c.prep
+            + (c.miscItems.length > 0 ? c.miscItems.reduce((a, li) => a + Number(li.amt || 0), 0) : c.miscFallback);
+          return { qty: r.qty, label: chargeLabel(r), sum };
+        }).filter((x) => x.sum > 0);
+        if (lines.length === 0) return null;
+        return (
           <div data-testid="preview-lumpsum-charges"
-            style={{ textAlign: "right", fontSize: 12, color: "#6b7280",
-              marginTop: -8, marginBottom: 12 }}>
-            One-Time Charges: <b style={{ color: "#1f2937" }}>{fmtMoney(lump)}</b>
+            style={{ marginTop: -8, marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280",
+              textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>
+              One-Time Charges
+            </div>
+            {lines.map((ln, i) => (
+              <div key={i} data-testid={`preview-lumpsum-line-${i}`}
+                style={{ display: "flex", justifyContent: "space-between", fontSize: 12,
+                  color: "#374151", padding: "2px 0" }}>
+                <span>{ln.label} @ {isMP ? "Set " : "Qty "}{fmtInt(ln.qty)}</span>
+                <b style={{ color: "#1f2937" }}>{fmtMoney(ln.sum)}</b>
+              </div>
+            ))}
           </div>
-        ) : null;
+        );
       })()}
     </>
   );

@@ -1,0 +1,72 @@
+{
+  "summary": "PASS — All 4 PDF/Quote-Preview fixes verified on SA-260617-163552-TEST (Simple multi-qty, qtys 500/1000/2000, Die+Freight+Clips line charges) and SA-260604-165816-COPY (Multi-Part·3 Matched Set). (1) MP Matched Set has NO 'View Kit Matrix' button (open-kit-matrix count=0) and no kit-matrix modal in DOM. (3) By Part renders separate columns Die | Freight | Clips with '—' for missing types (500-tier shows '—' in Die). (4) Lump Sum renders one descriptive line per qty tier under data-testid='preview-lumpsum-charges' with lines 'Freight + Clips @ Qty 500: $652.14', 'Freight + Die + Clips @ Qty 1,000: $2,168.77', 'Freight + Die + Clips @ Qty 2,000: $2,553.28'. (2) Across all three modes each tier reflects only the charges that apply (500 tier has NO die anywhere). By Type regression: single combined 'Charges' column unchanged.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "item1_mp_matched_set_no_kit_matrix": {
+      "status": "PASS",
+      "quote": "SA-260604-165816-COPY (Multi-Part · 3, Matched Set)",
+      "open_kit_matrix_count": 0,
+      "buttons_with_kit_matrix_text": [],
+      "modal_kit_matrix_count": 0,
+      "frontend_src_grep": "no matches for open-kit-matrix / KitMatrixModal / 'View Kit Matrix' anywhere in /app/frontend/src"
+    },
+    "item3_by_part_separate_columns": {
+      "status": "PASS",
+      "quote": "SA-260617-163552-TEST PDF LINE ITEMS",
+      "headers": ["Qty", "Each", "Per/M", "Total", "Die", "Freight", "Clips", "Quote Total"],
+      "row_500": {"Die": "—", "Freight": "$514.14", "Clips": "$138.00", "QuoteTotal": "$7,301.38", "math_check": "6649.24 + 514.14 + 138.00 = 7301.38 ✓"},
+      "row_1000": {"Die": "$1,380.00", "Freight": "$650.77", "Clips": "$138.00", "QuoteTotal": "$12,522.06", "math_check": "10353.28 + 1380 + 650.77 + 138 = 12522.05 (matches, $0.01 rounding) ✓"},
+      "row_2000": {"Die": "$1,380.00", "Freight": "$1,035.28", "Clips": "$138.00", "QuoteTotal": "$22,915.81", "math_check": "20362.53 + 1380 + 1035.28 + 138 = 22915.81 ✓"},
+      "lumpsum_block_present_in_byPart": 0,
+      "note": "Custom misc-name 'Clips' correctly rendered as its own column alongside Die/Freight (not bucketed into Misc). Tier 500 correctly shows '—' for Die since no die charge applies at that tier."
+    },
+    "item4_lump_sum_per_tier_lines": {
+      "status": "PASS",
+      "table_headers_no_Charges_column": ["Qty", "Each", "Per/M", "Total", "Quote Total"],
+      "block_testid_present": "data-testid='preview-lumpsum-charges' (count=1)",
+      "lines": [
+        "data-testid='preview-lumpsum-line-0' → 'Freight + Clips @ Qty 500 $652.14' (= 514.14 + 138.00 ✓)",
+        "data-testid='preview-lumpsum-line-1' → 'Freight + Die + Clips @ Qty 1,000 $2,168.77' (= 650.77 + 1380 + 138 ✓)",
+        "data-testid='preview-lumpsum-line-2' → 'Freight + Die + Clips @ Qty 2,000 $2,553.28' (= 1035.28 + 1380 + 138 ✓)"
+      ],
+      "not_only_first_tier": true,
+      "label_correctly_omits_Die_for_qty_500": true
+    },
+    "item2_per_tier_charge_correctness_all_modes": {
+      "status": "PASS",
+      "by_type_charges_column": {"500": "$652.14", "1000": "$2,168.77", "2000": "$2,553.28"},
+      "by_part_die_column": {"500": "—", "1000": "$1,380.00", "2000": "$1,380.00"},
+      "by_part_freight_column": {"500": "$514.14", "1000": "$650.77", "2000": "$1,035.28"},
+      "lump_sum_label_includes_Die": {"500": false, "1000": true, "2000": true},
+      "no_tier_shows_charge_not_applicable": true
+    },
+    "by_type_regression": {
+      "status": "PASS",
+      "headers": ["Qty", "Each", "Per/M", "Total", "Charges", "Quote Total"],
+      "single_combined_Charges_column": true,
+      "lumpsum_block_not_rendered": 0,
+      "default_mode_is_by_type": true
+    }
+  },
+  "test_report_links": [
+    "/app/test_reports/iter45_preview_default.png",
+    "/app/test_reports/iter45_byPart.png",
+    "/app/test_reports/iter45_lumpsum.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PreviewPdfModal.jsx PricingTable (L402-547) correctly toggles three layouts via chargeMode: byPart computes colDie/colFrt/colPrep flags from rows.some(...) and dynamically discovers miscNames from r.miscLineItems[].name with a 'Misc' fallback when only miscLineCost is present. The thead and tbody both gate columns on the same flags so headers always align with cells. Quote Total = r.itemSell + (die+freight+prep+sum(misc)) — confirmed correct on live data.",
+    "Lump Sum descriptive list (L517-544) maps rows → {qty, label, sum} filtered by sum>0, so empty-charge tiers wouldn't render a row (correct). chargeLabel() builds parts only when the corresponding charge value > 0, producing the variable label per tier (e.g. 'Freight + Clips' for qty 500 because Die=0 there, 'Freight + Die + Clips' for qtys 1000/2000). Misc items joined by name (Clips) not 'Misc', so custom names appear in both By Part columns and Lump Sum labels — consistent behavior.",
+    "QuoteTableSec.jsx — no remaining references to KitMatrixModal / open-kit-matrix / 'View Kit Matrix'; the modal component and its trigger button have been completely removed (grep -rn returns 0 matches across /app/frontend/src).",
+    "Minor: default chargeMode is hardcoded 'By Type' (L34). Acceptable since the request says By Type is the legacy/unchanged default. No persistence between opens — each modal open resets to By Type, which is fine for a preview-only control."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (frontend only per request)", "frontend": "100% (4/4 items PASS + 1 regression PASS)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None — reused existing SA-260617-163552-TEST PDF LINE ITEMS (Simple, qtys 500/1000/2000, Die+Freight+Clips line charges) and SA-260604-165816-COPY (Multi-Part Matched Set, 3 components).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To re-verify these 4 fixes: login admin → click the SA-260604-165816-COPY tab and confirm 0 elements with data-testid='open-kit-matrix' (MP Matched Set) → click the SA-260617-163552-TEST tab → click [data-testid='toolbar-preview'] to open the Quote Preview modal → use [data-testid='preview-charges-by-type' | 'preview-charges-by-part' | 'preview-charges-lump-sum'] to switch modes. In By Part check that the table thead contains 'Die', 'Freight', and 'Clips' as separate columns (not a single 'Charges' col) and that the 500-qty row shows '—' under Die. In Lump Sum check [data-testid='preview-lumpsum-charges'] exists and [data-testid='preview-lumpsum-line-0/1/2'] each render '<types> + ... @ Qty <n> $<sum>'. In By Type check the header still has a single 'Charges' column and the lumpsum block is absent.",
+  "rca of the issue": "Not a bug fix — this iteration validated 4 presentational changes implemented by E1: (a) removal of the redundant 'View Kit Matrix' affordance from QuoteTableSec.jsx (KitMatrixModal component + trigger button deleted, including data-testid='open-kit-matrix'); (b) PreviewPdfModal.jsx PricingTable now branches on chargeMode={'Lump Sum'|'By Type'|'By Part'} where (i) By Part dynamically discovers Die/Freight/Prepress/miscNames columns from row data via rows.some(r => Number(r.dieLineCost||0) > 0) etc. and per-row miscLineItems[].name, (ii) By Type retains the single combined Charges column (legacy), (iii) Lump Sum hides the Charges column entirely and renders a per-tier descriptive list below the table with data-testid='preview-lumpsum-line-{i}', where the label is constructed by joining only the charge TYPES whose values are >0 for that tier — which automatically gives 'Freight + Clips' for qty 500 (no Die) and 'Freight + Die + Clips' for qtys 1000/2000. Backend pdf.py (~L380) mirrors the same three-mode behaviour for the exported PDF and was not separately re-tested per E1's instruction (Print uses the modal DOM directly so the on-screen verification covers the Print path)."
+}

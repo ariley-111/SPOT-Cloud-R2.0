@@ -377,14 +377,52 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     rows = [r for r in results if r and r.get("pricable") and not r.get("error")
             and float(r.get("qty") or 0) > 0]
 
-    # ─── Detect which charge columns to show (legacy L4717-4723) ───
+    # ─── Charge-mode column model ───────────────────────────────────────
+    #  • By Type  → single combined "Charges" column (sum of one-time charges)
+    #  • By Part  → one column per charge TYPE present (Die | Freight | Prepress
+    #               | <each misc name>) each summing into the Quote Total
+    #  • Lump Sum → no charge column; a per-qty descriptive list is shown below
     s_die  = any(float(r.get("dieLineCost") or 0)      > 0 for r in rows)
     s_frt  = any(float(r.get("freightLine") or 0)      > 0 for r in rows)
     s_pp   = any(float(r.get("prepressLineCost") or 0) > 0 for r in rows)
     s_misc = any(float(r.get("miscLineCost") or 0)     > 0 for r in rows)
     has_line_charges = s_die or s_frt or s_pp or s_misc
-    by_type = charge_mode in ("By Type", "By Part") and has_line_charges
-    show_combined_charges = has_line_charges and not by_type
+    by_part = charge_mode == "By Part" and has_line_charges
+    by_type = charge_mode == "By Type" and has_line_charges
+    is_lump = charge_mode == "Lump Sum" and has_line_charges
+
+    def _row_misc_items(r):
+        return [li for li in (r.get("miscLineItems") or []) if float(li.get("amt") or 0) > 0]
+
+    misc_names: List[str] = []
+    if by_part:
+        for r in rows:
+            for li in _row_misc_items(r):
+                nm = li.get("name") or "Misc"
+                if nm not in misc_names:
+                    misc_names.append(nm)
+        if not misc_names and s_misc:
+            misc_names.append("Misc")
+
+    def _row_misc_amt(r, name):
+        for li in _row_misc_items(r):
+            if (li.get("name") or "Misc") == name:
+                return float(li.get("amt") or 0)
+        if name == "Misc" and not (r.get("miscLineItems")):
+            return float(r.get("miscLineCost") or 0)
+        return 0.0
+
+    def _row_charge_label(r):
+        parts = []
+        if float(r.get("freightLine") or 0) > 0: parts.append("Freight")
+        if float(r.get("dieLineCost") or 0) > 0: parts.append("Die")
+        if float(r.get("prepressLineCost") or 0) > 0: parts.append("Prepress")
+        items = _row_misc_items(r)
+        if items:
+            for li in items: parts.append(li.get("name") or "Misc")
+        elif float(r.get("miscLineCost") or 0) > 0:
+            parts.append("Misc")
+        return " + ".join(parts)
 
     th_s = ('padding:8px 10px;text-align:right;font-size:11px;font-weight:700;'
             'text-transform:uppercase;letter-spacing:.06em;color:#6b7280')
@@ -399,12 +437,13 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         f'<th style="{th_s}">{perm_label}</th>',
     ]
     if by_type:
+        header_cells.append(f'<th style="{th_s}">Charges</th>')
+    if by_part:
         if s_die:  header_cells.append(f'<th style="{th_s}">Die</th>')
         if s_frt:  header_cells.append(f'<th style="{th_s}">Freight</th>')
         if s_pp:   header_cells.append(f'<th style="{th_s}">Prepress</th>')
-        if s_misc: header_cells.append(f'<th style="{th_s}">Misc</th>')
-    elif show_combined_charges:
-        header_cells.append(f'<th style="{th_s}">Charges</th>')
+        for nm in misc_names:
+            header_cells.append(f'<th style="{th_s}">{nm}</th>')
     header_cells.append(f'<th style="{th_s};color:#1e40af">Total</th>')
 
     DASH = "\u2014"
@@ -429,20 +468,47 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(sell_pc * 1000)}</td>',
         ]
         if by_type:
+            cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(charges_sum) if charges_sum > 0 else DASH}</td>')
+        if by_part:
             if s_die:  cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(die)  if die  > 0 else DASH}</td>')
             if s_frt:  cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(frt)  if frt  > 0 else DASH}</td>')
             if s_pp:   cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(prep) if prep > 0 else DASH}</td>')
-            if s_misc: cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(misc) if misc > 0 else DASH}</td>')
-        elif show_combined_charges:
-            cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(charges_sum) if charges_sum > 0 else DASH}</td>')
+            for nm in misc_names:
+                v = _row_misc_amt(r, nm)
+                cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(v) if v > 0 else DASH}</td>')
         cells.append(f'<td style="padding:8px 10px;text-align:right;font-weight:700;color:#1e40af">{_fm(sell_total)}</td>')
         body_rows.append(f'<tr style="border-bottom:1px solid #e5e7eb;background:{bg}">{"".join(cells)}</tr>')
+
+    # Lump Sum: one descriptive line per qty tier (charge types + combined sum)
+    lump_html = ""
+    if is_lump:
+        lump_lines = []
+        for r in rows:
+            ssum = (float(r.get("dieLineCost") or 0) + float(r.get("freightLine") or 0)
+                    + float(r.get("prepressLineCost") or 0) + float(r.get("miscLineCost") or 0))
+            if ssum <= 0:
+                continue
+            lbl = _row_charge_label(r)
+            qty_word = "Set" if is_mp else "Qty"
+            lump_lines.append(
+                f'<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;padding:2px 0">'
+                f'<span>{lbl} @ {qty_word} {_fn(float(r.get("qty") or 0), 0)}</span>'
+                f'<b style="color:#1f2937">{_fm(ssum)}</b></div>'
+            )
+        if lump_lines:
+            lump_html = (
+                '<div style="margin-top:-8px;margin-bottom:14px">'
+                '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;'
+                'letter-spacing:.06em;margin-bottom:4px">One-Time Charges</div>'
+                + "".join(lump_lines) + '</div>'
+            )
 
     pricing_table = (
         f'<table style="width:100%;border-collapse:collapse;margin-bottom:16px">'
         f'<thead><tr style="border-bottom:2px solid #d1d5db">{"".join(header_cells)}</tr></thead>'
         f'<tbody>{"".join(body_rows) or f"""<tr><td colspan="{len(header_cells)}" style="padding:20pt;text-align:center;color:#9ca3af">No priced quantities</td></tr>"""}</tbody>'
         f'</table>'
+        + lump_html
     )
 
     # ─── MP-Matched Set: replace aggregate table with legacy per-component grid ─
