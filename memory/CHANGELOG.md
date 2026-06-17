@@ -2,6 +2,30 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Matched-Set freight "Qty 300" bug RESOLVED (P0, was recurring) ✅
+- **Symptom (user)**: In a Multi-Part Matched Set quote, adding a new qty tier
+  (e.g. 300) made the Freight Dashboard quote ONLY the active component at that
+  tier (others dropped), and the Per-Job scenario read "Scenario 3" instead of
+  "Qty 300". Failed twice previously (iter 39, 40).
+- **Root cause**: `RightDashboard.jsx` `buildItems` broadcast the unified set
+  qtys from `s.qtys` — which mirrors ONLY the active BOM tab. A tier added on
+  one component while another tab was active never reached the others.
+- **Fix**:
+  - New `getSetQtys()` in `RightDashboard.jsx` derives a **tab-independent**
+    unified set-qty array = longest qty array across the active mirror (`s.qtys`)
+    AND every component's stored `state.qtys`. `buildItems` broadcasts that
+    (× pcsPerSet) to all components in Matched Set mode.
+  - `buildScenarioMatrix` attaches `setQty` to each per-item row and per-job
+    scenario; `FreightDashModal.jsx` labels tiers by `setQty` ("Qty 300")
+    instead of requiring all per-component qtys to be equal.
+  - MP batch loop made resilient: retries each chunk once and only surfaces an
+    error when ZERO rates return — suppresses the transient "Batch freight
+    quote failed: 502" red banner when other chunks succeed.
+- **Verified**: testing agent iter41 — 6/6 PASS. Qty 300 tier now lists all 3
+  components (combined 1,143 lbs vs buggy 747 lbs); Per-Job scenario reads
+  "Qty 300"; no 502 banner.
+
+
 # SPOT Cloud — Changelog
 
 Append-only log of shipped features and fixes.
