@@ -432,7 +432,7 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
    * Versioned board-pricing snapshots (`pricing_versions`) + per-quote FREEZE (pin at save; re-price only via Duplicate). v1 baseline = 4.14.25 in-code rates; all existing quotes backfilled.
    * Admin "Board Pricing" tab: xlsx import (base_matrix only — adders carried forward) → diff review (per-cell old→new→Δ%, uniform-% detection) → deliberate Activate. Board Engine panel + engine calc both read the active version.
    * Verified on the real 6/15/26 list (uniform +6.5%, 172 cells). Engine parametrized via ContextVar overlay (`engine/core.py`); golden-$ parity test pinned to baseline.
-   * ⏳ **Phase 3 remaining (P1):** frozen-quote MESSAGING — banner on a saved quote showing "priced on {version} · current is {active}" with a Duplicate-to-reprice CTA; optional admin "Pricing Versions" history page polish.
+   * ✅ **Phase 3 DONE 2026-06-17 (frozen-quote guardrails):** Save no longer duplicates/re-pins (update-in-place); material-edit warning fires once per open on frozen quotes with "Keep frozen pricing" / "Duplicate at current pricing (as last saved)" choices; amber tab coloring (❄ + data-frozen) + "❄ Frozen — {date}" chip in Estimate Info; Estimate # locked on any saved quote. Tested iter33 (8/8).
    * Bulk-% increase tool ("apply +5% to all 200# rates") and manual per-cell edit in the diff screen — deferred P2 (importer covers the supplier-list use case).
 - "Request New Sheet" estimator workflow (queue → admin approves → enters library) — **P2**
 - Separate `bom_items` MongoDB collection (currently in `quote_drafts.state` JSON blob) — **P3**
