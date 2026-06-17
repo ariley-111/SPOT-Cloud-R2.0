@@ -291,61 +291,84 @@ function FreightPanel({ s }) {
     try {
       const isMP = s.quoteType === "Multi-Part" && Array.isArray(s.bomItems) && s.bomItems.length > 0;
 
-      // ─── Single-Part fallback ────────────────────────────────────────────
+      // ─── Single-Part: quote freight for EVERY priceable qty slot ─────────
+      // Legacy parity (spot_r1_5.jsx updateAllFreight): freight is recomputed
+      // per quantity because the shipped weight + skid count grow with qty. We
+      // fire one UTS quote per non-empty qty slot, store the per-slot result in
+      // `freightByQty[slot]`, and let the engine apply the matching freight to
+      // each Quote Table row.
       if (!isMP) {
-        const r = await freightQuote({
-          destZip: s.destZip, weightLbs: estimatedWeight, freightClass: "70",
-        });
-        const isLocal = r.carrier === "SPC Local Delivery" || r.source === "spcoc";
-        // Build a synthetic cache so the Freight Dashboard renders properly
-        // for Simple quotes too (mirrors legacy single-row dashboard view).
-        let qty = 0;
-        for (const v of (s.qtys || [])) {
-          const n = parseInt(v, 10);
-          if (Number.isFinite(n) && n > 0) { qty = n; break; }
-        }
         const uw = parseFloat(s.oneUpW || 0), ul = parseFloat(s.oneUpL || 0);
-        let shipObj = { totalWeight: estimatedWeight, productWeight: 0, skidTotalWeight: 0,
-                        skidCount: shipmentEst.skids || 1, skidKey: "S",
-                        skidLabel: "", trailerFeet: 0, pcsPerLayer: 0, layers: 0,
-                        stackHeight: 0, boardLbsMSF: 0 };
-        if (qty > 0 && uw > 0 && ul > 0) {
+        // Build a per-slot shipment for each populated qty.
+        const slots = [];
+        (s.qtys || []).forEach((raw, slot) => {
+          const qty = _parseQty(raw);
+          if (qty <= 0 || uw <= 0 || ul <= 0) return;
           const oMSF = (uw * ul * qty) / 144 / 1000;
-          shipObj = calcShipment(s.boardGrade, s.flute, s.outsideLiner || "None",
+          const ship = calcShipment(s.boardGrade, s.flute, s.outsideLiner || "None",
             s.insideLiner || "None", s.medium || "None", oMSF, uw, ul, qty);
+          slots.push({ slot, qty, ship, weight: Math.max(100, Math.round(ship.totalWeight || 100)) });
+        });
+        if (slots.length === 0) { setErr("Enter dimensions and at least one quantity first"); return; }
+
+        // Batch the UTS quotes (chunked to 4 to stay under the ~60s ingress cap).
+        const dest = { destZip: s.destZip, freightClass: "70" };
+        const batchItems = slots.map((sl, k) => ({ ...dest, weightLbs: sl.weight, ref: `s:${k}` }));
+        const byRef = {};
+        const CHUNK = 4;
+        for (let i = 0; i < batchItems.length; i += CHUNK) {
+          const chunk = batchItems.slice(i, i + CHUNK);
+          const resp = await freightQuoteBatch(chunk);
+          (resp.results || []).forEach((r) => { byRef[r.ref] = r; });
         }
-        const singleQuote = {
-          idx: 0, slot: 0, qty,
-          ship: shipObj, weight: estimatedWeight,
-          totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
-          transitDays: r.transitDays != null ? r.transitDays : null,
-          allCarriers: r.allCarriers || [],
-        };
-        // Per-Job mirrors Per-Item for a single-item shipment
-        const singleScenario = {
-          scenarioIdx: 0, perComp: [singleQuote],
-          combinedWeight: shipObj.totalWeight,
-          combinedSkids: shipObj.skidCount,
-          combinedFt: shipObj.trailerFeet,
-          weight: estimatedWeight,
-          totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
-          transitDays: r.transitDays != null ? r.transitDays : null,
-          allCarriers: r.allCarriers || [],
-        };
+        const perItemQuotes = slots.map((sl, k) => {
+          const r = byRef[`s:${k}`] || {};
+          return {
+            idx: 0, slot: sl.slot, qty: sl.qty, ship: sl.ship, weight: sl.weight,
+            totalAmount: r.totalAmount || 0, carrier: r.carrier || "",
+            transitDays: r.transitDays != null ? r.transitDays : null,
+            allCarriers: r.allCarriers || [],
+          };
+        });
+        // Per-slot freight map the engine reads: { slot: rawCost }.
+        const freightByQty = {};
+        perItemQuotes.forEach((q) => { freightByQty[q.slot] = String(Number(q.totalAmount || 0).toFixed(2)); });
+
+        // The active/selected slot drives the single freightCost the legacy
+        // Economics/Cost-Buildup panels read; default to the selected row.
+        const selSlot = Number(s.selSlot || 0);
+        const activeQuote = perItemQuotes.find((q) => q.slot === selSlot) || perItemQuotes[0];
+        const isLocal = activeQuote?.carrier === "SPC Local Delivery"
+          || s.quoteFOB === "LocalDelivery";
+
+        // Per-Job for a single-part quote == the same per-slot shipments (one
+        // component), so the Dashboard's Per-Job view mirrors Per-Item.
+        const perJobQuotes = perItemQuotes.map((q) => ({
+          scenarioIdx: q.slot,
+          perComp: [{ idx: 0, slot: q.slot, qty: q.qty, ship: q.ship }],
+          combinedWeight: q.ship.totalWeight, combinedSkids: q.ship.skidCount,
+          combinedFt: q.ship.trailerFeet, weight: q.weight,
+          totalAmount: q.totalAmount, carrier: q.carrier,
+          transitDays: q.transitDays, allCarriers: q.allCarriers,
+        }));
+
         setManyFields({
-          freightCost: String(r.totalAmount), quoteFOB: "Destination",
-          freightCarrier: r.carrier || "",
-          freightTransit: r.transitDays != null ? String(r.transitDays) : "",
+          freightByQty,
+          freightCost: String(activeQuote?.totalAmount ?? 0),
+          quoteFOB: "Destination",
+          freightCarrier: activeQuote?.carrier || "",
+          freightTransit: activeQuote?.transitDays != null ? String(activeQuote.transitDays) : "",
           freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
           freightMarkup: isLocal ? "0" : "0.15",
           freightDashCache: {
-            perItemQuotes: [singleQuote],
-            perJobQuotes: [singleScenario],
+            perItemQuotes,
+            perJobQuotes,
             lastCalcZip: s.destZip,
             lastCalcAt: new Date().toISOString(),
           },
         });
-        pushToast(`Freight ${fmtMoney(r.totalAmount)} · ${r.carrier}${isLocal ? " (no markup, local zone)" : ""} · ${shipmentEst.skids} skids · ${estimatedWeight} lbs est`, "ok");
+        const totalAll = perItemQuotes.reduce((a, q) => a + (Number(q.totalAmount) || 0), 0);
+        pushToast(`Freight quoted for ${perItemQuotes.length} qty tier${perItemQuotes.length === 1 ? "" : "s"} · ${fmtMoney(totalAll)} total${isLocal ? " (local, no markup)" : ""} — open Dashboard for per-qty detail`, "ok");
         return;
       }
 

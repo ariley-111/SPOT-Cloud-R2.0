@@ -1,0 +1,33 @@
+{
+  "summary": "Verified per-qty freight fix end-to-end in the live UI for Simple quote SA-260617-135543. After clicking btn-freight-update, the Quote Table 'Freight' column shows THREE DIFFERENT, monotonically increasing values across qty 500/1000/2000, and the Freight Dashboard Per-Item view renders three distinct slots each with its own weight + skid count. Single-qty regression on a fresh tab also passes. Multi-Part regression was skipped per request (no easily-loadable MP quote, not the focus of the fix).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "1_login_and_open_target_quote": "PASS — admin login via [data-testid='login-submit-btn']; Load → Saved Quotes → Team scope; row with est# 'SA-260617-135543' opened (id c00732e0-8ad6-427b-bcda-6eec644ca399). Initial state confirmed the bug pattern: Quote Table Freight column showed flat $514.14 across all three qty rows (500/1000/2000).",
+    "2_freight_update_fires_per_qty": "PASS — clicked [data-testid='btn-freight-update']. Three serialized UTS quotes returned and Quote Table refreshed within ~5 s.",
+    "3_PRIMARY_quote_table_per_qty_freight": "PASS — Freight column now shows: Qty 500 → $514.14, Qty 1,000 → $650.77, Qty 2,000 → $1,035.28. Three distinct values, increasing with quantity. NOT a flat value across rows.",
+    "4_freight_dashboard_per_item_view": "PASS — [data-testid='btn-freight-dash'] opened the dashboard in Per-Item mode. Three slot sections rendered, each with its own header showing weight + skids + linear ft and its own per-row carrier numbers: Slot 1 (Qty 500) = 583 lbs · 2 skids · 4 ft · Raw $447.08 / w-markup $514.14; Slot 2 (Qty 1,000) = 1,091 lbs · 3 skids · 8 ft · Raw $565.89 / $650.77; Slot 3 (Qty 2,000) = 2,182 lbs · 6 skids · 12 ft · Raw $900.24 / $1,035.28. Weights and skid counts differ across qtys as required.",
+    "5_REGRESSION_single_qty_simple": "PASS — new blank tab via [data-testid='tab-add-btn']; filled input-one-up-w=10, input-one-up-l=12, input-qty-0=500; switched FOB to Ship, filled [data-testid='freight-zip-input']=92618; clicked btn-freight-update. Returned a single freight value $286.19 on the one row within ~12 s (FEDEX FREIGHT ECONOMY · 5 days transit · 1 skid · 126 lbs est). Zero console errors during the run.",
+    "6_REGRESSION_multipart": "SKIPPED — per the review-request allowance ('If no MP quote is easily available, skip this and note it'). No Multi-Part quote was pre-staged in Team Saved Quotes for quick reuse, so skipped to keep the test focused on the per-qty fix that was just shipped. No regression risk indicators surfaced in the Single-Part loop change."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RightDashboard.jsx updateFreight() Single-Part branch correctly loops every populated qty slot, chunks freightQuoteBatch by 4, builds freightByQty={slot:cost}, and primes freightDashCache.perItemQuotes per slot — confirmed live by three distinct Quote Table values and three distinct Dashboard slot panels.",
+    "runner.py build_prod_inputs() JSON-string-key lookup ('0','1','2') is working: each Quote Table slot resolves its own freight; the falls-back-to-flat-freightCost path is no longer being hit for this quote.",
+    "Dashboard footer still shows 'Calculating…' indicator briefly after all 3 UTS quotes resolve — cosmetic only; the slot rows already render the final numbers. Minor: consider clearing the 'Calculating…' label as soon as the last in-flight batch settles to avoid confusion.",
+    "Pre-existing console warning unrelated to this change still observed in earlier runs (React shorthand/non-shorthand border mixing in TabBar frozen styling) — flagging again from iteration_34; not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request)", "frontend": "100% (5/5 assertions executed; 1 optional MP regression skipped per instructions)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md). Logged in via [data-testid='login-submit-btn'] — NOT the Microsoft SSO button.",
+  "seed_data_creation": "Created two transient draft tabs while testing the single-qty regression (est# SA-260617-180904 and SA-260617-181007). These were not saved; they remain as DRAFT tabs and will not pollute Saved Quotes / Team scope.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Per-qty freight is fully working end-to-end for Simple quotes. Reference numbers for quote SA-260617-135543 / ZIP 92618 / 30.75x33.5 / ECT32-B: qty 500 → 583 lbs · 2 skids · $447.08 raw / $514.14 markup; qty 1000 → 1091 lbs · 3 skids · $565.89 / $650.77; qty 2000 → 2182 lbs · 6 skids · $900.24 / $1,035.28. The freight Update can take 20–60s for 3 qty tiers; in this run it completed in ~5s thanks to the chunked batch. The Multi-Part Individual mode loop was not re-verified in the live UI this iteration (no MP quote pre-staged); recommend adding a small MP fixture in Team Saved Quotes if MP regression coverage matters for the next iteration.",
+  "rca of the issue": "N/A — fix verified. updateFreight() now iterates every populated qty in the Single-Part branch, fires one UTS quote per qty (chunked in batches of 4 server-side), populates state.freightByQty[slot] AND freightDashCache.perItemQuotes[slot]. useEngine forwards freightByQty in the payload; runner.build_prod_inputs() resolves it with JSON string keys so each Quote Table row picks up its own freight (and only falls back to flat freightCost when a slot is missing). Distinct Quote Table values and distinct Dashboard per-slot weights/skids confirm both backend and frontend changes are wired correctly."
+}

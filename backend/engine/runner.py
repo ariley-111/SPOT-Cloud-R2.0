@@ -67,10 +67,21 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
     if not fob_origin:
         fbq = json.get("freightByQty") or {}
         slot_idx = json.get("_slotIndex", 0)
-        if isinstance(fbq, dict) and slot_idx in fbq:
-            freight_cost = fbq[slot_idx]
+        # freightByQty arrives from the frontend as a JSON object, so its keys
+        # are STRINGS ("0","1",...) even though slot_idx is an int. Look up both
+        # forms so per-qty freight resolves per slot (Simple AND MP-Individual).
+        val = None
+        if isinstance(fbq, dict):
+            if slot_idx in fbq:
+                val = fbq[slot_idx]
+            elif str(slot_idx) in fbq:
+                val = fbq[str(slot_idx)]
         elif isinstance(fbq, list) and slot_idx < len(fbq):
-            freight_cost = fbq[slot_idx]
+            val = fbq[slot_idx]
+        # Use the per-slot value when present (incl. a legitimate "0"); only fall
+        # back to the flat freightCost when this slot has no entry.
+        if val not in (None, "", "null"):
+            freight_cost = val
         else:
             freight_cost = json.get("freightCost", "0")
 
