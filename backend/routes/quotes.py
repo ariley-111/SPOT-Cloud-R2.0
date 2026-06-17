@@ -156,6 +156,16 @@ async def list_quotes(
     counts = await count_files_by_quote([q.get("id") for q in result])
     for q in result:
         q["file_count"] = counts.get(q.get("id"), 0)
+    # Attach the pinned board-pricing version label (+ whether it's the current
+    # active version) so the Load Quote list can flag quotes on older pricing.
+    from services.pricing_versions import list_versions, get_active_version_id
+    versions = await list_versions()
+    vmap = {v["id"]: v.get("label") for v in versions}
+    active_vid = await get_active_version_id()
+    for q in result:
+        vid = q.get("pricing_version_id")
+        q["pricing_version_label"] = vmap.get(vid)
+        q["pricing_is_current"] = (vid == active_vid) if vid else None
     return result
 
 

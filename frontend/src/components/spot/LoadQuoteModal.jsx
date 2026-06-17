@@ -288,6 +288,20 @@ export default function LoadQuoteModal({ onClose }) {
                       <Paperclip size={11} /> {it.file_count}
                     </span>
                   )}
+                  {it.pricing_version_label && (
+                    <span data-testid={`load-pricing-badge-${it.id}`}
+                      title={it.pricing_is_current
+                        ? `Priced on the current board-pricing list (${it.pricing_version_label})`
+                        : `Priced on an older board-pricing list (${it.pricing_version_label}). Duplicate to re-price at current rates.`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                        fontSize: 10, fontWeight: 700,
+                        color: it.pricing_is_current ? "var(--spot-text3)" : "#b8860b",
+                        background: it.pricing_is_current ? "transparent" : "#b8860b18",
+                        border: `1px solid ${it.pricing_is_current ? "var(--spot-border)" : "#b8860b66"}`,
+                        borderRadius: 10, padding: "1px 6px" }}>
+                      {it.pricing_is_current ? "" : "⚠ "}priced {it.pricing_version_label}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--spot-text2)" }}>
                   {it.customer_name || (it.state || {}).custName || "—"}

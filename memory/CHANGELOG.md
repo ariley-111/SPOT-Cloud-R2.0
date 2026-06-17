@@ -10,6 +10,12 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-17 — Board Pricing · saved-quote pricing-version tag (Phase 2 follow-up)
+- **Load Quote → Saved Quotes** list now shows a per-quote pricing-version tag (`routes/quotes.py` list attaches `pricing_version_label` + `pricing_is_current` via one versions lookup; `LoadQuoteModal.jsx` renders it next to the est#/📎 badge).
+- Subtle/neutral when on the CURRENT active list; **amber "⚠ priced {date}"** when on an older list — so estimators can spot quotes worth re-confirming after a price increase. Verified: 6 saved quotes show "⚠ priced 2025-04-14" while 2026-06-15 is active.
+- Clarified prod rollout: pricing versions are per-environment (separate DBs). Deploy auto-seeds prod's v1 baseline + backfills prod quotes (zero movement); admin then Imports + Activates the new list in prod's Board Pricing tab (deliberate go-live).
+
+
 ## 2026-06-17 — Board Pricing Update + Freeze · PHASE 2 (importer + diff UI + activate)
 - **Importer (`services/pricing_import.py`):** defensive xlsx parser — anchors on SINGLEWALL/DOUBLEWALL labels + grade label in col A (not fixed cells), maps tier columns positionally to engine tiers. Imports **base_matrix ONLY** (adders carried forward, per business confirmation). Missing/zero cells keep old value + warn; new/unknown grades flagged. Auto-picks the latest-dated sheet tab. `diff_base_matrix()` → per-cell old/new/% + summary (detects uniform %).
 - **Admin routes (`routes/admin_pricing.py`, admin-gated):** POST /import (xlsx → DRAFT version + diff + warnings, no activation), GET /versions, GET /versions/{id} (diff: draft→vs active, active→vs the version it replaced), POST /versions/{id}/activate (deliberate, archives prior active), DELETE /versions/{id} (draft only). `create_version` now supports status=draft.
