@@ -25,6 +25,14 @@ Append-only log of shipped features and fixes.
 - **Tests**: `tests/test_per_job_allocation.py` 14/14 PASS incl. new
   `TestMatchedSetPerSlotJobFreight` (distinct-per-tier + breakdown==componentPricing).
 - Simple (single-part) freight path untouched (separate `freightByQty` pipeline).
+- **Bug 3 (user)**: The right-rail Cost Buildup "ONE-TIME LINE ITEMS > Freight"
+  showed only the active component's allocated share (~$33.88) instead of the
+  full per-job freight ($299.89). Fix: in MP Per-Job mode the One-Time Line Items
+  section is now JOB-scoped (`src = aggregate`): Items (job) = job sell, Freight
+  (per-job) = full per-job freight for the selected tier, Quote Total (job) =
+  order total — mirroring the Quote Table footer. Per-Item mode stays
+  component-scoped. Verified iter44 (all tiers match across cost buildup,
+  Per-Job card, and Quote Table footer/order total).
 
 
 ### 2026-06-18 — Matched-Set freight "Qty 300" bug RESOLVED (P0, was recurring) ✅
