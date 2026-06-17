@@ -12,6 +12,7 @@ from models.schemas import (
     AuditLogEntry,
 )
 from routes.auth import get_current_user
+from services.pricing_versions import get_active_version_id
 
 
 def _now() -> str:
@@ -160,10 +161,14 @@ async def list_quotes(
 
 @quotes_router.post("", response_model=Quote)
 async def create_quote(body: QuoteCreate, user: User = Depends(get_current_user)) -> Quote:
+    # Pin the pricing version at save time (Board Pricing Freeze). A fresh save
+    # pins to whatever is ACTIVE now; re-pricing later is only via Duplicate.
+    pinned = body.pricing_version_id or await get_active_version_id()
     quote = Quote(
         owner_id=user.id, est_num=body.est_num,
         customer_code=body.customer_code, customer_name=body.customer_name,
         state=body.state, status=body.status, test_mode=body.test_mode,
+        pricing_version_id=pinned,
     )
     await db[COL_QUOTES].insert_one(quote.model_dump())
     return quote
@@ -252,6 +257,9 @@ async def copy_quote(quote_id: str, user: User = Depends(get_current_user)) -> Q
         state=src.get("state") or {},
         status="draft",  # always start a copy as draft
         test_mode=src.get("test_mode", False),
+        # Duplicate IS the re-price path: pin the clone to the ACTIVE version
+        # so it picks up current board pricing (the original stays frozen).
+        pricing_version_id=await get_active_version_id(),
     )
     await db[COL_QUOTES].insert_one(clone.model_dump())
     await _log_audit(

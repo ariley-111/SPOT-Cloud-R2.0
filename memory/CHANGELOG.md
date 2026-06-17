@@ -10,6 +10,16 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-17 — Board Pricing Update + Freeze · PHASE 1 (versioning foundation, zero behavior change)
+- **Goal:** version board-supplier pricing, freeze saved quotes to the version they were priced on, and let the Board Engine panel reflect the active version. Re-pricing is ONLY via Duplicate (new est #).
+- **Engine parametrization (`engine/core.py`):** added `PRICING_KEYS` (base_matrix, liner_upgrades, medium_upgrades, dimensional_adders, fixed_charges, flute_rules), a per-request `ContextVar` overlay, `active_engine()`, `snapshot_pricing_config()`, and a `use_pricing(cfg)` context manager. `calc_board`/`get_liner_rate` now read `active_engine()[...]`. With no override → reads code ENGINE verbatim = exact legacy parity. Machine/labor rates stay managed by `rate_overrides` (orthogonal, unchanged).
+- **Versions service (`services/pricing_versions.py`) + `PricingVersion` model:** `pricing_versions` collection. Startup `ensure_initialized()` seeds v1 baseline ("2025-04-14" == in-code rates, marked active) and backfills all existing quotes/drafts to it. Idempotent.
+- **Pinning (`routes/quotes.py`):** `create_quote` pins to active version at save; `update_quote` preserves the pin (freeze); `copy_quote` (Duplicate) pins to the ACTIVE version (the re-price path).
+- **Engine endpoints (`engine_routes.py`):** `@with_pricing` decorator resolves `pricingVersionId` from the body (pinned) or active version and applies it via `use_pricing`. Applied to /calculate, /calculate-all, /calculate-multi-part, /compare-routes. `/manifest` now returns the ACTIVE version's pricing keys + version meta (so the Board Engine panel shows live rates).
+- **Verified:** startup seeded v1 + backfilled 37 quotes; `/manifest` reports baseline 2025-04-14 (275=139.58); `/calculate` sellTotal identical (3403.99). New `tests/test_pricing_versions.py` (3 pass: snapshot completeness, v1==default parity, +6.5% bump moves cost + no context leak). Full suite 124 pass (3 pre-existing SSO/auth-env failures unrelated).
+- **KEY IMPORT-SCOPE FINDING (for Phase 2):** engine `base_matrix` == supplier raw board rates 1:1, but liner/medium ADDERS diverge from the supplier sheet (e.g. engine 26#Med $3.00 vs sheet $2.50; 33#Med $7.00 vs $6.40; 40#Med $12.50 vs $10.00) — they carry SPC business values. The 6/15/26 change is a uniform **+6.5%** on base_matrix (header cell `0.065`) + 56# Kla-White $10.50→$15.00 (engine already at $15.00). ⇒ Importer must target **base_matrix only**; adders shown as informational diff, opt-in.
+
+
 ## 2026-06-16 — Corr auto-flip parity (option A): restore legacy auto-flip on typed dims
 - **Gap found (via legacy source diff, not docs):** cloud auto-flip effect was a faithful
   port of legacy `spot_r1_5.jsx` L3941-3957 EXCEPT it added `if (s.corrManual) return;`

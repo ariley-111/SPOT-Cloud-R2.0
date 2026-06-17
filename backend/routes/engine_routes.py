@@ -1,5 +1,6 @@
 """Engine endpoints — wrap the Python engine port (Phase 1)."""
 from __future__ import annotations
+import functools
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Body
@@ -9,36 +10,70 @@ from engine.routing import auto_select_sheet, auto_route, compare_routes
 from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, APPROVED_SHEETS, get_grade_fallback, ENGINE
 from engine.core import BOBST_FLUTES, BOBST_MIN_W, BOBST_MIN_L, BOBST_MAX_W, BOBST_MAX_L
 from engine.core import CREST_MAX_W, CREST_MAX_L, MULLEN_UPGRADE, FLUTE_CALIPERS
+from engine.core import use_pricing
 from models.schemas import User
 from routes.auth import get_current_user
+from services.pricing_versions import resolve_config, get_active_config, get_active_version
 
 router = APIRouter(prefix="/api/engine", tags=["engine"])
 
 
+def with_pricing(fn):
+    """Resolve the pricing version for a calc request and apply it for the
+    duration of the handler. Reads `pricingVersionId` from the JSON body
+    (a saved quote's PINNED version); falls back to the ACTIVE version for
+    drafts. calc_board overlays the version's config via the ContextVar."""
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        payload = kwargs.get("payload")
+        vid = None
+        if isinstance(payload, dict):
+            vid = payload.get("pricingVersionId") or payload.get("pricing_version_id")
+        cfg = await resolve_config(vid)
+        with use_pricing(cfg):
+            return await fn(*args, **kwargs)
+    return wrapper
+
+
+
+
 @router.get("/manifest")
-async def manifest(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
+async def manifest(version_id: Optional[str] = None,
+                   _u: User = Depends(get_current_user)) -> Dict[str, Any]:
     """Return the FULL Board Engine reference data so the Board Engine
     viewer panel can render the actual rates/rules/sheets — not a stale
     hardcoded summary. Legacy parity: matches the data legacy renders at
-    spot_r1_5.jsx L6606-6758 from its ENGINE constant."""
-    # Aggregate sheet library by spec for the bottom "Approved Sheets" row.
+    spot_r1_5.jsx L6606-6758 from its ENGINE constant.
+
+    Pricing keys (base_matrix + adders) come from the ACTIVE pricing version
+    (or `version_id` if given), so activating a new board-price list flips the
+    Board Engine panel to the new rates instantly."""
     from collections import Counter
     sheet_counts = Counter((sh["g"], sh["f"]) for sh in APPROVED_SHEETS)
     approved_specs = [
         {"grade": g, "flute": f, "count": n}
         for (g, f), n in sorted(sheet_counts.items())
     ]
+    active = await get_active_version()
+    cfg = await resolve_config(version_id) if version_id else (active or {}).get("config")
+    eng = {**ENGINE, **(cfg or {})}
     return {
         "msf_tiers": ENGINE["msf_tiers"],
-        "base_matrix": ENGINE["base_matrix"],
-        "liner_upgrades": ENGINE.get("liner_upgrades") or {},
-        "medium_upgrades": ENGINE.get("medium_upgrades") or {},
-        "flute_rules": ENGINE.get("flute_rules") or {},
-        "dimensional_adders": ENGINE.get("dimensional_adders") or {},
-        "fixed_charges": ENGINE.get("fixed_charges") or {},
+        "base_matrix": eng["base_matrix"],
+        "liner_upgrades": eng.get("liner_upgrades") or {},
+        "medium_upgrades": eng.get("medium_upgrades") or {},
+        "flute_rules": eng.get("flute_rules") or {},
+        "dimensional_adders": eng.get("dimensional_adders") or {},
+        "fixed_charges": eng.get("fixed_charges") or {},
         "org_limits": ENGINE.get("org_limits") or {},
         "approved_sheets_total": len(APPROVED_SHEETS),
         "approved_specs": approved_specs,
+        "pricing_version": {
+            "id": (active or {}).get("id"),
+            "label": (active or {}).get("label"),
+            "effective_date": (active or {}).get("effective_date"),
+            "is_baseline": (active or {}).get("is_baseline", False),
+        } if active else None,
         "constants": {
             "BOBST_FLUTES": BOBST_FLUTES,
             "BOBST_MIN_W": BOBST_MIN_W, "BOBST_MIN_L": BOBST_MIN_L,
@@ -51,6 +86,7 @@ async def manifest(_u: User = Depends(get_current_user)) -> Dict[str, Any]:
 
 
 @router.post("/calculate")
+@with_pricing
 async def calculate(
     payload: Dict[str, Any] = Body(...),
     slot_index: int = 0,
@@ -70,6 +106,7 @@ async def calculate(
 
 
 @router.post("/calculate-all")
+@with_pricing
 async def calculate_all(
     payload: Dict[str, Any] = Body(...),
     _u: User = Depends(get_current_user),
@@ -279,6 +316,7 @@ async def grade_availability(
 
 
 @router.post("/compare-routes")
+@with_pricing
 async def compare_routes_ep(
     payload: Dict[str, Any] = Body(...),
     _u: User = Depends(get_current_user),
@@ -449,6 +487,7 @@ def _build_item_payload(item: Dict[str, Any], top: Dict[str, Any], item_qtys: Li
 
 
 @router.post("/calculate-multi-part")
+@with_pricing
 async def calculate_multi_part(
     payload: Dict[str, Any] = Body(...),
     _u: User = Depends(get_current_user),

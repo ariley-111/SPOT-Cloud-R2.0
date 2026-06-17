@@ -75,6 +75,11 @@ async def on_startup():
     logger.info(f"Integration overrides applied: {ni}")
     ns = await load_sheets_from_db()
     logger.info(f"Sheet library loaded: {ns}")
+    # Board Pricing Freeze: seed v1 baseline (4.14.25 == in-code rates) + pin
+    # all existing quotes to it. Idempotent — no-op once initialized.
+    from services.pricing_versions import ensure_initialized
+    active_pv = await ensure_initialized()
+    logger.info(f"Pricing versions initialized; active={active_pv}")
     # One-time admin role grants. Idempotent — only updates when role differs.
     from db import db as _db, COL_USERS
     admin_grants = ["rwalter@standardprinting.com"]

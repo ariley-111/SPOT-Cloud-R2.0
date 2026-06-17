@@ -29,3 +29,4 @@ COL_PARSER_USAGE = "parser_usage"      # Per-parse-call usage log (tokens, $, cu
 COL_SHEETS = "sheet_library"           # Admin-managed sheet adds / edits / disables
 COL_BOM_TEMPLATES = "bom_templates"    # Personal + team BOM templates
 COL_PARSER_FILES = "parser_files"      # Saved raw uploads — metadata + path; lifetime = quote lifetime
+COL_PRICING_VERSIONS = "pricing_versions"  # Versioned board-supplier pricing snapshots (base_matrix etc.)

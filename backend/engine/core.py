@@ -13,6 +13,8 @@ Any deviation from the JS engine output MUST be treated as a regression bug.
 from __future__ import annotations
 import math
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -152,6 +154,57 @@ ENGINE: Dict[str, Any] = {
         "pallet_prep_fee": {"amount": 17.5},
     },
 }
+
+
+# ═══════════════════════════════════════════════════════════════
+# VERSIONED BOARD PRICING (Phase 1 — Board Pricing Update + Freeze)
+# ───────────────────────────────────────────────────────────────
+# Only the BOARD-SUPPLIER pricing keys below are versioned/snapshotted.
+# Machine/labor rates + margin curves (RATE_DEFAULTS, GM/SELL_DEFAULTS,
+# GRADE_ADDER_DEFAULTS) are managed separately by services/rate_overrides
+# and are NOT part of a pricing version.
+#
+# Resolution model: per-request ContextVar overlay. When a request sets an
+# override (a saved quote's PINNED version, or the ACTIVE version for drafts),
+# calc_board/get_liner_rate read from {**ENGINE, **override}. With NO override
+# set, they read the module ENGINE values verbatim → exact legacy parity, and
+# v1 == these values, so existing quotes never move.
+# ═══════════════════════════════════════════════════════════════
+PRICING_KEYS: Tuple[str, ...] = (
+    "base_matrix", "liner_upgrades", "medium_upgrades",
+    "dimensional_adders", "fixed_charges", "flute_rules",
+)
+
+_pricing_override: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+    "spot_pricing_override", default=None)
+
+
+def active_engine() -> Dict[str, Any]:
+    """The pricing config in effect for the current request: ENGINE overlaid
+    with any ContextVar pricing override. Returns ENGINE itself when none set."""
+    ov = _pricing_override.get()
+    if not ov:
+        return ENGINE
+    return {**ENGINE, **ov}
+
+
+def snapshot_pricing_config() -> Dict[str, Any]:
+    """Deep copy of the current code-level pricing config (the v1 baseline)."""
+    return {k: deepcopy(ENGINE[k]) for k in PRICING_KEYS}
+
+
+@contextmanager
+def use_pricing(config: Optional[Dict[str, Any]]):
+    """Apply a versioned pricing config for the duration of the block.
+    No-op when config is falsy (→ uses code defaults / active version)."""
+    if not config:
+        yield
+        return
+    token = _pricing_override.set(config)
+    try:
+        yield
+    finally:
+        _pricing_override.reset(token)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -347,7 +400,7 @@ def get_dim_adder(v: float, rules: List[Dict[str, Any]]) -> float:
 
 
 def get_liner_rate(name: str, kemi_tariff: float) -> float:
-    r = ENGINE["liner_upgrades"].get(name)
+    r = active_engine()["liner_upgrades"].get(name)
     if not r:
         return 0.0
     if name == "42# Kemi-Lite":
@@ -382,7 +435,8 @@ def get_medium_fallback(requested_medium: str, available_mediums: Set[str]) -> O
 # calcBoard — board pricing (verbatim L227-258)
 # ═══════════════════════════════════════════════════════════════
 def calc_board(bi: Dict[str, Any], qty: int, is_stock: bool = False) -> Dict[str, Any]:
-    fr = ENGINE["flute_rules"].get(bi["flute"])
+    eng = active_engine()
+    fr = eng["flute_rules"].get(bi["flute"])
     if not fr:
         return {
             "qty": qty, "sqft": 0, "oSqFt": 0, "oMsf": 0, "tier": "-", "base": None,
@@ -396,23 +450,23 @@ def calc_board(bi: Dict[str, Any], qty: int, is_stock: bool = False) -> Dict[str
     o_sq_ft = sqft * qty
     o_msf = o_sq_ft / 1000
     tier = get_msf_tier(o_msf)
-    base = ENGINE["base_matrix"][mk].get(bi["boardGrade"], {}).get(tier)
+    base = eng["base_matrix"][mk].get(bi["boardGrade"], {}).get(tier)
     has_price = base is not None
     kemi_tariff = bi.get("kemiTariff", 2.50)
     ol_r = get_liner_rate(bi["outsideLiner"], kemi_tariff)
     il_r = get_liner_rate(bi["insideLiner"], kemi_tariff)
     k_sides = (1 if bi["outsideLiner"] == "42# Kemi-Lite" else 0) + (1 if bi["insideLiner"] == "42# Kemi-Lite" else 0)
-    md_up = ENGINE["medium_upgrades"].get(bi["medium"]) or {}
+    md_up = eng["medium_upgrades"].get(bi["medium"]) or {}
     md_r = md_up.get("amount_per_msf", 0) or 0
     fl_r = fr.get("flute_upcharge_per_msf", 0) or 0
-    w_a = get_dim_adder(bi["widthIn"], ENGINE["dimensional_adders"]["width"])
-    l_a = get_dim_adder(bi["lengthIn"], ENGINE["dimensional_adders"]["length"])
+    w_a = get_dim_adder(bi["widthIn"], eng["dimensional_adders"]["width"])
+    l_a = get_dim_adder(bi["lengthIn"], eng["dimensional_adders"]["length"])
     grade_adder = bi["gradeAdder"] if is_finite(bi.get("gradeAdder")) else 0
     eff_rate = (base or 0) + ol_r + il_r + md_r + fl_r + w_a + l_a + grade_adder
     var_cost = eff_rate * o_msf
     kemi_chg = k_sides * kemi_tariff * o_msf
     fsc_amt = (bi["fscFee"] if is_finite(bi.get("fscFee")) else 25) if bi.get("fscEnabled") else 0
-    setup = (bi["under5MsfFee"] if is_finite(bi.get("under5MsfFee")) else 0) if o_msf < ENGINE["fixed_charges"]["under_5_msf_setup_fee"]["trigger_order_msf_lt"] else 0
+    setup = (bi["under5MsfFee"] if is_finite(bi.get("under5MsfFee")) else 0) if o_msf < eng["fixed_charges"]["under_5_msf_setup_fee"]["trigger_order_msf_lt"] else 0
     pp_rate = bi["palletPrepFee"] if is_finite(bi.get("palletPrepFee")) else 17.5
     pp = 0 if is_stock else pp_rate * o_msf
     total = var_cost + fsc_amt + setup + pp

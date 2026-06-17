@@ -113,6 +113,9 @@ class Quote(BaseModel):
     state: Dict[str, Any] = Field(default_factory=dict)
     results: Optional[List[Dict[str, Any]]] = None
     test_mode: bool = False
+    # Board Pricing Freeze (Phase 1): the pricing version this quote is pinned to.
+    # Set at save time; preserved on update. Re-pricing is only via Duplicate.
+    pricing_version_id: Optional[str] = None
     created_at: str = Field(default_factory=_utc_now)
     updated_at: str = Field(default_factory=_utc_now)
 
@@ -124,6 +127,26 @@ class QuoteCreate(BaseModel):
     customer_name: Optional[str] = None
     status: str = "draft"
     test_mode: bool = False
+    pricing_version_id: Optional[str] = None
+
+
+# ─── PRICING VERSIONS (Board Pricing Update + Freeze) ──────────────────────
+class PricingVersion(BaseModel):
+    """A versioned snapshot of board-supplier pricing (base_matrix + adders).
+    `config` holds the PRICING_KEYS payload the engine overlays at calc time."""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=_uuid)
+    label: str                              # e.g. "2026-06-15"
+    effective_date: Optional[str] = None    # supplier effective date (ISO)
+    status: str = "archived"                # active | archived | draft
+    config: Dict[str, Any] = Field(default_factory=dict)
+    change_summary: Optional[Dict[str, Any]] = None  # diff vs prior active version
+    source_file: Optional[str] = None       # original filename, for the record
+    notes: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=_utc_now)
+    activated_at: Optional[str] = None
+    is_baseline: bool = False               # v1 = the in-code 4.14.25 snapshot
 
 
 # ─── ENGINE ───────────────────────────────────────────────────────────────
