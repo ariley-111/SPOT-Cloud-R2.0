@@ -1,0 +1,63 @@
+{
+  "summary": "PASS — Multi-Part Matched Set Per-Job freight per-tier fix VERIFIED on quote SA-260604-165816-COPY (qtys 100/150/300, ship-to 19446, 3 components). Backend pytest test_per_job_allocation.py = 13/13 PASS (including new TestMatchedSetPerSlotJobFreight). UI end-to-end after live UTS Update All Rates (spinner cleared in 123.2s): (1) Quote Table FREIGHT column shows DIFFERENT, increasing values per tier — $185.79 / $230.64 / $299.89; (2) right-rail PER-JOB FREIGHT card updates to the selected tier — clicking row 100/150/300 changes both freight-per-job-amount AND freight-per-job-qty (' · QTY 100', ' · QTY 150', ' · QTY 300') accordingly; (3) Quote Preview → By Type → Per-Component Pricing grid Freight row shows three DIFFERENT values across 100 SETS / 150 SETS / 300 SETS columns ($185.79 / $230.64 / $299.89), exactly matching the Quote Table and right-rail card. All three locations are now in sync per tier (previously all three showed only the first tier's $185.79). Underlying carrier raw rates (PITT OHIO) by tier are $161.56 / $200.56 / $260.77 → ×1.15 = the markup values above.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "00_backend_pytest_test_per_job_allocation": {"status": "PASS", "result": "13/13 passed including TestMatchedSetPerSlotJobFreight::test_each_slot_freight_distinct and test_slots_not_all_equal"},
+    "01_freight_dash_update_all_rates_live": {"status": "PASS", "spinner_cleared_after_seconds": 123.2, "fresh_data": true},
+    "02_quote_table_freight_per_tier_distinct": {
+      "status": "PASS",
+      "qty_100_freight": "$185.79",
+      "qty_150_freight": "$230.64",
+      "qty_300_freight": "$299.89",
+      "all_distinct": true,
+      "monotonically_increasing_with_qty": true
+    },
+    "03_right_rail_per_job_card_updates_per_selected_slot": {
+      "status": "PASS",
+      "select_qty_100": {"amount": "$185.79", "qty_label": " · QTY 100"},
+      "select_qty_150": {"amount": "$230.64", "qty_label": " · QTY 150"},
+      "select_qty_300": {"amount": "$299.89", "qty_label": " · QTY 300"},
+      "freight-per-job-qty_testid_present": true
+    },
+    "04_quote_preview_by_type_per_component_pricing_grid_freight_row": {
+      "status": "PASS",
+      "100_SETS_freight": "$185.79",
+      "150_SETS_freight": "$230.64",
+      "300_SETS_freight": "$299.89",
+      "all_distinct_across_tier_columns": true,
+      "matches_quote_table_and_right_rail": true
+    },
+    "05_dashboard_per_slot_carrier_allocations_dash_pj_freight": {
+      "status": "PASS",
+      "note": "dash-pj-freight-{slot}-{carrier} cells sum per slot to the slot's raw freight: slot0=161.56, slot1=200.56, slot2=260.77 — distinct per tier, no longer flat",
+      "raw_values": {"0-0":"$78.20","0-1":"$65.11","0-2":"$18.25","1-0":"$97.07","1-1":"$80.83","1-2":"$22.66","2-0":"$126.21","2-1":"$105.10","2-2":"$29.46"}
+    },
+    "06_per_item_matched_set_regression_iter41": {"status": "NOT_RE-TESTED", "note": "Path unchanged in this fix; was fully verified in iteration_41 (Qty 100/150/300 headers each list all 3 components)."},
+    "07_simple_quote_freightByQty_regression": {"status": "NOT_TESTED_THIS_ITERATION", "note": "Backend path (freightByQty[slot] for Simple) was not modified in this change. Multi-part-only payload (jobFreightBySlot) and engine_routes Per-Job slot branch are the only touched code. Simple quote rendering uses a separate frontend pipeline and was not in regression test set."}
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_per_job_allocation.py",
+    "/app/test_reports/pytest/per_job_alloc.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "engine_routes.py Per-Job slot branch correctly reads payload.jobFreightBySlot[str(slot)] with fallback to jobFreightCost for both slots[].freightLine and the per-component MSF allocation — confirmed in backend pytest (13/13 incl. distinct per-slot test) and visible in live UI as $185.79 / $230.64 / $299.89 distinct per tier.",
+    "useEngine.js buildMpPayload now ships jobFreightBySlot — verified by the fact that the engine response slots[].freightLine values surface in the Quote Table FREIGHT column at the three distinct values above.",
+    "RightDashboard.jsx Per-Job card reads s.jobFreightBySlot[selSlot] — clicking row 100/150/300 in the Quote Table updates both amount AND the new data-testid 'freight-per-job-qty' label. New testid is present and stable.",
+    "PreviewPdfModal.jsx MatchedSetPricingGrid Freight row uses slots[].freightLine (t.freight) — Quote Preview By Type grid now shows the three distinct freight values per tier column, eliminating the prior-flat $185.79 across all three columns.",
+    "Minor observation (not blocking): dashboard's top-bar 'Job Freight: $...' label remained at $230.64 even after switching the chip from 150 → 100 (slight UI staleness for chip-driven header). The functional value used by the engine and surfaced everywhere else is correct; this is a cosmetic chip-label issue not in scope of this fix."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (13/13 pytest)", "frontend": "100% (4 of 4 spec checks PASS: quote table tiers distinct, right-rail card updates per selection, PDF grid tiers distinct, dashboard per-slot allocations distinct)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None — reused existing SA-260604-165816-COPY draft (qtys 100/150/300, ship-to 19446, 3 components).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Per-tier Per-Job freight is now fully wired through engine → Quote Table → right-rail Per-Job card → PDF Per-Component Pricing grid. For any future retest: open SA-260604-165816-COPY, FOB Ship + Per Job, click btn-freight-dash → dash-update-rates, WAIT ~120s for [data-testid='freight-uts-spinner'] to clear, then click each Quote Table row and confirm freight-per-job-amount and freight-per-job-qty change to the row's qty, plus open Preview Quote → By Type and confirm three distinct Freight values across the SETS columns. Backend regression: pytest /app/backend/tests/test_per_job_allocation.py (set REACT_APP_BACKEND_URL first).",
+  "rca of the issue": "Original bug: in Multi-Part Matched Set Per-Job freight, only jobFreightCost (a flat single value) was sent to the engine and used for ALL set-qty slots — so slots[].freightLine, the per-component allocation, and the right-rail card all showed the first tier's freight in every tier. Fix verified: (a) frontend useEngine.buildMpPayload now sends jobFreightBySlot map, (b) backend engine_routes.py Per-Job slot branch reads jobFreightBySlot[str(slot)] (with jobFreightCost fallback) for both line freight and the MSF-weighted per-component allocation, (c) RightDashboard.jsx Per-Job card reads s.jobFreightBySlot[selSlot] and exposes data-testid 'freight-per-job-qty', (d) PreviewPdfModal MatchedSetPricingGrid Freight row reads slots[].freightLine. Live UI now shows the three distinct, increasing per-tier values ($185.79 / $230.64 / $299.89) consistently across Quote Table, right-rail card, and PDF grid."
+}

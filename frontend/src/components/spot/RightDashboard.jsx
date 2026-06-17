@@ -820,7 +820,16 @@ function FreightPanel({ s }) {
               // Per Job mode — freight $ + markup display, no verbose pointer text.
               <>
               {(() => {
-                const raw = Number(s.jobFreightCost) || 0;
+                // Show the Per-Job freight for the CURRENTLY SELECTED qty tier
+                // (driven by the Quote Table row selection, s.selSlot). Per-slot
+                // value comes from jobFreightBySlot; fall back to the flat
+                // jobFreightCost only when no per-slot value exists.
+                const selSlot = Number(s.selSlot || 0);
+                const jbs = s.jobFreightBySlot || {};
+                const perSlot = jbs[selSlot] ?? jbs[String(selSlot)];
+                const hasPerSlot = perSlot != null && perSlot !== "" && perSlot !== "null";
+                const raw = Number(hasPerSlot ? perSlot : s.jobFreightCost) || 0;
+                const selQty = Number((s.qtys || [])[selSlot]) || 0;
                 const _isLocal = s.quoteFOB === "LocalDelivery";
                 const mk  = Number(s.freightMarkup ?? (_isLocal ? 0 : 0.15)) || 0;
                 const total = raw * (1 + mk);
@@ -828,7 +837,15 @@ function FreightPanel({ s }) {
                   <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
                     border: "1px solid #06b6d444", borderRadius: 4 }} data-testid="freight-per-job-pointer">
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#06b6d4",
-                      textTransform: "uppercase", letterSpacing: ".06em" }}>Per-Job Freight</div>
+                      textTransform: "uppercase", letterSpacing: ".06em" }}>
+                      Per-Job Freight
+                      {selQty > 0 && (
+                        <span data-testid="freight-per-job-qty"
+                          style={{ color: "var(--spot-text3)", fontWeight: 700 }}>
+                          {" · Qty "}{selQty.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 2 }}>
                       <span style={{ fontSize: 11, color: "var(--spot-text3)" }}
                         data-testid="freight-per-job-base">

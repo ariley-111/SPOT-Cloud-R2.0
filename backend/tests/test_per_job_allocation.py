@@ -283,3 +283,48 @@ class TestShipPerJobAggregateConsistency:
         """jobTotals.jobFreightCost MUST remain the raw $70 so the UI can
         render '$70 + 15% markup' breakdown labels correctly."""
         assert float(resp["jobTotals"]["jobFreightCost"]) == pytest.approx(70.0, abs=0.01)
+
+
+# ── Matched Set + Per Job + jobFreightBySlot: each set-qty tier gets ITS OWN
+#    job freight (× markup) in slots[k].freightLine — NOT a flat first-tier value.
+#    Regression for the 2026-06-18 bug where every tier showed the same freight.
+class TestMatchedSetPerSlotJobFreight:
+    @pytest.fixture(scope="class")
+    def resp(self, client):
+        payload = {
+            "quoteType": "Multi-Part",
+            "pricingMode": "Matched Set",
+            "setMarginPct": "0.40",
+            "setMarginOverride": False,
+            "purchasedMarginPct": "0.40",
+            "fulfillmentMarginPct": "0.45",
+            "qtys": ["100", "150", "300", "", ""],
+            "bomItems": [
+                {"id": "a", "desc": "A", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["100", "150", "300", "", ""])},
+                {"id": "b", "desc": "B", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["100", "150", "300", "", ""])},
+            ],
+            "quoteFOB": "Destination",
+            "freightScope": "Per Job",
+            "jobFreightCost": "161.56",         # active/first tier value
+            "jobFreightBySlot": {"0": "161.56", "1": "200.56", "2": "260.77"},
+            "freightAllocMethod": "By MSF",
+            "freightMarkup": "0.15",
+            "jobFreightTreatment": "Separate Line",
+        }
+        r = client.post(f"{BASE_URL}/api/engine/calculate-multi-part",
+                        json=payload, timeout=60)
+        assert r.status_code == 200, f"{r.status_code} {r.text[:400]}"
+        return r.json()
+
+    def test_each_slot_freight_distinct(self, resp):
+        slots = {int(s["slot"]): float(s.get("freightLine") or 0) for s in resp["slots"]}
+        # Each tier = its own raw × 1.15
+        assert slots[0] == pytest.approx(161.56 * 1.15, abs=0.02)
+        assert slots[1] == pytest.approx(200.56 * 1.15, abs=0.02)
+        assert slots[2] == pytest.approx(260.77 * 1.15, abs=0.02)
+
+    def test_slots_not_all_equal(self, resp):
+        vals = [round(float(s.get("freightLine") or 0), 2) for s in resp["slots"]]
+        assert len(set(vals)) == 3, f"Freight should differ per tier, got {vals}"

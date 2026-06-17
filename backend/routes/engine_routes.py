@@ -607,7 +607,13 @@ async def calculate_multi_part(
         freight_scope = payload.get("freightScope") or "None"
         prepress_scope = payload.get("prepressScope") or "None"
         if freight_scope == "Per Job":
-            job_freight = _safe_float(payload.get("jobFreightCost"))
+            # Per-slot job freight (see line_freight note below) so each tier's
+            # per-component allocation reflects that tier's combined-load freight.
+            _jfbs0 = payload.get("jobFreightBySlot") or {}
+            _slot_job0 = _jfbs0.get(str(slot), _jfbs0.get(slot)) if isinstance(_jfbs0, dict) else None
+            if _slot_job0 in (None, "", "null"):
+                _slot_job0 = payload.get("jobFreightCost")
+            job_freight = _safe_float(_slot_job0)
             method = payload.get("freightAllocMethod") or "By MSF"
             # Pass shipWeight so "By Weight" allocation works correctly.
             items_for_alloc = [{
@@ -645,7 +651,15 @@ async def calculate_multi_part(
         if freight_scope == "Per Job":
             _mk_raw = payload.get("freightMarkup")
             _mk = _safe_float(_mk_raw if _mk_raw not in (None, "") else 0.15)
-            line_freight += _safe_float(payload.get("jobFreightCost")) * (1.0 + _mk)
+            # Per-slot job freight: each set-qty tier ships a different combined
+            # load, so its UTS-quoted job freight differs. jobFreightBySlot maps
+            # {slotIdx: rawCost}; fall back to the flat jobFreightCost only when a
+            # per-slot value isn't present (e.g. single-tier quotes / local del.).
+            _jfbs = payload.get("jobFreightBySlot") or {}
+            _slot_job = _jfbs.get(str(slot), _jfbs.get(slot)) if isinstance(_jfbs, dict) else None
+            if _slot_job in (None, "", "null"):
+                _slot_job = payload.get("jobFreightCost")
+            line_freight += _safe_float(_slot_job) * (1.0 + _mk)
         line_die = sum(_safe_float(pc.get("dieLineCost")) for pc in per_comp
                        if _safe_float(pc.get("dieLineCost")) > 0)
         # Aggregate die base (pre-markup) so the cost buildup can render

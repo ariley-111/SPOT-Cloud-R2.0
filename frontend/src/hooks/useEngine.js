@@ -213,6 +213,11 @@ export function buildMpPayload(state) {
     // Job-level freight / prepress
     freightScope: state.freightScope, freightAllocMethod: state.freightAllocMethod,
     jobFreightCost: state.jobFreightCost, jobFreightTreatment: state.jobFreightTreatment,
+    // Per-slot job freight: each set-qty tier ships a different combined load,
+    // so its UTS-quoted job freight differs. jobFreightBySlot maps {slotIdx:
+    // rawCost}; the backend applies the matching value to each Quote Table tier,
+    // PDF column and aggregate (was previously flat jobFreightCost for all tiers).
+    jobFreightBySlot: state.jobFreightBySlot || {},
     // BUG-2026-02: Job-level freightMarkup MUST be on the payload so the
     // backend allocator uses the correct rate (0 for Local Delivery, 0.15 for
     // Ship). Without this the backend defaulted to 0.15, double-billing
