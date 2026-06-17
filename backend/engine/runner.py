@@ -393,6 +393,17 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
                          board_spec["outsideLiner"], board_spec["insideLiner"], board_spec["medium"],
                          wf.get("shippedMSF") or wf["oMSF"], eff_w, eff_l, qty)
 
+    # FINISHED ship weight (for FREIGHT only): freight is charged on the finished,
+    # die-cut product that actually ships — NOT the full board sheets consumed
+    # (the trim is recycled at the plant). So compute a separate shipment from the
+    # finished one-up footprint (oneUpW × oneUpL × qty), mirroring the freight
+    # dashboard's calcShipment. Used for Per-Job freight allocation (By Weight /
+    # By MSF). The board-based `ship` above is left untouched for pricing/skids.
+    fin_msf = (eff_w * eff_l * qty) / 144000.0 if (eff_w and eff_l and qty) else 0.0
+    fin_ship = calc_shipment(board_spec["boardGrade"], board_spec["flute"],
+                             board_spec["outsideLiner"], board_spec["insideLiner"], board_spec["medium"],
+                             fin_msf, eff_w, eff_l, qty)
+
     # When force_custom_order, the board IS a custom mill order regardless of
     # the underlying auto-selected stock sheet's flag. Override the surface
     # flags so the Board panel shows "ORDER" (not "STOCK") — legacy parity.
@@ -494,6 +505,8 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "shipWeight": ship["totalWeight"], "skidCount": ship["skidCount"],
         "skidKey": ship["skidKey"], "trailerFeet": ship["trailerFeet"],
         "boardLbsMSF": ship["boardLbsMSF"],
+        # Finished (shipped-product) basis — used for freight allocation only.
+        "finMSF": fin_msf, "finShipWeight": fin_ship["totalWeight"],
         # ── Display fields surfaced for Cost Buildup ────────────────────
         "freightMarkup": float(json.get("freightMarkup") or 0),
         "freightCost": float(json.get("freightCost") or 0),

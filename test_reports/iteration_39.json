@@ -1,0 +1,84 @@
+{
+  "summary": "Scenario 2 final validation on Multi-Part MATCHED SET quote SA-260604-165816 with NEW third set qty 300. Results: (1) The Allocate-By distinctness fix and the LTL minimum notice are VERIFIED WORKING — Board MSF, Equal Split, and By Weight produce three DISTINCT freight tuples that match the spec's expected w/markup values exactly. (2) HOWEVER, the two NEW Matched-Set unified-qty fixes specifically called out in the spec have FAILED: (a) the Per-Item Qty 300 slot still lists ONLY the Header component (not all three), and (b) the Per-Job third scenario header still reads 'Scenario 3' (not 'Qty 300'). RightDashboard.buildItems is NOT actually treating Matched Set's top-level qty 300 as a unified per-component qty when only the Header component has explicit slot[2] data.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FreightDashModal — Per Item view, Qty 300 slot (dash-per-item-slot-2)", "issue": "FAIL — Slot 2 (Qty 300) only renders the Header component. Display Base and 60ct. Tray rows are MISSING. Spec required: in Matched Set mode, when set qty 300 is added, all 3 components must be quoted at qty 300 in the Per-Item Qty 300 slot. Currently rendering: only 'Header 300 qty / 1 skid / 4 ft / 176 lbs / $161.56'. Display Base and 60ct. Tray are entirely absent from the Qty 300 table.", "selector": "[data-testid='dash-per-item-slot-2']", "priority": "HIGH"},
+      {"component": "FreightDashModal — Per Job view, third scenario header (dash-per-job-scenario-2)", "issue": "FAIL — Header text reads 'Scenario 3' instead of 'Qty 300'. Spec explicitly required: 'A Per-Job scenario with a single uniform qty is labeled Qty N (not Scenario N).' In Matched Set this third scenario IS a single uniform qty (300), so it should say 'Qty 300'. It still falls back to the generic 'Scenario 3' label. (First two scenarios DO correctly show 'Qty 100' and 'Qty 150'.)", "selector": "[data-testid='dash-per-job-scenario-2']", "priority": "HIGH"},
+      {"component": "FreightDashModal — Per Job view, scenario 3 component qtys", "issue": "Related/root-cause to the two issues above: in the Per-Job Scenario 3 table the rows show Display Base=150, 60ct. Tray=150, Header=300 — i.e. only the Header was updated to qty 300, and the Display Base + 60ct. Tray stayed at their slot[1]=150 qty. The shipment header reads '747 lbs · 3 skids · 13 ft combined' (vs. an expected 'all 3 components at qty 300' shipment). This is the same root bug that breaks Per-Item slot 2 — RightDashboard.buildItems is not actually broadcasting the unified top-level set qty 300 to ALL components when only one component has been edited to add that tier.", "selector": "[data-testid='dash-per-job-scenario-2']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Quote Table FREIGHT per-row binding (carry-over from iter_37)", "issue": "Quote Table FREIGHT column still shows $185.79 for ALL THREE qty rows (100/150/300), even though the dashboard correctly reports per-job freight as $185.79 / $230.64 / $247.54 for qty 100/150/300 respectively. This was already flagged in iteration_37 and iteration_38 as out of scope.", "affected_selectors": ["Quote Table FREIGHT column rows for qty 150 and qty 300"]}
+    ],
+    "design_issues": []
+  },
+  "test_results": {
+    "01_quote_loaded": {"status": "PASS", "est": "SA-260604-165816-COPY", "qtys": ["100","150","300"], "components": 3, "matched_set": true},
+    "02_freight_dash_update_all_rates": {"status": "PASS", "spinner_cleared_within": "~5s (cache hot)", "calls": 19446},
+    "03_ltl_min_notice": {"status": "PASS", "data_testid": "dash-min-notice", "text": "Carrier LTL minimum in play: $161.56 (PITT OHIO EXPRESS). Shipments below the carrier's weight floor all price at this minimum — that's why several quotes show the same freight, not a calculation error."},
+    "04_per_item_qty300_components": {
+      "status": "FAIL",
+      "expected": "Qty 300 slot lists Display Base, 60ct. Tray, AND Header (all three at qty 300)",
+      "actual": "Qty 300 slot lists ONLY Header (qty 300, 176 lbs, 1 skid, 4 ft, $161.56). Display Base and 60ct. Tray are entirely absent.",
+      "per_item_slot_0_components": {"Display Base": true, "60ct. Tray": true, "Header": true},
+      "per_item_slot_1_components": {"Display Base": true, "60ct. Tray": true, "Header": true},
+      "per_item_slot_2_components": {"Display Base": false, "60ct. Tray": false, "Header": true}
+    },
+    "05_per_job_scenario3_label": {
+      "status": "FAIL",
+      "scen_0_header_excerpt": "Qty 100 ...",
+      "scen_1_header_excerpt": "Qty 150 ...",
+      "scen_2_header_excerpt": "Scenario 3 747 lbs · 3 skids · 13 ft combined ...",
+      "expected_scen_2": "Qty 300"
+    },
+    "06_allocate_by_distinct_qty100": {
+      "status": "PASS",
+      "board_msf_raw": ["$78.20","$65.11","$18.25"],
+      "board_msf_w_markup_per_screenshot": ["$89.92","$74.88","$20.99"],
+      "equal_raw": ["$53.85","$53.85","$53.85"],
+      "equal_w_markup_per_screenshot": ["$61.93","$61.93","$61.93 (approx)"],
+      "by_weight_raw": ["$71.94","$57.49","$32.14"],
+      "by_weight_w_markup_per_screenshot": ["$82.73","$66.11","$36.96"],
+      "matches_spec_exactly": true,
+      "all_three_methods_distinct": true,
+      "note": "dash-pj-freight selectors return RAW freight values; the spec's expected values [89.92/74.88/20.99 etc] are w/markup column values — confirmed visually in screenshot."
+    },
+    "07_allocate_by_qty300_scen2": {
+      "status": "PARTIAL_PASS",
+      "board_msf_raw": ["$93.61","$77.94","$43.70"],
+      "equal_raw": ["$71.75","$71.75","$71.75"],
+      "by_weight_raw": ["$91.06","$73.48","$50.71"],
+      "all_three_methods_distinct": true,
+      "concern": "These per-component qty-300 freights are computed from a WRONG shipment (Display Base+Tray at qty 150 + Header at qty 300 = 747 lbs / 3 skids), not the intended unified Matched-Set 300/300/300 shipment. Once the root cause (#04/#05 above) is fixed these numbers will change."
+    },
+    "08_quote_table_parity": {
+      "status": "FAIL (carry-over from iter_37)",
+      "qt_freight_col_per_row": ["$185.79 qty100", "$185.79 qty150", "$185.79 qty300"],
+      "expected_from_dashboard": ["$185.79 qty100", "$230.64 qty150", "$247.54 qty300"]
+    }
+  },
+  "test_report_links": [
+    "/app/test_reports/scn2b_peritem_q300.png",
+    "/app/test_reports/scn2b_perjob_q300.png",
+    "/app/test_reports/scn2b_qt_byweight.png"
+  ],
+  "action_items": [
+    "HIGH — Fix RightDashboard.buildItems for Matched Set mode so the third (qty 300) tier is broadcast to ALL components at qty 300, not just the component that had its slot[2] explicitly populated. Currently scn 2 shows Display Base=150 / 60ct. Tray=150 / Header=300 instead of 300/300/300. This causes (a) the Per-Item Qty 300 slot to only list Header, and (b) the Per-Job scenario 3 header to fall back to 'Scenario 3' (because qtys are non-uniform).",
+    "HIGH — Once buildItems is fixed, re-validate: (a) dash-per-item-slot-2 should list all 3 components at qty 300 each, (b) dash-per-job-scenario-2 should read 'Qty 300', and (c) the per-job freight for the qty-300 scenario will change (currently $215.25 raw / $247.54 markup for a 747lb load; after fix expect a heavier 3×qty300 load).",
+    "MEDIUM (carry-over from iter_37/38) — Quote Table FREIGHT column still shows scalar $185.79 for all 3 qty rows; needs per-row binding to freightByQty[slot]."
+  ],
+  "critical_code_review_comments": [
+    "The allocate-by distinctness fix (RightDashboard.buildScenarioMatrix + FreightDashModal.PerJobTable + engine_routes._alloc_job threading shipWeight) is VERIFIED correct: Board MSF, Equal, By Weight all produce three distinct freight tuples that match the spec's expected $ values to the cent (after accounting for the 15% markup column).",
+    "LTL minimum notice banner (dash-min-notice) renders correctly with carrier name and dollar amount — copy is clear and reassuring.",
+    "HOWEVER, the Matched-Set unified-qty broadcast fix appears to be only PARTIALLY implemented. Per the spec, in Matched Set mode the top-level set qtys ([100,150,300]) should drive ALL components' qty arrays uniformly. Currently when the user adds a 3rd tier (300) via input-qty-2, only the *active* component (Header in this load) gets a real qty-300 row in its components[].qtys[]. Display Base and 60ct. Tray retain their original 2-qty arrays. The bug manifests in both Per-Item slot 2 (only Header) and Per-Job scenario 2 label ('Scenario 3' fallback because non-uniform qtys defeat the 'Qty N' label condition).",
+    "Suspected root: RightDashboard.buildItems still iterates per-component qty arrays rather than per top-level set-qty index in Matched Set mode. The fix needs to map top-level qtys (line item 'QTY' row: 100/150/300) → ALL components' working qty per slot, regardless of whether the individual component's qtys[] array has that index populated."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (frontend-only)", "frontend": "3 of 5 spec checks PASS (allocate-by distinct, LTL notice, qtys field accepts 300); 2 of 5 spec checks FAIL (Per-Item Qty 300 missing 2 of 3 components; Per-Job scen 2 label still 'Scenario 3')"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 via [data-testid='login-submit-btn']",
+  "seed_data_creation": "Quote SA-260604-165816 was already in -COPY draft state from prior iteration (qtys 100/150/300 pre-set in this session). No new seed data created.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "After the buildItems Matched-Set unified-qty broadcast fix lands, re-run: open quote SA-260604-165816, verify input-qty-2=300, open freight dashboard (btn-freight-dash), Update All Rates (wait ~90-120s cold). Per Item: dash-per-item-slot-2 must contain all 3 components (Display Base, 60ct. Tray, Header) each at qty 300. Per Job: dash-per-job-scenario-2 header text must start with 'Qty 300' (not 'Scenario 3'). The allocate-by distinctness and LTL notice are already PASSING — they should remain stable.",
+  "rca of the issue": "Bug: In Matched-Set mode with a newly-added 3rd set-qty tier (300), only the Header component had its components[].qtys[2]=300 (because that was the active component when the user clicked input-qty-2). Display Base and 60ct. Tray still have qtys=[100,150]. RightDashboard.buildItems iterates each component's qtys[] independently, so for slot index 2 only Header has a real row — Display Base and 60ct. Tray are absent. Consequence: (a) Per-Item Qty 300 panel shows only Header, (b) Per-Job scenario 2 has non-uniform qtys (150/150/300) and therefore fails the 'all qtys equal' check used to print the 'Qty N' label, falling back to 'Scenario 3'. Fix path: in buildItems for Matched Set mode, iterate the TOP-LEVEL setQtys array (length 3 with [100,150,300]) and broadcast setQtys[slot] to every component's working qty for that slot, ignoring any gaps in per-component qtys[] arrays."
+}

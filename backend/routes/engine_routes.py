@@ -857,6 +857,8 @@ async def calculate_multi_part(
                 "sheetL": r.get("sheetL") or "",
                 "pcsPerSheet": r.get("pcsPerSheet") or 0,
                 "shipWeight": float(r.get("shipWeight") or 0),  # for By-Weight job freight allocation
+                "finMSF": float(r.get("finMSF") or 0),          # finished basis (freight alloc)
+                "finShipWeight": float(r.get("finShipWeight") or 0),
                 "route": r.get("route") or "",
                 "routeWarning": r.get("routeWarning"),  # surface "Too many CAD hours..." per-row
                 "cadHrs": cad_hrs,
@@ -965,9 +967,11 @@ async def calculate_multi_part(
             # Compute total oMSF + shipWeight per component (sum across rows)
             items_for_alloc = []
             for c in component_pricing:
-                tot_msf = sum(float(r.get("oMSF") or 0) for r in c["rows"])
-                # shipWeight is whole-job per component; take first row's value.
-                ship_w = next((float(r.get("shipWeight") or 0) for r in c["rows"] if r.get("shipWeight")), 0)
+                # Freight allocates on the FINISHED shipped basis (finMSF /
+                # finShipWeight), not the board-consumed oMSF/shipWeight.
+                tot_msf = sum(float(r.get("finMSF") or r.get("oMSF") or 0) for r in c["rows"])
+                ship_w = next((float(r.get("finShipWeight") or r.get("shipWeight") or 0)
+                               for r in c["rows"] if (r.get("finShipWeight") or r.get("shipWeight"))), 0)
                 items_for_alloc.append({
                     "type": c["type"], "oMSF": tot_msf, "shipWeight": ship_w, "rows": c["rows"],
                 })
@@ -1025,8 +1029,9 @@ async def calculate_multi_part(
                     row = next((r for r in c["rows"] if r["slotIdx"] == slot_i), None)
                     items_for_slot.append({
                         "idx": c["itemIndex"], "type": c["type"],
-                        "oMSF": float((row or {}).get("oMSF") or 0),
-                        "shipWeight": float((row or {}).get("shipWeight") or 0),  # for By-Weight alloc
+                        # Freight allocates on the FINISHED shipped basis.
+                        "oMSF": float((row or {}).get("finMSF") or (row or {}).get("oMSF") or 0),
+                        "shipWeight": float((row or {}).get("finShipWeight") or (row or {}).get("shipWeight") or 0),
                         "row": row,
                     })
                 if freight_scope == "Per Job":
