@@ -2,6 +2,24 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — PDF / Quote-Preview charge-mode overhaul ✅
+- **#1 Removed "View Kit Matrix"** (MP Individual + Matched Set) — deleted the
+  `KitMatrixModal` + trigger button from `QuoteTableSec.jsx` (redundant).
+- **#2 Per-quantity line charges** — every charge mode now shows only the charges
+  that apply to each qty tier (e.g. 500-tier = freight only; 1000/2000 = die+freight).
+- **#3 "By Part" → separate columns** — `PreviewPdfModal.jsx` `PricingTable` now
+  renders one column per charge TYPE present (Die | Freight | Prepress | each custom
+  misc name e.g. "Clips") summing into Quote Total, instead of comma-joined text.
+- **#4 "Lump Sum" → per-qty list** — fixed bug where only the first tier's charge
+  showed. Now one descriptive line per tier: "Freight + Die + Clips @ Qty 1,000:
+  $2,168.77" (label built from the charge types > 0 at that tier).
+- "By Type" unchanged (single combined Charges column). Backend `routes/pdf.py`
+  mirrors all three modes for Export. Verified iter45 — 4/4 PASS + By-Type regression.
+- NOTE: custom misc charges per-qty/per-component (#5) deferred to next session
+  (flat $ + markup input; today they replicate one charge across all qtys/components,
+  same class of bug freight had).
+
+
 ### 2026-06-18 — Per-Job freight per-tier + cross-display consistency ✅
 - **Bug 1 (user)**: In MP Matched Set Per-Job mode, the Quote Table tiers, the
   PDF Per-Component Pricing grid, and the right-rail Per-Job card all showed the
