@@ -6,7 +6,7 @@ import { useQuote } from "../../context/QuoteContext";
  *  Right side: Expand / Collapse all sections links */
 export default function TabBar() {
   const { tabs, activeId, setActiveId, closeTab, newTab, duplicateTab,
-    initials, expandAll, collapseAll } = useQuote();
+    initials, expandAll, collapseAll, activePricingVersionId } = useQuote();
 
   return (
     <div data-testid="spot-tab-bar" style={{
@@ -18,22 +18,33 @@ export default function TabBar() {
         {tabs.map((t) => {
           const isActive = t.id === activeId;
           const hasCust = !!t.state.custName;
+          // A frozen tab = a SAVED quote pinned to a board-pricing version
+          // older than the current active one. Color it amber so estimators
+          // know edits won't re-price at current rates.
+          const frozen = !!t.state.quoteId && !!t.state.pricingVersionId &&
+            !!activePricingVersionId && t.state.pricingVersionId !== activePricingVersionId;
+          const FROZEN = "#b8860b";
           return (
             <div key={t.id}
               data-testid={`tab-${t.id}`}
               data-active={isActive ? "1" : "0"}
+              data-frozen={frozen ? "1" : "0"}
               onClick={() => setActiveId(t.id)}
+              title={frozen ? "Frozen pricing — this saved quote is preserved on an older board-pricing list" : undefined}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
                 padding: "5px 10px", fontSize: 12, fontWeight: 600,
-                background: isActive ? "var(--spot-bg)" : "var(--spot-bg3)",
-                color: isActive ? "var(--spot-text)" : "var(--spot-text3)",
-                border: "1px solid var(--spot-line)", borderBottom: "none",
+                background: isActive ? "var(--spot-bg)" : (frozen ? "#b8860b14" : "var(--spot-bg3)"),
+                color: frozen ? FROZEN : (isActive ? "var(--spot-text)" : "var(--spot-text3)"),
+                border: `1px solid ${frozen ? "#b8860b66" : "var(--spot-line)"}`,
+                borderBottom: "none",
                 borderRadius: "5px 5px 0 0", cursor: "pointer",
                 position: "relative", top: 1,
                 maxWidth: 240, minWidth: 90,
               }}>
-              {hasCust && <span style={{ width: 5, height: 5, borderRadius: 3, background: "var(--spot-green)" }} />}
+              {frozen
+                ? <span title="Frozen pricing" style={{ fontSize: 11, lineHeight: 1, color: FROZEN }}>❄</span>
+                : (hasCust && <span style={{ width: 5, height: 5, borderRadius: 3, background: "var(--spot-green)" }} />)}
               <span style={{
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 fontFamily: t.state.estNum ? "'JetBrains Mono', monospace" : "inherit",

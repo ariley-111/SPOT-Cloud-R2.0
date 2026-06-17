@@ -2,7 +2,7 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
-import { createQuote, updateQuoteStatus, reassignParserFiles } from "../../api/spot";
+import { createQuote, updateQuote, updateQuoteStatus, reassignParserFiles } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
 import SpotCube from "./SpotCube";
 
@@ -84,27 +84,35 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
     }
     setSaving(true);
     try {
-      const saved = await createQuote({
+      const body = {
         est_num: s.estNum || `DRAFT-${Date.now()}`,
         label: s.custRef || s.itemDesc || s.custName || "Untitled",
         state: s,
         status: currentStatus,
         customer_code: s.custCode || null,
         customer_name: s.custName || null,
-      });
-      // Stash the new quote's id + status onto local state so the status
-      // dropdown can persist changes via PATCH on subsequent edits.
+      };
+      // If this quote was already saved (or loaded from Saved), UPDATE it in
+      // place — never create a duplicate. update_quote on the backend preserves
+      // the pinned pricingVersionId, so a frozen quote stays frozen.
+      const isUpdate = !!quoteId;
+      const saved = isUpdate
+        ? await updateQuote(quoteId, body)
+        : await createQuote(body);
+      // Stash the quote's id + status + pinned pricing version onto local state
+      // so the status dropdown can PATCH and recalcs stay on the right version.
       setField("quoteId", saved.id);
       setField("quoteStatus", saved.status || currentStatus);
-      // Migrate parser files from the draft tab id → saved-quote id so they
-      // remain accessible when the quote is later loaded back.
-      // (Bug fix 2026-02-15.)
+      if (saved.pricing_version_id) setField("pricingVersionId", saved.pricing_version_id);
+      // Migrate parser files from the draft tab id → saved-quote id on FIRST save
+      // so they remain accessible when the quote is later loaded back.
+      // (Bug fix 2026-02-15.) On update the files already live under quoteId.
       try {
-        if (active?.id && saved.id && active.id !== saved.id) {
+        if (!isUpdate && active?.id && saved.id && active.id !== saved.id) {
           await reassignParserFiles(active.id, saved.id);
         }
       } catch (_) {}
-      pushToast(`Saved ${saved.est_num || s.estNum || "quote"}`, "ok");
+      pushToast(`${isUpdate ? "Updated" : "Saved"} ${saved.est_num || s.estNum || "quote"}`, "ok");
       // If "File" checkbox is checked, also download a .json snapshot
       if (fileCbRef.current?.checked) {
         const blob = new Blob([JSON.stringify({ est_num: saved.est_num, state: s }, null, 2)],

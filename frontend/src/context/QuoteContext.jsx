@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, engineManifest } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
 import {
@@ -12,6 +12,27 @@ const QuoteCtx = createContext(null);
 
 const INITIALS_KEY = "wf_est_initials";   // matches legacy localStorage key
 const ACTIVE_KEY = "spot_active_tab";
+
+// ─── Frozen-quote material-edit detection ───────────────────────────────
+// A "frozen" quote is a SAVED quote pinned to an older board-pricing version
+// than the currently-active one. Editing a MATERIAL field on it (qty tiers,
+// dims, board/production specs, one-time costs, quote type) must warn the
+// estimator ONCE per quote-open. Metadata edits (customer, project name,
+// notes, est#, status, ship-to) are NOT material and never warn.
+const FROZEN_EXCLUDE = new Set([
+  // identity / metadata
+  "estNum", "estNumAuto", "estInitials", "custName", "custCode", "customerRecord",
+  "custRef", "custIdent", "quoteStatus", "quoteId", "pricingVersionId",
+  "pricingVersionLabel", "pricingIsCurrent", "spinOffOrigin", "label",
+  // quote-header / address metadata
+  "notes", "quoteNotes", "coverLetterNote", "quotePayment", "quoteFOB",
+  "quoteValidDays", "quoteExpDays", "quoteShipTo", "shipTo", "destZip",
+  "quoteTerms", "quoteValidUntil",
+  // UI / transient (anything starting with "_" is also excluded below)
+  "activeItemIdx", "exportExclude", "freightDashCache",
+]);
+const isMaterialKey = (k) =>
+  typeof k === "string" && !k.startsWith("_") && !FROZEN_EXCLUDE.has(k);
 
 const DEFAULT_SEC = {
   job: true, bom: true, qty: true, prod: true, quoteTable: true,
@@ -37,6 +58,79 @@ export function QuoteProvider({ children }) {
   const [sec, setSec] = useState(DEFAULT_SEC);
   const [toasts, setToasts] = useState([]);
   const saveTimers = useRef({});
+
+  // Frozen-quote guardrails: track the active board-pricing version (to detect
+  // older-pinned quotes), which tabs have already shown the warning this open,
+  // and a brief post-load guard so programmatic recalcs don't false-trigger it.
+  const [activePricingVersionId, setActivePricingVersionId] = useState(null);
+  const [frozenWarnTabId, setFrozenWarnTabId] = useState(null);
+  const tabsRef = useRef(tabs);
+  const activeIdRef = useRef(activeId);
+  const activeVerRef = useRef(null);
+  const frozenWarnedRef = useRef(new Set());
+  const frozenGuardRef = useRef({});
+  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  // Resolve the currently-active board-pricing version id once (manifest with no
+  // version arg returns the ACTIVE version). Used to flag frozen (older-pinned) quotes.
+  useEffect(() => {
+    if (!user) return;
+    engineManifest()
+      .then((m) => {
+        const id = m?.pricing_version?.id || null;
+        activeVerRef.current = id;
+        setActivePricingVersionId(id);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  // Fire the frozen-edit warning at most once per quote-open for material edits.
+  const checkFrozenEdit = useCallback(() => {
+    const av = activeVerRef.current;
+    if (!av) return;
+    const id = activeIdRef.current;
+    const tab = (tabsRef.current || []).find((t) => t.id === id);
+    if (!tab) return;
+    const st = tab.state || {};
+    const frozen = !!st.quoteId && !!st.pricingVersionId && st.pricingVersionId !== av;
+    if (!frozen) return;
+    if (frozenWarnedRef.current.has(id)) return;
+    if (Date.now() < (frozenGuardRef.current[id] || 0)) return;  // post-load settle window
+    frozenWarnedRef.current.add(id);
+    setFrozenWarnTabId(id);
+  }, []);
+
+  const dismissFrozenWarn = useCallback(() => setFrozenWarnTabId(null), []);
+
+  // "Duplicate at current pricing" — clones the quote AS LAST SAVED in the DB
+  // (deliberately discarding the in-progress dirty edit) and re-pins it to the
+  // ACTIVE pricing version, then loads it into the active tab.
+  const duplicateFrozenAtCurrent = useCallback(async () => {
+    const id = activeIdRef.current;
+    const tab = (tabsRef.current || []).find((t) => t.id === id);
+    const qid = tab?.state?.quoteId;
+    setFrozenWarnTabId(null);
+    if (!qid) return;
+    try {
+      const copy = await copyQuote(qid);
+      // reset warn/guard for this tab (replaceState below also does this)
+      replaceStateRef.current({
+        ...(copy.state || {}),
+        quoteId: copy.id,
+        quoteStatus: copy.status || "draft",
+        pricingVersionId: copy.pricing_version_id || null,
+        pricingVersionLabel: null,
+        pricingIsCurrent: true,
+        estNum: copy.est_num || tab?.state?.estNum,
+      });
+      pushToast(`Duplicated at current pricing → ${copy.est_num}`, "ok");
+    } catch (e) {
+      pushToast(`Duplicate failed — ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  }, []);
+  // replaceState is defined later; hold a ref so the callbacks above can reach it.
+  const replaceStateRef = useRef(null);
 
   // ─── Initials: prefer saved → else derive from user.name → else prompt ───
   useEffect(() => {
@@ -118,13 +212,15 @@ export function QuoteProvider({ children }) {
     setTabs((cur) => cur.map((t) =>
       t.id === activeId ? { ...t, state: { ...t.state, [key]: value }, updatedAt: Date.now() } : t
     ));
-  }, [activeId]);
+    if (isMaterialKey(key)) checkFrozenEdit();
+  }, [activeId, checkFrozenEdit]);
 
   const setManyFields = useCallback((patch) => {
     setTabs((cur) => cur.map((t) =>
       t.id === activeId ? { ...t, state: { ...t.state, ...patch }, updatedAt: Date.now() } : t
     ));
-  }, [activeId]);
+    if (Object.keys(patch || {}).some(isMaterialKey)) checkFrozenEdit();
+  }, [activeId, checkFrozenEdit]);
 
   // ─── Pricing-mode toggle with smart qty handling ─────────────
   // Individual → Matched Set: gather union of all unique component qtys,
@@ -202,10 +298,18 @@ export function QuoteProvider({ children }) {
 
   /** Reset-first state apply: replace the active tab's state completely. */
   const replaceState = useCallback((nextState) => {
+    // Loading a quote resets the frozen-warn state for this tab and starts a
+    // brief settle window so the initial recompute/auto-flip doesn't false-fire.
+    const id = activeId;
+    if (id) {
+      frozenWarnedRef.current.delete(id);
+      frozenGuardRef.current[id] = Date.now() + 2500;
+    }
     setTabs((cur) => cur.map((t) =>
       t.id === activeId ? { ...t, state: applyState(nextState), updatedAt: Date.now() } : t
     ));
   }, [activeId]);
+  replaceStateRef.current = replaceState;
 
   // ─── Auto-save (debounced 1.5s) ─────────────────────────────
   useEffect(() => {
@@ -711,6 +815,8 @@ export function QuoteProvider({ children }) {
     initials, initialsGateOpen, setInitialsGateOpen, commitInitials,
     sec, toggleSec, expandAll, collapseAll,
     toasts, pushToast,
+    // Frozen-quote guardrails
+    activePricingVersionId, frozenWarnTabId, dismissFrozenWarn, duplicateFrozenAtCurrent,
   };
   return <QuoteCtx.Provider value={value}>{children}</QuoteCtx.Provider>;
 }

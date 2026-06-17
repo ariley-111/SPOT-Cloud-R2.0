@@ -16,6 +16,7 @@ import LoadQuoteModal from "../components/spot/LoadQuoteModal";
 import SheetLibraryModal from "../components/spot/SheetLibraryModal";
 import QuoteHeaderModal from "../components/spot/QuoteHeaderModal";
 import BomBuilderModal from "../components/spot/BomBuilderModal";
+import FrozenEditWarnModal from "../components/spot/FrozenEditWarnModal";
 import { useQuote } from "../context/QuoteContext";
 import { useEngine } from "../hooks/useEngine";
 
@@ -96,6 +97,9 @@ export default function SpotApp({ onOpenAdmin }) {
         />
       )}
       <BomBuilderModal open={modal === "bom-builder"} onClose={() => setModal(null)} />
+
+      {/* Frozen-quote material-edit warning (global, driven by context) */}
+      <FrozenEditWarnModal />
 
       {/* Initials gate (first-launch popup) */}
       <InitialsGate />

@@ -141,6 +141,8 @@ export default function LoadQuoteModal({ onClose }) {
         // Carry the quote's PINNED board-pricing version so recalcs stay FROZEN
         // on the version it was saved under (Board Pricing Freeze).
         pricingVersionId: it.pricing_version_id || null,
+        pricingVersionLabel: it.pricing_version_label || null,
+        pricingIsCurrent: it.pricing_is_current,
       } : {}),
     };
     replaceState(stateWithMeta);

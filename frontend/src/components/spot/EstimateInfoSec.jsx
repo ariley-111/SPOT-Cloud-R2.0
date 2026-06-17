@@ -7,12 +7,25 @@ import { searchCustomers } from "../../api/spot";
 import { generateEstNum } from "../../lib/format";
 
 export default function EstimateInfoSec() {
-  const { active, sec, toggleSec, setField, setManyFields, setPricingMode, initials } = useQuote();
+  const { active, sec, toggleSec, setField, setManyFields, setPricingMode, initials, activePricingVersionId } = useQuote();
   const s = active?.state || {};
+
+  // Frozen = a SAVED quote pinned to an older board-pricing version than active.
+  const isSaved = !!s.quoteId;
+  const isFrozen = isSaved && !!s.pricingVersionId && !!activePricingVersionId &&
+    s.pricingVersionId !== activePricingVersionId;
 
   const headerLabel = (
     <>
       <span>Estimate Info</span>
+      {isFrozen && (
+        <span data-testid="frozen-chip" title="This saved quote is preserved on an older board-pricing list. Editing keeps the frozen pricing; use Duplicate to re-price at current rates."
+          style={{
+            fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
+            background: "#b8860b1f", color: "#b8860b", border: "1px solid #b8860b66",
+            display: "inline-flex", alignItems: "center", gap: 4,
+          }}>❄ Frozen{s.pricingVersionLabel ? ` — ${s.pricingVersionLabel}` : ""}</span>
+      )}
       {s.spinOffOrigin && (
         <span style={{
           fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
@@ -35,7 +48,11 @@ export default function EstimateInfoSec() {
         <F l="Estimate #">
           <input className="sp-input" value={s.estNum || ""}
             data-testid="input-est-num"
-            onChange={(e) => { setField("estNum", e.target.value); setField("estNumAuto", false); }} />
+            disabled={isSaved}
+            readOnly={isSaved}
+            title={isSaved ? "Estimate # is locked — it can't be changed once a quote is saved" : undefined}
+            style={isSaved ? { opacity: 0.7, cursor: "not-allowed" } : undefined}
+            onChange={(e) => { if (isSaved) return; setField("estNum", e.target.value); setField("estNumAuto", false); }} />
         </F>
         <F l="Customer">
           <CustomerInput value={s.custName}

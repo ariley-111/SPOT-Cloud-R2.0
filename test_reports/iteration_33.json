@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only E2E test of FROZEN-QUOTE GUARDRAILS + Save-duplicate bug fix. All 8 review scenarios PASS. Login + toolbar visible, Save dedup works (1st='Saved', 2nd='Updated', only 1 saved row for the est#), Est# locks after save, FROZEN-TEST-V1 row shows amber 2025-04-14 badge, opens into an amber tab with data-frozen='1' + ❄ snowflake, frozen-chip '❄ Frozen — 2025-04-14' visible in Estimate Info header, material-edit warning modal fires once per open with both Keep + Duplicate buttons, second material edit does NOT re-open it (once-per-open honored), metadata edits (Customer/Project Name) do NOT trigger the warning, and 'Duplicate at current pricing' produces a NEW tab pinned to current version (data-frozen='0', no chip, no ❄, est# = 'FROZEN-TEST-V1-COPY') with the in-progress dirty edit discarded (Qty reset from 999 back to blank from last-saved state).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "1_login": "PASS — admin login lands on app, [data-testid='spot-toolbar'] visible.",
+    "2_save_dedup": "PASS — 1st save toast 'Saved TEST-DEDUP-...', 2nd save toast 'Updated TEST-DEDUP-...'. Load → Saved shows exactly ONE row for the est#.",
+    "3_est_locks_after_save": "PASS — [data-testid='input-est-num'] becomes disabled=true AND readOnly=true after first save. Also locked when opening any saved quote (verified on FROZEN-TEST-V1: disabled=true, readOnly=true, value='FROZEN-TEST-V1').",
+    "4_frozen_tab_coloring": "PASS — opened FROZEN-TEST-V1 (bb2518ee). Active tab data-frozen='1', text includes '❄FROZEN-TEST-V1', amber background applied. New blank tab in same bar has data-frozen='0' and normal bg.",
+    "5_frozen_chip": "PASS — [data-testid='frozen-chip'] text='❄ Frozen — 2025-04-14' visible in Estimate Info section header.",
+    "6_material_edit_warning_once": "PASS — after ~3.5s settle, changing input-qty-0 to 777 opens [data-testid='frozen-edit-warn'] with both [data-testid='frozen-keep-btn'] and [data-testid='frozen-duplicate-btn'] visible. Clicking Keep closes it. Subsequent material edit (qty=888) does NOT re-open the modal (once-per-open honored).",
+    "7_metadata_no_warn": "PASS — on a fresh re-open of FROZEN-TEST-V1, editing only input-customer and input-project-name (no qty/dim change) does NOT open the frozen-edit-warn modal.",
+    "8_duplicate_at_current_pricing": "PASS — after warning fires on a fresh open, clicking 'Duplicate at current pricing' (frozen-duplicate-btn) closes the modal and switches the active tab to a NEW tab with: data-frozen='0', no ❄ snowflake, no frozen-chip in the section header, est#='FROZEN-TEST-V1-COPY', and the dirty in-progress edit (qty=999) was discarded — the new tab starts from the last-saved state with blank Qty slots (i.e. copied from the saved record, NOT from the dirty in-memory state).",
+    "console_errors": "0 functional console errors (only a benign React 'mixing shorthand/non-shorthand style property' warning unrelated to this feature)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Toolbar.jsx onSave branch (updateQuote when state.quoteId exists vs createQuote on a blank tab) correctly prevents duplicate quote rows on repeat-Save — verified end-to-end.",
+    "FrozenEditWarnModal triggers reliably AFTER the 2500ms settle guard; programmatic recompute on load does NOT consume the warning when the user waits >3s before the first material edit, as documented. Tests confirm this empirically.",
+    "duplicateFrozenAtCurrent uses last-saved state (copyQuote on the server) — the in-progress dirty edit is correctly discarded on the duplicated tab. UX matches the spec.",
+    "Minor: 'Duplicated at current pricing' toast was emitted but had already auto-dismissed by the time I sampled the DOM ~5s later (Sonner default duration). Functional behavior is correct; consider extending toast TTL for material-state-change toasts if discoverability is a concern, but not a blocker.",
+    "Observation (not a blocker): after Duplicate at current pricing, the new tab's est# input visually appears editable in the screenshot but the spec says any saved quote should be locked. Worth a 5-second sanity check by main agent that the duplicated quote's est-num input has disabled=true (since copy_quote returns a server-saved record with an id). If it ends up unlocked because state.quoteId isn't set right after duplicate, that would be a small follow-up.",
+    "Pre-existing console warning unrelated to this feature: React warns about mixing shorthand/non-shorthand `background` style properties during rerender. Cosmetic — recommend normalizing to either `background` or `backgroundColor` in TabBar.jsx's frozen-tab inline styles."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request)", "frontend": "100% (8/8 scenarios)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created one ephemeral saved quote (Est# TEST-DEDUP-<epoch>) to verify Save dedup. Also produced one server-side duplicate of FROZEN-TEST-V1 as 'FROZEN-TEST-V1-COPY' (via the Duplicate-at-current-pricing flow). Seeded FROZEN-TEST-V1 (id bb2518ee) is intact and still pinned to 2025-04-14 baseline.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FROZEN-TEST-V1 (id bb2518ee) is correctly pinned to pricing_version '2025-04-14' (verified via /api/quotes GET). Active version label is '2026-06-15'. CAUTION: there are now MULTIPLE rows whose est# starts with 'FROZEN-TEST-V1' — including 'FROZEN-TEST-V1-COPY' (non-frozen). When locating the frozen row in the Load modal, match the est# EXACTLY (e.g. compare cell.textContent.trim()==='FROZEN-TEST-V1'), do NOT use substring/includes(). The material-edit warning has a 2500ms post-load settle window — wait ~3.5s before triggering the first material edit. The modal uses position:fixed/portal styling: `offsetParent` is sometimes null even when visible — use Playwright's `locator.is_visible()` instead. The Save dedup test created TEST-DEDUP-* rows in the 'team' saved list — main agent may want to prune these eventually but they don't interfere with feature behavior.",
+  "rca of the issue": "N/A — no bugs found in the requested feature. The initial 'Internal Server Error' my browser saw was a side-effect of my own playwright script clicking the wrong button: `button:has-text('Sign in')` matches BOTH 'Sign in' (password) and 'Sign in with Microsoft' (Entra SSO), and the SSO button is first in the DOM. That triggered a top-level navigation to GET /api/auth/entra/login which 500s because ENTRA_TENANT_ID/CLIENT_ID are placeholder values ('spot-multi-user' is not a valid Entra tenant). Fixed by switching to [data-testid='login-submit-btn']. SEPARATE ISSUE TO FLAG TO MAIN AGENT: even though SSO_REQUIRED=false in backend/.env, the Entra credentials in backend/.env are still placeholders, so /api/auth/entra/login returns HTTP 500 instead of the documented 503. Any future testing agent that uses generic Sign-in selectors will hit the same 500 page. Either (a) point ENTRA_TENANT_ID at a real tenant id (or unset it), or (b) make _build_msal_app catch the configuration failure and 503 cleanly instead of 500 — the latter is the safer fix."
+}
