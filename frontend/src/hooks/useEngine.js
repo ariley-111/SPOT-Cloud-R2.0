@@ -133,6 +133,9 @@ export function buildPayload(state) {
     boardSubstitution: state.boardSubstitution || null,
     // User sheet override (legacy parity — pins route to CAD)
     overrideSheetId: state.overrideSheetId || null,
+    // Board Pricing Freeze: pinned version (saved quotes recalc on their frozen
+    // rates; drafts/new quotes send null → backend uses the ACTIVE version).
+    pricingVersionId: state.pricingVersionId || undefined,
   };
 }
 
@@ -218,5 +221,7 @@ export function buildMpPayload(state) {
     freightMarkup: state.freightMarkup,
     prepressScope: state.prepressScope, prepressAllocMethod: state.prepressAllocMethod,
     jobPrepressCost: state.jobPrepressCost, jobPrepressTreatment: state.jobPrepressTreatment,
+    // Board Pricing Freeze: pinned version for the whole matched set.
+    pricingVersionId: state.pricingVersionId || undefined,
   };
 }

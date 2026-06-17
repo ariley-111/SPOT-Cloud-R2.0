@@ -135,7 +135,13 @@ export default function LoadQuoteModal({ onClose }) {
     // copies on every status change.
     const stateWithMeta = {
       ...(it.state || {}),
-      ...(tab === "saved" ? { quoteId: it.id, quoteStatus: it.status || "draft" } : {}),
+      ...(tab === "saved" ? {
+        quoteId: it.id,
+        quoteStatus: it.status || "draft",
+        // Carry the quote's PINNED board-pricing version so recalcs stay FROZEN
+        // on the version it was saved under (Board Pricing Freeze).
+        pricingVersionId: it.pricing_version_id || null,
+      } : {}),
     };
     replaceState(stateWithMeta);
     pushToast(`Loaded ${it.est_num || it.label || "draft"}${it.owner_id !== myUserId ? ` (view only — ${it.owner_name})` : ""}`, "ok");
@@ -145,7 +151,8 @@ export default function LoadQuoteModal({ onClose }) {
   const onTakeOver = async (it) => {
     try {
       const updated = await takeOverQuote(it.id);
-      replaceState({ ...(updated.state || {}), quoteId: updated.id, quoteStatus: updated.status || "draft" });
+      replaceState({ ...(updated.state || {}), quoteId: updated.id, quoteStatus: updated.status || "draft",
+        pricingVersionId: updated.pricing_version_id || null });
       pushToast(`Took over ${updated.est_num} — you are now the owner`, "ok");
       onClose();
     } catch (e) {
@@ -156,7 +163,9 @@ export default function LoadQuoteModal({ onClose }) {
   const onCopy = async (it) => {
     try {
       const copy = await copyQuote(it.id);
-      replaceState({ ...(copy.state || {}), quoteId: copy.id, quoteStatus: copy.status || "draft" });
+      // A copy is the RE-PRICE path — backend pins it to the ACTIVE version.
+      replaceState({ ...(copy.state || {}), quoteId: copy.id, quoteStatus: copy.status || "draft",
+        pricingVersionId: copy.pricing_version_id || null });
       pushToast(`Copied ${it.est_num} → new draft (${copy.est_num})`, "ok");
       onClose();
     } catch (e) {
