@@ -361,10 +361,13 @@ function PerItemTable({ cache, bomItems, markup, qtyFilter, itemFilter, sections
         const totalFt = visible.reduce((a, r) => a + (r.ship.trailerFeet || 0), 0);
         const rawTotal = visible.reduce((a, r) => a + (Number(r.totalAmount) || 0), 0);
         const wmTotal = rawTotal * (1 + markup);
-        // Section header: for a single qty in this slot (always true for Simple
-        // multi-qty quotes) label it "Qty N"; otherwise fall back to "Slot N".
+        // Section header: label by the unified SET quantity when available
+        // (Matched Set), otherwise by the single qty in this slot, else "Slot N".
+        const slotSetQty = rows.find((r) => r.setQty != null)?.setQty;
         const slotQtys = Array.from(new Set(rows.map((r) => r.qty)));
-        const hdrLabel = slotQtys.length === 1 ? `Qty ${fmtInt(slotQtys[0])}` : `Slot ${slot + 1}`;
+        const hdrLabel = slotSetQty != null
+          ? `Qty ${fmtInt(slotSetQty)}`
+          : slotQtys.length === 1 ? `Qty ${fmtInt(slotQtys[0])}` : `Slot ${slot + 1}`;
         return (
           <div key={slot} style={tierBox} data-testid={`dash-per-item-slot-${slot}`}>
             <div style={tierHdr}>
@@ -452,10 +455,12 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, allocMeth
         const allAllocs = allocateJobCost(allComps, raw, allocMethod);
         const allocByIdx = {};
         (sc.perComp || []).forEach((p, ci) => { allocByIdx[p.idx] = allAllocs[ci] || 0; });
-        // Single distinct qty in this scenario (Simple multi-qty quotes) → "Qty N";
-        // multi-component scenarios keep the "Scenario N" label.
+        // Header: label by the unified SET quantity when available (Matched
+        // Set), otherwise by a single distinct qty, else "Scenario N".
         const scQtys = Array.from(new Set((sc.perComp || []).map((p) => p.qty)));
-        const scHdr = scQtys.length === 1 ? `Qty ${fmtInt(scQtys[0])}` : `Scenario ${sc.scenarioIdx + 1}`;
+        const scHdr = sc.setQty != null
+          ? `Qty ${fmtInt(sc.setQty)}`
+          : scQtys.length === 1 ? `Qty ${fmtInt(scQtys[0])}` : `Scenario ${sc.scenarioIdx + 1}`;
         return (
           <div key={sc.scenarioIdx} style={tierBox} data-testid={`dash-per-job-scenario-${sc.scenarioIdx}`}>
             <div style={tierHdr}>

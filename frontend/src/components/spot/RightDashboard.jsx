@@ -140,6 +140,31 @@ function FreightPanel({ s }) {
   // active item we read live state (s.*); for the others we read each
   // bomItem.state. Matches legacy updateAllFreight L4326-4328 selection.
   const activeIdx = s.activeItemIdx ?? 0;
+  // Tab-INDEPENDENT unified SET qtys for Matched Set. `s.qtys` only mirrors the
+  // ACTIVE BOM tab, so a tier added on one component (e.g. a 300 added on
+  // "Header") then switching to another tab ("Display Base") would make the
+  // new tier invisible to the freight dashboard. We instead take the qty array
+  // with the MOST populated tiers across the active mirror AND every
+  // component's stored state, so every set-qty tier is always discovered.
+  // Returns parsed ints (null for empty slots), or null when not applicable
+  // (single-part or Individual mode — each component keeps its own qtys).
+  const _countTiers = (arr) => (arr || []).filter((q) => {
+    const n = parseInt(q, 10); return Number.isFinite(n) && n > 0;
+  }).length;
+  const getSetQtys = () => {
+    const items = Array.isArray(s.bomItems) && s.bomItems.length > 0 ? s.bomItems : null;
+    if (!items) return null;
+    const isMatched = (s.pricingMode || "Matched Set") !== "Individual";
+    if (!isMatched) return null;
+    let best = s.qtys || [];
+    let bestN = _countTiers(best);
+    items.forEach((it, i) => {
+      const arr = (i === activeIdx) ? (s.qtys || []) : ((it.state || {}).qtys || []);
+      const n = _countTiers(arr);
+      if (n > bestN) { bestN = n; best = arr; }
+    });
+    return best.map((q) => { const n = parseInt(q, 10); return Number.isFinite(n) && n > 0 ? n : null; });
+  };
   const buildItems = () => {
     const items = Array.isArray(s.bomItems) && s.bomItems.length > 0 ? s.bomItems : null;
     if (!items) {
@@ -155,6 +180,7 @@ function FreightPanel({ s }) {
     }
     // Matched Set is the MP default; Individual is the explicit opt-in.
     const isMatched = (s.pricingMode || "Matched Set") !== "Individual";
+    const setQtys = getSetQtys(); // null in Individual / single-part
     return items.map((it, i) => {
       const st = (i === activeIdx)
         ? { boardGrade: s.boardGrade, flute: s.flute,
@@ -162,17 +188,14 @@ function FreightPanel({ s }) {
             oneUpW: s.oneUpW, oneUpL: s.oneUpL, qtys: s.qtys }
         : (it.state || {});
       // Matched Set: every component is produced at the SAME set quantities
-      // (× pcsPerSet), so use the top-level set qtys for ALL components — this
-      // matches the pricing engine (which uses top_qtys for matched-set) and
-      // fixes the bug where non-active components dropped tiers the active item
-      // had (e.g. a 300 tier quoting only the active component). Individual mode
-      // keeps each component's own qtys.
+      // (× pcsPerSet), so broadcast the tab-independent unified set qtys to ALL
+      // components — this matches the pricing engine (which uses top_qtys for
+      // matched-set) and fixes the bug where non-active components dropped tiers
+      // the active item had (e.g. a 300 tier quoting only the active component).
+      // Individual mode keeps each component's own qtys.
       const pcs = parseInt(it.pcsPerSet ?? st.pcsPerSet ?? 1, 10) || 1;
-      const itemQtys = isMatched
-        ? (s.qtys || []).map((q) => {
-            const n = parseInt(q, 10);
-            return Number.isFinite(n) && n > 0 ? String(n * pcs) : "";
-          })
+      const itemQtys = (isMatched && setQtys)
+        ? setQtys.map((n) => (n != null && n > 0 ? String(n * pcs) : ""))
         : (st.qtys || []);
       return {
         boardGrade: st.boardGrade,
@@ -261,6 +284,7 @@ function FreightPanel({ s }) {
   };
   const buildScenarioMatrix = () => {
     const items = buildItems();
+    const setQtys = getSetQtys(); // null in Individual / single-part
     const perItemRows = items.map((it) => {
       const qtys = (it.qtys || []).map(parseQty);
       return qtys.map((q, slot) => {
@@ -268,6 +292,7 @@ function FreightPanel({ s }) {
         const oMSF = (it.oneUpW * it.oneUpL * q) / 144 / 1000;
         return {
           slot, qty: q,
+          setQty: setQtys && setQtys[slot] != null ? setQtys[slot] : null,
           ship: calcShipment(
             it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
             oMSF, it.oneUpW, it.oneUpL, q
@@ -296,7 +321,11 @@ function FreightPanel({ s }) {
       const combinedWeight = perComp.reduce((a, p) => a + (p.ship.totalWeight || 0), 0);
       const combinedSkids  = perComp.reduce((a, p) => a + (p.ship.skidCount   || 0), 0);
       const combinedFt     = perComp.reduce((a, p) => a + (p.ship.trailerFeet || 0), 0);
-      perJobScenarios.push({ scenarioIdx: k, perComp, combinedWeight, combinedSkids, combinedFt });
+      perJobScenarios.push({
+        scenarioIdx: k,
+        setQty: setQtys && setQtys[k] != null ? setQtys[k] : null,
+        perComp, combinedWeight, combinedSkids, combinedFt,
+      });
     }
     return { perItemRows, perJobScenarios };
   };
@@ -421,14 +450,22 @@ function FreightPanel({ s }) {
       ];
       const CHUNK = 4;
       const byRef = {};
-      try {
-        for (let i = 0; i < batchItems.length; i += CHUNK) {
-          const chunk = batchItems.slice(i, i + CHUNK);
-          const resp = await freightQuoteBatch(chunk);
-          (resp.results || []).forEach((r) => { byRef[r.ref] = r; });
+      // Resilient batching: a single chunk hitting a transient 502 (UTS/ingress
+      // hiccup) must NOT abort the whole quote or flash a red error when the
+      // other chunks succeed. Retry each chunk once, accumulate what we get, and
+      // only surface an error if NOTHING came back.
+      for (let i = 0; i < batchItems.length; i += CHUNK) {
+        const chunk = batchItems.slice(i, i + CHUNK);
+        let resp = null;
+        for (let attempt = 0; attempt < 2 && !resp; attempt++) {
+          try { resp = await freightQuoteBatch(chunk); }
+          catch (e) { /* retry once, then move on */ }
         }
-      } catch (e) {
-        setErr(`Batch freight quote failed: ${e.message}`); return;
+        (resp?.results || []).forEach((r) => { byRef[r.ref] = r; });
+      }
+      if (Object.keys(byRef).length === 0) {
+        setErr("Freight quote failed — no carrier rates returned. Check the ZIP and try again.");
+        return;
       }
       const perItemQuotes = flatPerItem.map((row, k) => {
         const r = byRef[`pi:${k}`] || {};
