@@ -428,11 +428,12 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
        - all `base_matrix` cost-rate changes with $-delta and %-delta
    * `price_history` ledger as a separate "executive ledger" view layered
      on top of the existing audit_log
-- **Board Cost editor for `base_matrix`** (P1 — sister feature to above):
-   * Edit per-grade × per-tier $/MSF rates
-   * Bulk-% increase tool ("apply +5% to all 200# rates")
-   * CSV import/export of the cost matrix
-   * Used 3-4x/year for supplier-driven price-list updates
+- **Board Cost editor for `base_matrix`** (P1 — sister feature to above): ✅ **DONE 2026-06-17 (Phase 1+2)**
+   * Versioned board-pricing snapshots (`pricing_versions`) + per-quote FREEZE (pin at save; re-price only via Duplicate). v1 baseline = 4.14.25 in-code rates; all existing quotes backfilled.
+   * Admin "Board Pricing" tab: xlsx import (base_matrix only — adders carried forward) → diff review (per-cell old→new→Δ%, uniform-% detection) → deliberate Activate. Board Engine panel + engine calc both read the active version.
+   * Verified on the real 6/15/26 list (uniform +6.5%, 172 cells). Engine parametrized via ContextVar overlay (`engine/core.py`); golden-$ parity test pinned to baseline.
+   * ⏳ **Phase 3 remaining (P1):** frozen-quote MESSAGING — banner on a saved quote showing "priced on {version} · current is {active}" with a Duplicate-to-reprice CTA; optional admin "Pricing Versions" history page polish.
+   * Bulk-% increase tool ("apply +5% to all 200# rates") and manual per-cell edit in the diff screen — deferred P2 (importer covers the supplier-list use case).
 - "Request New Sheet" estimator workflow (queue → admin approves → enters library) — **P2**
 - Separate `bom_items` MongoDB collection (currently in `quote_drafts.state` JSON blob) — **P3**
 - Phase 5a: Entra SSO — **P2** (user owns this, 2026-06-03 afternoon)

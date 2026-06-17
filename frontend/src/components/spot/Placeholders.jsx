@@ -492,6 +492,24 @@ export function BoardEngineSec() {
         )}
         {manifest && (
           <>
+            {/* Active board-pricing version badge — drives preview-vs-prod spot-check */}
+            {manifest.pricing_version && (
+              <div data-testid="board-pricing-version" style={{
+                marginBottom: 8, padding: "5px 9px", borderRadius: 5,
+                background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
+                fontSize: 11, color: "var(--spot-text2)", display: "flex",
+                alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#fff",
+                  background: "var(--spot-green)", padding: "2px 6px", borderRadius: 3 }}>PRICING</span>
+                <b style={{ color: "var(--spot-text)" }}>{manifest.pricing_version.label}</b>
+                {manifest.pricing_version.effective_date && (
+                  <span style={{ color: "var(--spot-text3)" }}>· effective {manifest.pricing_version.effective_date}</span>
+                )}
+                {manifest.pricing_version.is_baseline && (
+                  <span style={{ color: "var(--spot-text3)" }}>· baseline</span>
+                )}
+              </div>
+            )}
             {/* MSF Tiers */}
             <div style={{ marginBottom: 4 }} data-testid="board-msf-tiers">
               <div style={SUBHEAD}>MSF Tiers</div>

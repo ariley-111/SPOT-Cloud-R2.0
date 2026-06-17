@@ -78,6 +78,26 @@ export const adminImportSheetsCsv = (file, reason) => {
 export const engineDefaults = () =>
   api.get("/engine/defaults").then((r) => r.data);
 
+// ─── Admin: Board Pricing Versions (import / diff / activate) ───────────
+export const adminPricingVersions = () =>
+  api.get("/admin/pricing/versions").then((r) => r.data);
+export const adminPricingGetVersion = (id) =>
+  api.get(`/admin/pricing/versions/${encodeURIComponent(id)}`).then((r) => r.data);
+export const adminPricingImport = (file, { sheet, label, notes } = {}) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (sheet) fd.append("sheet", sheet);
+  if (label) fd.append("label", label);
+  if (notes) fd.append("notes", notes);
+  return api.post("/admin/pricing/import", fd,
+    { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+};
+export const adminPricingActivate = (id) =>
+  api.post(`/admin/pricing/versions/${encodeURIComponent(id)}/activate`).then((r) => r.data);
+export const adminPricingDeleteDraft = (id) =>
+  api.delete(`/admin/pricing/versions/${encodeURIComponent(id)}`).then((r) => r.data);
+
+
 // Full Board Engine reference data — base matrix, liner/medium upgrades, flute
 // rules, dim adders, fixed charges, approved sheet specs. Drives the Board
 // Engine viewer panel (Placeholders.jsx → BoardEngineSec). Matches the data

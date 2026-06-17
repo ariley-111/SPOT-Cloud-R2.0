@@ -35,13 +35,26 @@ async def get_version(version_id: str, _admin: User = Depends(require_admin)) ->
     if not v:
         raise HTTPException(404, "Pricing version not found")
     active = await pv.get_active_version()
+    active_id = (active or {}).get("id")
+
+    # Choose a meaningful comparison baseline:
+    #  • a draft  → diff vs the ACTIVE version (what activating it would change)
+    #  • the active version → diff vs the version it REPLACED (its change history)
+    baseline = active
+    if version_id == active_id:
+        all_versions = await pv.list_versions()  # newest-first, no config
+        prev = next((x for x in all_versions
+                     if x["id"] != version_id and x.get("status") != "draft"), None)
+        baseline = await pv.get_version(prev["id"]) if prev else None
+
     diff = None
-    if active and active.get("config") and v.get("config"):
+    if baseline and baseline.get("config") and v.get("config"):
         diff = diff_base_matrix(
-            active["config"].get("base_matrix", {}),
+            baseline["config"].get("base_matrix", {}),
             v["config"].get("base_matrix", {}),
         )
-    return {"version": v, "diff": diff, "active_id": (active or {}).get("id")}
+    return {"version": v, "diff": diff, "active_id": active_id,
+            "compared_to": (baseline or {}).get("label")}
 
 
 @router.post("/import")

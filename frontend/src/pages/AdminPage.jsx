@@ -11,6 +11,8 @@ import {
   adminGetIntegrations, adminSetIntegration, adminResetIntegration, adminGetUsage,
   adminGetSheets, adminAddSheet, adminEditSheet, adminDisableSheet, adminEnableSheet,
   adminExportSheetsCsv, adminImportSheetsCsv,
+  adminPricingVersions, adminPricingGetVersion, adminPricingImport,
+  adminPricingActivate, adminPricingDeleteDraft,
   listQuoteAudit,
 } from "../api/spot";
 
@@ -19,14 +21,15 @@ const TAB_LABELS = {
   gm_tier:      "GM Curve",
   sell_tier:    "Sell Curve",
   grade_adder:  "Grade Adders",
+  board_pricing:"Board Pricing",
   sheets:       "Sheet Library",
   integrations: "Integrations",
   usage:        "Usage",
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
-const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "sheets",
-                   "integrations", "usage", "audit", "calibration"];
+const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "board_pricing",
+                   "sheets", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
   const { user } = useAuth();
@@ -153,6 +156,7 @@ export default function AdminPage({ onClose }) {
               />
             )}
             {tab === "sheets" && <SheetLibraryPanel />}
+            {tab === "board_pricing" && <BoardPricingPanel flash={flash} />}
             {tab === "integrations" && <IntegrationsPanel />}
             {tab === "usage" && <UsagePanel />}
             {tab === "audit" && <AuditPanel />}
@@ -782,6 +786,251 @@ function ImportSheetsModal({ onClose, onSaved }) {
     </ModalShell>
   );
 }
+
+// ─── Board Pricing Versions panel (import / diff / activate) ────────────
+function BoardPricingPanel({ flash }) {
+  const [versions, setVersions] = React.useState([]);
+  const [activeId, setActiveId] = React.useState(null);
+  const [sel, setSel] = React.useState(null);       // {version, diff, warnings, ...}
+  const [loading, setLoading] = React.useState(true);
+  const [showImport, setShowImport] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await adminPricingVersions();
+      setVersions(r.versions || []);
+      setActiveId(r.active_id || null);
+    } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+    finally { setLoading(false); }
+  }, [flash]);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const openVersion = async (id) => {
+    try { setSel(await adminPricingGetVersion(id)); }
+    catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+  };
+
+  const onImported = async (res) => {
+    setShowImport(false);
+    await reload();
+    setSel(res);                 // import response already carries version + diff
+    flash(`Draft created — review the diff, then Activate`);
+  };
+
+  const activate = async (id) => {
+    if (!window.confirm("Activate this pricing version? New quotes will price on it immediately. Saved quotes stay frozen on their pinned version.")) return;
+    setBusy(true);
+    try {
+      await adminPricingActivate(id);
+      flash("✓ Pricing version activated");
+      await reload();
+      await openVersion(id);
+    } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+    finally { setBusy(false); }
+  };
+
+  const discard = async (id) => {
+    if (!window.confirm("Discard this draft pricing version?")) return;
+    setBusy(true);
+    try {
+      await adminPricingDeleteDraft(id);
+      flash("Draft discarded");
+      setSel(null);
+      await reload();
+    } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div data-testid="board-pricing-panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)" }}>Board Pricing Versions</div>
+          <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 2 }}>
+            Import a supplier board-price spreadsheet → review the diff → Activate. Imports update
+            the board <code>base_matrix</code> only; liner/medium adders are carried forward.
+          </div>
+        </div>
+        <button onClick={() => setShowImport(true)} data-testid="pricing-import-btn"
+          style={{ ...btnStyle, background: "var(--spot-accent)", color: "#fff", borderColor: "var(--spot-accent)" }}>
+          + Import price list
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        {/* Version list */}
+        <div style={{ width: 280, flexShrink: 0 }}>
+          {loading && <div style={{ color: "var(--spot-text3)", fontSize: 12 }}>Loading…</div>}
+          {!loading && versions.map((v) => (
+            <button key={v.id} onClick={() => openVersion(v.id)} data-testid={`pricing-version-${v.id}`}
+              style={{
+                all: "unset", cursor: "pointer", display: "block", width: "100%", boxSizing: "border-box",
+                padding: "10px 12px", marginBottom: 6, borderRadius: 6,
+                background: sel?.version?.id === v.id ? "var(--spot-bg3)" : "var(--spot-bg2)",
+                border: `1px solid ${sel?.version?.id === v.id ? "var(--spot-accent)" : "var(--spot-border)"}`,
+              }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)" }}>{v.label}</span>
+                <PricingStatusPill status={v.status} isActive={v.id === activeId} />
+              </div>
+              <div style={{ fontSize: 10, color: "var(--spot-text3)", marginTop: 3 }}>
+                {v.effective_date ? `Eff ${v.effective_date}` : "—"}
+                {v.change_summary?.cells_changed != null && ` · ${v.change_summary.cells_changed} cells`}
+                {v.change_summary?.uniform_pct != null && ` · +${v.change_summary.uniform_pct}%`}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Diff detail */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {!sel && <div style={{ color: "var(--spot-text3)", fontSize: 12, paddingTop: 20 }}>
+            Select a version to see its rate changes, or import a new price list.</div>}
+          {sel && <VersionDetail data={sel} activeId={activeId} busy={busy}
+            onActivate={activate} onDiscard={discard} />}
+        </div>
+      </div>
+
+      {showImport && <ImportPricingModal onClose={() => setShowImport(false)} onImported={onImported} />}
+    </div>
+  );
+}
+
+function PricingStatusPill({ status, isActive }) {
+  const map = {
+    active: ["var(--spot-green)", "ACTIVE"],
+    draft:  ["var(--spot-amber, #b8860b)", "DRAFT"],
+    archived: ["var(--spot-text3)", "ARCHIVED"],
+  };
+  const [bg, label] = map[isActive ? "active" : status] || map.archived;
+  return <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#fff",
+    background: bg, padding: "2px 6px", borderRadius: 3 }} data-testid="pricing-status-pill">{label}</span>;
+}
+
+function VersionDetail({ data, activeId, busy, onActivate, onDiscard }) {
+  const v = data.version;
+  const diff = data.diff;
+  const warnings = data.warnings || [];
+  const isActive = v.id === activeId;
+  const isDraft = v.status === "draft";
+  const s = diff?.summary;
+  const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 }));
+
+  return (
+    <div data-testid="pricing-version-detail">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--spot-text)" }}>{v.label}</span>
+          {v.source_file && <span style={{ fontSize: 11, color: "var(--spot-text3)", marginLeft: 8 }}>· {v.source_file}</span>}
+          {data.sheet_used && <span style={{ fontSize: 11, color: "var(--spot-text3)", marginLeft: 6 }}>· tab “{data.sheet_used}”</span>}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isDraft && <button onClick={() => onDiscard(v.id)} disabled={busy} data-testid="pricing-discard-btn"
+            style={{ ...btnStyle, color: "var(--spot-err)", borderColor: "var(--spot-err)" }}>Discard</button>}
+          {isDraft && <button onClick={() => onActivate(v.id)} disabled={busy} data-testid="pricing-activate-btn"
+            style={{ ...btnStyle, background: "var(--spot-green)", color: "#fff", borderColor: "var(--spot-green)" }}>
+            {busy ? "Activating…" : "Activate"}</button>}
+          {isActive && <span style={{ fontSize: 11, color: "var(--spot-green)", fontWeight: 700, alignSelf: "center" }}>● Live now</span>}
+        </div>
+      </div>
+
+      {s && (
+        <div style={{ display: "flex", gap: 18, fontSize: 12, marginBottom: 10, color: "var(--spot-text2)" }}>
+          <span data-testid="pricing-summary-cells"><b>{s.cells_changed}</b> cells changed
+            {data.compared_to && <span style={{ color: "var(--spot-text3)" }}> vs {data.compared_to}</span>}</span>
+          {s.uniform_pct != null
+            ? <span style={{ color: "var(--spot-green)" }}>Uniform <b>+{s.uniform_pct}%</b></span>
+            : s.avg_pct != null && <span>avg <b>{s.avg_pct}%</b> ({s.min_pct}% to {s.max_pct}%)</span>}
+        </div>
+      )}
+
+      {warnings.length > 0 && (
+        <div style={{ background: "var(--spot-bg2)", border: "1px solid var(--spot-amber, #b8860b)",
+          borderRadius: 4, padding: 8, marginBottom: 10, fontSize: 11, color: "var(--spot-text2)" }}
+          data-testid="pricing-warnings">
+          <b style={{ color: "var(--spot-amber, #b8860b)" }}>⚠ {warnings.length} note(s):</b>
+          <ul style={{ margin: "4px 0 0 16px" }}>{warnings.slice(0, 12).map((w, i) => <li key={i}>{w}</li>)}</ul>
+        </div>
+      )}
+
+      {diff && diff.cells.length > 0 ? (
+        <div style={{ maxHeight: 380, overflow: "auto", border: "1px solid var(--spot-border)", borderRadius: 4 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead><tr style={{ position: "sticky", top: 0, background: "var(--spot-bg2)" }}>
+              {["Wall", "Grade", "Tier", "Old", "New", "Δ%"].map((h) =>
+                <th key={h} style={{ textAlign: h === "Old" || h === "New" || h === "Δ%" ? "right" : "left",
+                  padding: "6px 10px", borderBottom: "1px solid var(--spot-border)",
+                  color: "var(--spot-text3)", fontWeight: 700 }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {diff.cells.map((c, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--spot-border)" }}>
+                  <td style={{ padding: "4px 10px", color: "var(--spot-text3)" }}>{c.wall === "singlewall" ? "SW" : "DW"}</td>
+                  <td style={{ padding: "4px 10px", color: "var(--spot-text)", fontWeight: 600 }}>{c.grade}</td>
+                  <td style={{ padding: "4px 10px", color: "var(--spot-text3)" }}>{c.tier}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", color: "var(--spot-text3)" }}>{fmt(c.old)}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", color: "var(--spot-text)", fontWeight: 600 }}>{fmt(c.new)}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right",
+                    color: c.pct > 0 ? "var(--spot-green)" : c.pct < 0 ? "var(--spot-err)" : "var(--spot-text3)" }}>
+                    {c.pct == null ? "—" : `${c.pct > 0 ? "+" : ""}${c.pct}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ color: "var(--spot-text3)", fontSize: 12 }}>
+          {v.is_baseline ? "Baseline version — the in-code rates all quotes started on." : "No board-rate changes vs the active version."}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImportPricingModal({ onClose, onImported }) {
+  const [file, setFile] = React.useState(null);
+  const [label, setLabel] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const submit = async () => {
+    if (!file) return;
+    setBusy(true); setErr("");
+    try {
+      const r = await adminPricingImport(file, { label: label || undefined });
+      onImported(r);
+    } catch (e) { setErr(e?.response?.data?.detail || e.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <ModalShell title="Import Board Price List" onClose={onClose} testid="import-pricing-modal">
+      <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 10, lineHeight: 1.5 }}>
+        Upload the supplier <code>.xlsx</code>. We read the <b>SINGLEWALL / DOUBLEWALL</b> grade × tier
+        board rates only and land them as a <b>draft</b> for review. Liner/medium adders are not changed.
+        Nothing goes live until you click Activate.
+      </div>
+      <input type="file" accept=".xlsx,.xlsm" onChange={(e) => setFile(e.target.files?.[0])}
+        data-testid="import-pricing-file" style={{ marginBottom: 10, fontSize: 12 }} />
+      <input value={label} onChange={(e) => setLabel(e.target.value)}
+        placeholder="Label (optional — defaults to the sheet date)" data-testid="import-pricing-label"
+        style={{ width: "100%", padding: "5px 8px", fontSize: 12, boxSizing: "border-box",
+          background: "var(--spot-bg2)", color: "var(--spot-text)",
+          border: "1px solid var(--spot-border)", borderRadius: 3, marginBottom: 12 }} />
+      {err && <div style={{ color: "var(--spot-err)", fontSize: 11, marginBottom: 10 }} data-testid="import-pricing-err">{err}</div>}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button onClick={onClose} style={btnStyle}>Cancel</button>
+        <button onClick={submit} disabled={!file || busy} data-testid="import-pricing-submit"
+          style={{ ...btnStyle, background: file ? "var(--spot-accent)" : "var(--spot-bg3)",
+            color: file ? "#fff" : "var(--spot-text3)",
+            borderColor: file ? "var(--spot-accent)" : "var(--spot-border)",
+            cursor: file && !busy ? "pointer" : "not-allowed" }}>
+          {busy ? "Parsing…" : "Import & Review"}</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 
 function ModalShell({ title, children, onClose, testid }) {
   return (

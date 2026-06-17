@@ -10,6 +10,14 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-17 — Board Pricing Update + Freeze · PHASE 2 (importer + diff UI + activate)
+- **Importer (`services/pricing_import.py`):** defensive xlsx parser — anchors on SINGLEWALL/DOUBLEWALL labels + grade label in col A (not fixed cells), maps tier columns positionally to engine tiers. Imports **base_matrix ONLY** (adders carried forward, per business confirmation). Missing/zero cells keep old value + warn; new/unknown grades flagged. Auto-picks the latest-dated sheet tab. `diff_base_matrix()` → per-cell old/new/% + summary (detects uniform %).
+- **Admin routes (`routes/admin_pricing.py`, admin-gated):** POST /import (xlsx → DRAFT version + diff + warnings, no activation), GET /versions, GET /versions/{id} (diff: draft→vs active, active→vs the version it replaced), POST /versions/{id}/activate (deliberate, archives prior active), DELETE /versions/{id} (draft only). `create_version` now supports status=draft.
+- **Admin UI (`AdminPage.jsx` → BoardPricingPanel):** new "Board Pricing" tab. Version list w/ status pills (ACTIVE/DRAFT/ARCHIVED), Import modal (file + optional label), diff-review detail (summary "+6.5% vs 2025-04-14", warnings, per-cell SW/DW grade×tier old→new→Δ% table), Activate + Discard. API in `api/spot.js`.
+- **Verified end-to-end (real 6/15/26 spreadsheet):** parsed 172 cells = uniform +6.5%, NT-DW blank cells kept old + warned; landed as draft; Activate flipped it live → Board Engine `/manifest` now 2026-06-15 (275=148.6527). FREEZE confirmed: new unpinned quote $34,129.33 (new) vs same pinned to v1 $33,950.13 (frozen old).
+- **Test stability:** golden-$ legacy-parity test (`test_below_min::test_storage_bin_v3_legacy_parity`) now pins `pricingVersionId`→baseline so it stays deterministic regardless of active version. Suite green (3 pre-existing SSO/role-gate failures unrelated). 2026-06-15 left ACTIVE in PREVIEW for the user's preview-vs-prod Board Engine spot-check; PROD untouched until deploy+activate there.
+
+
 ## 2026-06-17 — Board Pricing Update + Freeze · PHASE 1 (versioning foundation, zero behavior change)
 - **Goal:** version board-supplier pricing, freeze saved quotes to the version they were priced on, and let the Board Engine panel reflect the active version. Re-pricing is ONLY via Duplicate (new est #).
 - **Engine parametrization (`engine/core.py`):** added `PRICING_KEYS` (base_matrix, liner_upgrades, medium_upgrades, dimensional_adders, fixed_charges, flute_rules), a per-request `ContextVar` overlay, `active_engine()`, `snapshot_pricing_config()`, and a `use_pricing(cfg)` context manager. `calc_board`/`get_liner_rate` now read `active_engine()[...]`. With no override → reads code ENGINE verbatim = exact legacy parity. Machine/labor rates stay managed by `rate_overrides` (orthogonal, unchanged).

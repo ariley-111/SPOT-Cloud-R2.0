@@ -35,6 +35,21 @@ def client(auth_token):
     return s
 
 
+@pytest.fixture(scope="module")
+def baseline_version_id(auth_token):
+    """The pricing version that == the in-code 4.14.25 rates. Golden-$ parity
+    tests pin to it so they stay deterministic regardless of which board-price
+    version is currently ACTIVE."""
+    r = requests.get(f"{BASE_URL}/api/admin/pricing/versions",
+                     headers={"Authorization": f"Bearer {auth_token}"}, timeout=15)
+    if r.status_code != 200:
+        return None
+    for v in r.json().get("versions", []):
+        if v.get("is_baseline"):
+            return v["id"]
+    return None
+
+
 def _below_min_payload(buy_min: str = "Auto", qty: int = 200) -> dict:
     """Minimal payload for a 6x6 B-flute 275 quote — custom-order grade lands below mill min.
 
@@ -134,7 +149,7 @@ def test_force_spec_board_triggers_buy_min_recalc(client):
 #   - route "Saber + D/C" with the "Too many CAD hours..." warning
 #   - buyMinSheets = 600 (15,000 sqft Kraft min ÷ 25.03 sqft/sheet)
 #   - matTotal ≈ $1,977.42, cutterDirect ≈ $4,650.60, totalMfg ≈ $6,628.02
-def test_storage_bin_v3_legacy_parity(client):
+def test_storage_bin_v3_legacy_parity(client, baseline_version_id):
     payload = {
         "itemDesc": "Storage Bin v3", "oneUpW": 72.125, "oneUpL": 46.625,
         "qtys": [500, 0, 0, 0, 0],
@@ -144,6 +159,9 @@ def test_storage_bin_v3_legacy_parity(client):
         "productMats": "RSC", "prepressTreatment": "Auto",
         "cadDifficulty": "Complex",
         "pricingBasis": "Gross Margin %", "gmByTier": {"10-24": 0.25},
+        # Pin to the 4.14.25 baseline so the legacy golden $ values hold
+        # regardless of the currently-active board-price version.
+        "pricingVersionId": baseline_version_id,
     }
     r = client.post(f"{BASE_URL}/api/engine/calculate?slot_index=0", json=payload, timeout=20)
     assert r.status_code == 200, r.text
