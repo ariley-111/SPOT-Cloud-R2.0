@@ -13,7 +13,7 @@ from engine.core import CREST_MAX_W, CREST_MAX_L, MULLEN_UPGRADE, FLUTE_CALIPERS
 from engine.core import use_pricing
 from models.schemas import User
 from routes.auth import get_current_user
-from services.pricing_versions import resolve_config, get_active_config, get_active_version
+from services.pricing_versions import resolve_config, get_active_config, get_active_version, get_version
 
 router = APIRouter(prefix="/api/engine", tags=["engine"])
 
@@ -55,7 +55,14 @@ async def manifest(version_id: Optional[str] = None,
         for (g, f), n in sorted(sheet_counts.items())
     ]
     active = await get_active_version()
-    cfg = await resolve_config(version_id) if version_id else (active or {}).get("config")
+    active_id = (active or {}).get("id")
+    # Show the REQUESTED version (a loaded quote's pinned/frozen version) if given,
+    # else the active version. This makes the Board Engine panel reflect exactly
+    # what the open quote is priced on — not always the global active version.
+    shown = await get_version(version_id) if version_id else active
+    if not shown:
+        shown = active
+    cfg = (shown or {}).get("config")
     eng = {**ENGINE, **(cfg or {})}
     return {
         "msf_tiers": ENGINE["msf_tiers"],
@@ -69,11 +76,13 @@ async def manifest(version_id: Optional[str] = None,
         "approved_sheets_total": len(APPROVED_SHEETS),
         "approved_specs": approved_specs,
         "pricing_version": {
-            "id": (active or {}).get("id"),
-            "label": (active or {}).get("label"),
-            "effective_date": (active or {}).get("effective_date"),
-            "is_baseline": (active or {}).get("is_baseline", False),
-        } if active else None,
+            "id": shown.get("id"),
+            "label": shown.get("label"),
+            "effective_date": shown.get("effective_date"),
+            "is_baseline": shown.get("is_baseline", False),
+            "is_active": shown.get("id") == active_id,
+            "active_label": (active or {}).get("label"),
+        } if shown else None,
         "constants": {
             "BOBST_FLUTES": BOBST_FLUTES,
             "BOBST_MIN_W": BOBST_MIN_W, "BOBST_MIN_L": BOBST_MIN_L,

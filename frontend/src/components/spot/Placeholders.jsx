@@ -414,15 +414,20 @@ function RatePanel({ title, color, rows, dataTestId }) {
  *    • Flute Rules + Dim Adders + Fixed Charges three-column
  *    • Approved Sheets summary chips (spec → count) */
 export function BoardEngineSec() {
-  const { sec, toggleSec } = useQuote();
+  const { sec, toggleSec, active } = useQuote();
+  const pinnedVersionId = active?.state?.pricingVersionId || null;
   const [manifest, setManifest] = React.useState(null);
   const [err, setErr] = React.useState(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     import("../../api/spot").then(({ engineManifest }) =>
-      engineManifest().then(setManifest).catch((e) => setErr(e?.message || String(e)))
+      engineManifest(pinnedVersionId)
+        .then((m) => { if (!cancelled) setManifest(m); })
+        .catch((e) => { if (!cancelled) setErr(e?.message || String(e)); })
     );
-  }, []);
+    return () => { cancelled = true; };
+  }, [pinnedVersionId]);
 
   // Number formatter matching legacy `fn`
   const fn2 = (n, mx = 2, mn = 2) =>
@@ -492,24 +497,37 @@ export function BoardEngineSec() {
         )}
         {manifest && (
           <>
-            {/* Active board-pricing version badge — drives preview-vs-prod spot-check */}
-            {manifest.pricing_version && (
-              <div data-testid="board-pricing-version" style={{
-                marginBottom: 8, padding: "5px 9px", borderRadius: 5,
-                background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
-                fontSize: 11, color: "var(--spot-text2)", display: "flex",
-                alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#fff",
-                  background: "var(--spot-green)", padding: "2px 6px", borderRadius: 3 }}>PRICING</span>
-                <b style={{ color: "var(--spot-text)" }}>{manifest.pricing_version.label}</b>
-                {manifest.pricing_version.effective_date && (
-                  <span style={{ color: "var(--spot-text3)" }}>· effective {manifest.pricing_version.effective_date}</span>
-                )}
-                {manifest.pricing_version.is_baseline && (
-                  <span style={{ color: "var(--spot-text3)" }}>· baseline</span>
-                )}
-              </div>
-            )}
+            {/* Board-pricing version badge. When a saved quote is open and it's
+                pinned to a non-active version, show FROZEN (amber) so it's clear
+                this panel reflects the quote's preserved pricing, not the live list. */}
+            {manifest.pricing_version && (() => {
+              const pv = manifest.pricing_version;
+              const frozen = pv.is_active === false;
+              const accent = frozen ? "#b8860b" : "var(--spot-green)";
+              return (
+                <div data-testid="board-pricing-version" style={{
+                  marginBottom: 8, padding: "5px 9px", borderRadius: 5,
+                  background: frozen ? "#b8860b14" : "var(--spot-bg2)",
+                  border: `1px solid ${frozen ? "#b8860b66" : "var(--spot-border)"}`,
+                  fontSize: 11, color: "var(--spot-text2)", display: "flex",
+                  alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#fff",
+                    background: accent, padding: "2px 6px", borderRadius: 3 }}>
+                    {frozen ? "FROZEN PRICING" : "PRICING"}
+                  </span>
+                  <b style={{ color: "var(--spot-text)" }}>{pv.label}</b>
+                  {pv.effective_date && (
+                    <span style={{ color: "var(--spot-text3)" }}>· effective {pv.effective_date}</span>
+                  )}
+                  {pv.is_baseline && <span style={{ color: "var(--spot-text3)" }}>· baseline</span>}
+                  {frozen && (
+                    <span style={{ color: "#b8860b", fontWeight: 600 }}>
+                      · this quote is preserved on {pv.label} (current list is {pv.active_label}). Duplicate to re-price.
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             {/* MSF Tiers */}
             <div style={{ marginBottom: 4 }} data-testid="board-msf-tiers">
               <div style={SUBHEAD}>MSF Tiers</div>

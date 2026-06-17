@@ -10,6 +10,13 @@ Append-only log of shipped features and fixes.
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-17 — Board Pricing Freeze: wire pinned version through UI + Board Engine panel (BUG FIX)
+- **Freeze wasn't applied in the UI (bug):** the frontend never sent `pricingVersionId` on recalc, so opening a saved quote silently re-priced at the ACTIVE version. Fixed: `LoadQuoteModal` injects the quote's `pricing_version_id` into state on load/take-over/copy; `useEngine` buildPayload + buildMpPayload include `pricingVersionId`. Verified on `/calculate-all`: same quote = $34,129.33 (active) vs $33,950.13 (frozen v1).
+- **Board Engine panel showed the wrong version (confusing bug):** it always showed the global ACTIVE version even when a frozen quote was open. Fixed: `/manifest` accepts `version_id` and returns THAT version's meta + rates + an `is_active` flag (+ `active_label`). `engineManifest(versionId)` + `BoardEngineSec` now pass the loaded quote's pinned version and refetch on change. Badge shows amber **"FROZEN PRICING {label} · this quote is preserved on {label} (current list is {active}). Duplicate to re-price."** when pinned≠active; green "PRICING {label}" otherwise. Verified in UI on a frozen quote (shows 2025-04-14, 275=139.58).
+- **Test data:** created `FROZEN-TEST-V1` (status sent, pinned v1) in preview so the freeze can be validated against a current-priced quote.
+- **Known follow-up (not yet done):** Save always calls `createQuote` (never `updateQuote`) → re-saving spawns DUPLICATE saved quotes (observed dup est#s); and Save defaults to `draft` status. User wants a "Save Draft" vs "Save as Quote" choice. Pending decision on UI (two buttons vs dropdown); will also fix create-vs-update.
+
+
 ## 2026-06-17 — Board Pricing · saved-quote pricing-version tag (Phase 2 follow-up)
 - **Load Quote → Saved Quotes** list now has a dedicated **"Pricing Version"** column (own grid column, aligned rows) — pill shows the version date only (no "priced" word); amber + ⚠ icon when on an older list, neutral when current. Backend `routes/quotes.py` list attaches `pricing_version_label` + `pricing_is_current` via one versions lookup.
 - **Admin → Audit Log → Quote Activity** now has a **"Pricing Version"** column (each row shows the quote's pinned version label; backend joins quote→version label in `list_quote_audit`).

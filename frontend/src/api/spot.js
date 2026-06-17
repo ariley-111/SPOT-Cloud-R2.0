@@ -102,8 +102,9 @@ export const adminPricingDeleteDraft = (id) =>
 // rules, dim adders, fixed charges, approved sheet specs. Drives the Board
 // Engine viewer panel (Placeholders.jsx → BoardEngineSec). Matches the data
 // shape legacy spot_r1_5.jsx L6606-6758 renders from its ENGINE constant.
-export const engineManifest = () =>
-  api.get("/engine/manifest").then((r) => r.data);
+export const engineManifest = (versionId) =>
+  api.get("/engine/manifest", { params: versionId ? { version_id: versionId } : {} })
+    .then((r) => r.data);
 
 // Returns {outside: [liner names], inside: [liner names]} that have approved
 // stock sheets for the given board grade/flute/medium. Used by liner-tile
