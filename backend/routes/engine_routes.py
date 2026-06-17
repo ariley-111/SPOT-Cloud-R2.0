@@ -607,19 +607,25 @@ async def calculate_multi_part(
         freight_scope = payload.get("freightScope") or "None"
         prepress_scope = payload.get("prepressScope") or "None"
         if freight_scope == "Per Job":
-            # Per-slot job freight (see line_freight note below) so each tier's
-            # per-component allocation reflects that tier's combined-load freight.
+            # Per-slot job freight, MARKUP-INCLUSIVE, on the FINISHED shipped
+            # basis (finMSF / finShipWeight). This must match the componentPricing
+            # path (lines ~1051-1065) and the right-rail cost buildup so the
+            # per-component breakdown chip, the cost buildup line, and the Quote
+            # Table tier freight all agree. Legacy parity: spot_r1_5.jsx L3442
+            # allocateJobCost(items, slotFreight*(1+freightMarkup), method).
             _jfbs0 = payload.get("jobFreightBySlot") or {}
             _slot_job0 = _jfbs0.get(str(slot), _jfbs0.get(slot)) if isinstance(_jfbs0, dict) else None
             if _slot_job0 in (None, "", "null"):
                 _slot_job0 = payload.get("jobFreightCost")
-            job_freight = _safe_float(_slot_job0)
+            _mk0_raw = payload.get("freightMarkup")
+            _mk0 = _safe_float(_mk0_raw if _mk0_raw not in (None, "") else 0.15)
+            job_freight = _safe_float(_slot_job0) * (1.0 + _mk0)
             method = payload.get("freightAllocMethod") or "By MSF"
-            # Pass shipWeight so "By Weight" allocation works correctly.
+            # Finished shipped basis — NOT board-consumed oMSF/shipWeight.
             items_for_alloc = [{
                 "type": pc.get("type"),
-                "oMSF": pc.get("oMSF", 0),
-                "shipWeight": pc.get("shipWeight", 0),
+                "oMSF": _safe_float(pc.get("finMSF") or pc.get("oMSF") or 0),
+                "shipWeight": _safe_float(pc.get("finShipWeight") or pc.get("shipWeight") or 0),
             } for pc in per_comp]
             from engine.pricing import allocate_job_cost as _alloc
             alloc = _alloc(items_for_alloc, job_freight, method)

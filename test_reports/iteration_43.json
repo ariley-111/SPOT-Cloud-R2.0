@@ -1,0 +1,65 @@
+{
+  "summary": "PASS - Multi-Part Matched Set Per-Job freight is now CONSISTENT across all three on-screen displays on quote SA-260604-165816-COPY (FOB=Ship, scope=Per Job, ship-to 19446, qtys 100/150/300). After live Update All Rates (spinner cleared in ~117s, PITT OHIO EXPRESS active), Header component freight matches across (a) Per-Component Breakdown chip [data-testid='mp-pc-freight-2'], (b) right-rail Cost Buildup 'One-Time Line Items > Freight $base + 15% markup', and (c) right-rail active-component card 'Freight: $X'. The previously reported divergence ($19.32 vs $33.88) is GONE.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "00_setup": {"quote": "SA-260604-165816-COPY", "fob": "Ship", "type": "Per Job", "treatment": "Line", "ship_to": "19446", "markup": "15%", "components": 3, "set_qtys": [100,150,300], "active_carrier": "PITT OHIO EXPRESS", "spinner_cleared_s": 117.5},
+    "01_tier_qty_300": {
+      "status": "PASS",
+      "qt_row_selected": "qt-row-2",
+      "mp_pc_freight": {"Display Base": "$145.15", "60ct. Tray": "$120.86", "Header": "$33.88"},
+      "cost_buildup_one_time_freight": "$29.46 + 15% markup = $33.88",
+      "active_component_card_header_freight": "$33.88",
+      "per_job_card_amount": "$299.89",
+      "per_job_card_qty_label": " · Qty 300",
+      "sum_mp_pc": 299.89,
+      "matches_per_job_card": true,
+      "header_freight_consistent_across_3_displays": true
+    },
+    "02_tier_qty_150": {
+      "status": "PASS",
+      "qt_row_selected": "qt-row-1",
+      "mp_pc_freight": {"Display Base": "$111.63", "60ct. Tray": "$92.95", "Header": "$26.06"},
+      "cost_buildup_one_time_freight": "$22.66 + 15% markup = $26.06",
+      "active_component_card_header_freight": "$26.06",
+      "per_job_card_amount": "$230.64",
+      "per_job_card_qty_label": " · Qty 150",
+      "sum_mp_pc": 230.64,
+      "matches_per_job_card": true,
+      "header_freight_consistent_across_3_displays": true
+    },
+    "03_tier_qty_100": {
+      "status": "PASS",
+      "qt_row_selected": "qt-row-0",
+      "mp_pc_freight": {"Display Base": "$89.92", "60ct. Tray": "$74.88", "Header": "$20.99"},
+      "cost_buildup_one_time_freight": "$18.25 + 15% markup = $20.99",
+      "active_component_card_header_freight": "$20.99 (visible in screenshot ACTIVE COMPONENT panel as 'Freight: $20.99')",
+      "per_job_card_amount": "$185.79",
+      "per_job_card_qty_label": " · Qty 100",
+      "sum_mp_pc": 185.79,
+      "matches_per_job_card": true,
+      "header_freight_consistent_across_3_displays": true
+    },
+    "04_per_tier_distinctness": {"status": "PASS", "per_tier_per_job_freight": {"100": 185.79, "150": 230.64, "300": 299.89}, "all_distinct": true, "monotonic_increasing": true}
+  },
+  "test_report_links": [
+    "/app/test_reports/iter43_copy_loaded.png",
+    "/app/test_reports/iter43_post_update.png",
+    "/app/test_reports/iter43_tier300.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "engine_routes.py aggregate Per-Job block (~L609) now allocates the markup-inclusive per-slot job freight (jobFreightBySlot[slot]*(1+markup)) on finished finMSF/finShipWeight basis, identical to the componentPricing path (~L1051). This eliminates the prior split between an 'oMSF on raw freight' aggregate path and a 'finMSF on marked-up freight' componentPricing path.",
+    "QuoteTableSec PerComponentBreakdownLegacy displays pc.allocatedFreight (the new finMSF-based, markup-inclusive value) and now produces $20.99/$26.06/$33.88 for Header across the 100/150/300 tiers - exactly matching the Cost Buildup One-Time Freight line '$base + 15% markup' result (18.25*1.15=20.99, 22.66*1.15=26.06, 29.46*1.15=33.88).",
+    "Sum of three components' allocatedFreight per tier reconciles to the tier's Per-Job freight: 89.92+74.88+20.99=185.79 (qty100), 111.63+92.95+26.06=230.64 (qty150), 145.15+120.86+33.88=299.89 (qty300). Engine slot-level total = sum of allocations, confirming the per-slot job freight is distributed correctly.",
+    "No regressions observed in per-tier distinctness verified previously in iteration_42 ($185.79/$230.64/$299.89)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (frontend-only per request)", "frontend": "100% (3/3 tier consistency checks PASS; 3/3 tier sum-to-tier-total checks PASS)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None - reused existing SA-260604-165816-COPY draft.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Aggregate (per-component breakdown chip) and componentPricing (right-rail Cost Buildup + active-component card) freight allocations are now unified on the markup-inclusive, finMSF-based path. To retest: login admin, open SA-260604-165816-COPY tab, click btn-freight-dash -> dash-update-rates, wait ~120s for [data-testid='freight-uts-spinner'] to clear, close modal, then for each qt-row-{0,1,2} click the row and confirm: (1) sum of mp-pc-freight-{0..2} == freight-per-job-amount, (2) mp-pc-freight-2 (Header) == 'Freight: $X' shown in ACTIVE COMPONENT card == 'Freight $base + 15% markup' shown in COST BUILDUP > One-Time Line Items (with Detail view active).",
+  "rca of the issue": "Pre-fix: aggregate Per-Component Breakdown path in engine_routes.py allocated RAW (no-markup) freight by board-consumed oMSF; the componentPricing path allocated MARKED-UP freight by finished finMSF/finShipWeight. With FOB=Ship + Per Job, these produced two different values per component (e.g. Header $19.32 vs $33.88 at qty 300). Fix: aggregate path now multiplies per-slot job freight by (1+markup) and allocates on finMSF/finShipWeight (storing pc.allocatedFreight). Verified live: across all 3 tiers, Header allocated freight in mp-pc-freight-2 == cost-buildup One-Time Freight markup-inclusive value == active-component card 'Freight:' value, and sum across all 3 components == Per-Job card amount for that tier."
+}

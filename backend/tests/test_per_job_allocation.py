@@ -328,3 +328,26 @@ class TestMatchedSetPerSlotJobFreight:
     def test_slots_not_all_equal(self, resp):
         vals = [round(float(s.get("freightLine") or 0), 2) for s in resp["slots"]]
         assert len(set(vals)) == 3, f"Freight should differ per tier, got {vals}"
+
+    def test_breakdown_alloc_matches_componentpricing(self, resp):
+        """The aggregate per-component allocatedFreight (breakdown chip) MUST
+        equal the componentPricing row freightLine for the same component+slot
+        — both marked-up, both on the finished MSF basis. Regression for the
+        2026-06-18 mismatch ($33.88 cost buildup vs $19.32 breakdown)."""
+        # componentPricing ordered list of {slot: freightLine}
+        cp_by_slot = []
+        for cp in sorted(resp["componentPricing"], key=lambda c: c.get("itemIndex", 0)):
+            cp_by_slot.append({int(r["slotIdx"]): float(r.get("freightLine") or 0) for r in cp["rows"]})
+        checked = 0
+        for sl in resp["slots"]:
+            slot_i = int(sl["slot"])
+            pcs = sl.get("perComponent", [])
+            for pos, pc in enumerate(pcs):
+                alloc = float(pc.get("allocatedFreight") or 0)
+                expect = cp_by_slot[pos].get(slot_i) if pos < len(cp_by_slot) else None
+                if expect is None:
+                    continue
+                assert alloc == pytest.approx(expect, abs=0.05), (
+                    f"slot {slot_i} comp#{pos}: breakdown {alloc} != componentPricing {expect}")
+                checked += 1
+        assert checked >= 4, f"expected to verify multiple comp/slot pairs, only {checked}"
