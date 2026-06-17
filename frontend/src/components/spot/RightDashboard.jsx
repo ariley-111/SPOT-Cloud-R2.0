@@ -153,12 +153,26 @@ function FreightPanel({ s }) {
         qtys: s.qtys || [],
       }];
     }
+    const isMatched = s.pricingMode === "Matched Set";
     return items.map((it, i) => {
       const st = (i === activeIdx)
         ? { boardGrade: s.boardGrade, flute: s.flute,
             outsideLiner: s.outsideLiner, insideLiner: s.insideLiner, medium: s.medium,
             oneUpW: s.oneUpW, oneUpL: s.oneUpL, qtys: s.qtys }
         : (it.state || {});
+      // Matched Set: every component is produced at the SAME set quantities
+      // (× pcsPerSet), so use the top-level set qtys for ALL components — this
+      // matches the pricing engine (which uses top_qtys for matched-set) and
+      // fixes the bug where non-active components dropped tiers the active item
+      // had (e.g. a 300 tier quoting only the active component). Individual mode
+      // keeps each component's own qtys.
+      const pcs = parseInt(it.pcsPerSet ?? st.pcsPerSet ?? 1, 10) || 1;
+      const itemQtys = isMatched
+        ? (s.qtys || []).map((q) => {
+            const n = parseInt(q, 10);
+            return Number.isFinite(n) && n > 0 ? String(n * pcs) : "";
+          })
+        : (st.qtys || []);
       return {
         boardGrade: st.boardGrade,
         flute: st.flute,
@@ -167,7 +181,7 @@ function FreightPanel({ s }) {
         medium: st.medium || "None",
         oneUpW: parseFloat(st.oneUpW || 0),
         oneUpL: parseFloat(st.oneUpL || 0),
-        qtys: st.qtys || [],
+        qtys: itemQtys,
       };
     });
   };
@@ -270,15 +284,8 @@ function FreightPanel({ s }) {
         const slot = Math.min(k, qtys.length - 1);
         const qty = qtys[slot];
         const oMSF = (it.oneUpW * it.oneUpL * qty) / 144 / 1000;
-        // Pull the ENGINE's per-component oMSF + shipWeight for this qty so the
-        // dashboard's Per-Job allocation matches the priced Quote Table exactly
-        // (the engine uses sheet-based values, not the finished-piece estimate).
-        const er = ((componentPricing || [])[i]?.rows || [])
-          .find((rw) => Number(rw.qty) === qty);
         return {
           idx: i, slot, qty, oMSF,
-          engOMSF: er ? (Number(er.oMSF) || 0) : 0,
-          engWeight: er ? (Number(er.shipWeight) || 0) : 0,
           ship: calcShipment(
             it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
             oMSF, it.oneUpW, it.oneUpL, qty
@@ -462,7 +469,7 @@ function FreightPanel({ s }) {
           allCarriers: sc.allCarriers || [],
         };
         if (total > 0) {
-          const comps = sc.perComp.map((p) => ({ oMSF: p.engOMSF || p.oMSF || 0, weight: p.engWeight || p.ship?.totalWeight || 0 }));
+          const comps = sc.perComp.map((p) => ({ oMSF: p.oMSF || 0, weight: p.ship?.totalWeight || 0 }));
           const allocs = allocateJobCost(comps, total, allocMethod);
           sc.perComp.forEach((p, ci) => {
             if (!perJobMap[p.idx]) perJobMap[p.idx] = {};
@@ -572,7 +579,7 @@ function FreightPanel({ s }) {
     (cache.perJobQuotes || []).forEach((sc) => {
       const total = Number(sc.totalAmount || 0);
       if (total <= 0) return;
-      const comps = (sc.perComp || []).map((p) => ({ oMSF: p.engOMSF || p.oMSF || 0, weight: p.engWeight || p.ship?.totalWeight || 0 }));
+      const comps = (sc.perComp || []).map((p) => ({ oMSF: p.oMSF || 0, weight: p.ship?.totalWeight || 0 }));
       const allocs = allocateJobCost(comps, total, s.freightAllocMethod || "By MSF");
       (sc.perComp || []).forEach((p, ci) => {
         if (!perJobBy[p.idx]) perJobBy[p.idx] = {};

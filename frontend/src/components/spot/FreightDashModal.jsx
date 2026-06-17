@@ -448,7 +448,7 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, allocMeth
         // Allocate the scenario's combined freight across ALL its components by
         // the SELECTED method (Board MSF / Equal / By Weight) — same allocator
         // the engine uses, so the displayed split matches the priced split.
-        const allComps = (sc.perComp || []).map((p) => ({ oMSF: p.engOMSF || p.oMSF || 0, weight: p.engWeight || p.ship?.totalWeight || 0 }));
+        const allComps = (sc.perComp || []).map((p) => ({ oMSF: p.oMSF || 0, weight: p.ship?.totalWeight || 0 }));
         const allAllocs = allocateJobCost(allComps, raw, allocMethod);
         const allocByIdx = {};
         (sc.perComp || []).forEach((p, ci) => { allocByIdx[p.idx] = allAllocs[ci] || 0; });
