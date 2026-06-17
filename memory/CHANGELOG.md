@@ -2,6 +2,31 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Per-Job freight per-tier + cross-display consistency ✅
+- **Bug 1 (user)**: In MP Matched Set Per-Job mode, the Quote Table tiers, the
+  PDF Per-Component Pricing grid, and the right-rail Per-Job card all showed the
+  FIRST tier's freight for EVERY set-qty tier.
+  - Root cause: only the flat `jobFreightCost` reached the engine; per-slot
+    `jobFreightBySlot` was never sent.
+  - Fix: `useEngine.buildMpPayload` now sends `jobFreightBySlot`; backend
+    `engine_routes.py` applies `jobFreightBySlot[slot]×(1+markup)` per tier for
+    `slots[].freightLine`; right-rail Per-Job card reads `jobFreightBySlot[selSlot]`
+    (new `freight-per-job-qty` label). Verified iter42 — 185.79/230.64/299.89.
+- **Bug 2 (user)**: Per-Job freight DISAGREED between the Quote Table
+  "Per-Component Breakdown" chip (Header $19.32) and the right-rail Cost Buildup /
+  active-component card (Header $33.88).
+  - Root cause: two backend allocation paths used different bases — aggregate
+    `allocatedFreight` = RAW × board-consumed `oMSF`; componentPricing
+    `freightLine` = MARKED-UP × finished `finMSF`.
+  - Fix: aggregate path now allocates the markup-inclusive per-slot job freight on
+    the finished `finMSF`/`finShipWeight` basis — identical to componentPricing.
+    Now breakdown chip == cost buildup == active card, and the 3 components sum to
+    the tier's job freight. Verified iter43 (all tiers reconcile).
+- **Tests**: `tests/test_per_job_allocation.py` 14/14 PASS incl. new
+  `TestMatchedSetPerSlotJobFreight` (distinct-per-tier + breakdown==componentPricing).
+- Simple (single-part) freight path untouched (separate `freightByQty` pipeline).
+
+
 ### 2026-06-18 — Matched-Set freight "Qty 300" bug RESOLVED (P0, was recurring) ✅
 - **Symptom (user)**: In a Multi-Part Matched Set quote, adding a new qty tier
   (e.g. 300) made the Freight Dashboard quote ONLY the active component at that
