@@ -1,0 +1,46 @@
+{
+  "summary": "RE-TEST after frontend restart of the two Matched-Set unified-qty fixes on quote SA-260604-165816-COPY (set qtys 100/150/300, ship-to 19446). The freight dashboard was opened cleanly, Update All Rates was clicked, and the UTS spinner was confirmed cleared after ~59s (fresh data, not stale cache). Both spec checks still FAIL — identical behavior to iteration_39. (1) Per-Item Qty 300 slot still lists ONLY the Header component (Display Base and 60ct. Tray missing). (2) Per-Job third scenario header still reads 'Scenario 3' (not 'Qty 300') because the underlying component qtys remain 150/150/300, not 300/300/300. The buildItems fix in RightDashboard.jsx has NOT been effective.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FreightDashModal — Per Item view, Qty 300 slot", "issue": "FAIL — dash-per-item-slot-2 only renders Header (qty 300, 176 lbs, 1 skid, 4 ft, $161.56 / $185.79). Display Base and 60ct. Tray are entirely absent. Expected (per spec & matched-set semantics): all 3 components at qty 300.", "selector": "[data-testid='dash-per-item-slot-2']", "priority": "HIGH"},
+      {"component": "FreightDashModal — Per Job view, third scenario header", "issue": "FAIL — dash-per-job-scenario-2 header text reads 'Scenario 3' instead of 'Qty 300'. Root cause: scenario 3 component qtys are 150 / 150 / 300 (Display Base / 60ct. Tray / Header), failing the all-qtys-equal check that produces the 'Qty N' label. First two scenarios DO correctly read 'Qty 100' and 'Qty 150'.", "selector": "[data-testid='dash-per-job-scenario-2']", "priority": "HIGH"},
+      {"component": "FreightDashModal / FreightPanel — Batch freight banner", "issue": "Minor: a red text 'Batch freight quote failed: Request failed with status code 502' appears in the right-side Freight panel after Update All Rates, even though individual freights eventually computed successfully. Likely a non-blocking 502 in a batch endpoint that should be suppressed when individual UTS calls succeed.", "selector": "Right Freight panel banner", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "observed_data": {
+    "per_item_slot_2_inner_text": "Qty 300\n176 lbs · 1 skid · 4 ft\nRaw: $161.56  w/ Markup: $185.79\nHeader 300  101  75  176  1(S)  4  $161.56  $185.79",
+    "per_job_scenario_2_inner_text_excerpt": "Scenario 3\n747 lbs · 3 skids · 13 ft combined\nRaw: $215.25  w/ Markup: $247.54\nDisplay Base 150 / 60ct. Tray 150 / Header 300 / Combined 600",
+    "scenario_0_first_line": "Qty 100",
+    "scenario_1_first_line": "Qty 150",
+    "spinner_clear_time_seconds": 59,
+    "ship_to": 19446,
+    "matched_set": true,
+    "components": ["Display Base", "60ct. Tray", "Header"]
+  },
+  "test_report_links": [
+    "/app/test_reports/iter40_peritem_slot2.png",
+    "/app/test_reports/iter40_perjob_scn2.png",
+    "/app/test_reports/iter40_after_dash_click.png"
+  ],
+  "action_items": [
+    "HIGH — The fix to RightDashboard.jsx buildItems for Matched Set mode (broadcasting top-level set qtys 100/150/300 to ALL components uniformly) is NOT WORKING in the current bundle. Verify the code actually constructs each component's qtys array as [setQtys[0], setQtys[1], setQtys[2]] = [100,150,300] regardless of per-component qtys[] gaps. Currently Display Base and 60ct. Tray retain only [100,150] which is why slot 2 has no row for them, and why scenario 2 has non-uniform qtys (150/150/300).",
+    "HIGH — Also confirm FreightDashModal.PerJobTable scHdr 'Qty N' logic. Even after buildItems is fixed, the qtys-equal check must succeed at scenario index 2 (all three qtys=300) to render 'Qty 300'. The current code path for scenarios 0/1 works, so the same logic should hold at index 2 once data is uniform.",
+    "MEDIUM — Suppress or downgrade the 'Batch freight quote failed: Request failed with status code 502' banner when individual UTS calls succeed."
+  ],
+  "critical_code_review_comments": [
+    "Frontend bundle restart did NOT change observed behavior — either the buildItems fix was not committed/saved to the served file, the deployed bundle is still stale, or the logic change is incorrect and falls through the same branch as before.",
+    "Likely fix location (per spec L156): RightDashboard.jsx buildItems → in the isMatched branch, ignore per-component qtys[] entirely for tier discovery and instead iterate setQtys (top-level QTY row). For each setQty[i], emit a row per component with qty = setQty[i] * (pcs/set). Currently the code still appears to honor each component's individual qtys[] array length, missing the broadcast.",
+    "Cross-check: in Per-Item slot 0 (Qty 100) and slot 1 (Qty 150) all three components appear correctly because every component's qtys[] array has those tiers; the bug only surfaces at slot 2 (the newly added tier 300) where only Header was edited."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (frontend-only)", "frontend": "0 of 2 retest checks PASS — both fixes still failing identically to iteration_39"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 via [data-testid='login-submit-btn']",
+  "seed_data_creation": "None — reused existing -COPY draft with qtys 100/150/300 already set.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "After applying the REAL buildItems Matched-Set unified-qty broadcast fix, open SA-260604-165816-COPY, confirm input-qty-2=300, click btn-freight-dash, click dash-update-rates, WAIT for [data-testid='freight-uts-spinner'] to clear (~60-120s — required for fresh data; cache will lie). Then: dash-scope-peritem → dash-per-item-slot-2 must contain all 3 components (Display Base, 60ct. Tray, Header) each at qty 300. dash-scope-perjob → dash-per-job-scenario-2 first line must be 'Qty 300' and the table should show all three components at qty 300 (combined ~ heavier load than current 747 lbs).",
+  "rca of the issue": "Bug persists identically from iteration_39. In Matched Set mode the third set-qty tier (300) is only being written into the active component's (Header) qtys[2] array. Display Base and 60ct. Tray still have qtys=[100,150] (length 2). RightDashboard.buildItems iterates per-component qtys[] rather than the top-level setQtys, so for slot index 2 only Header produces a row. This causes (a) Per-Item Qty 300 panel to show only Header, and (b) Per-Job scenario 2 to have non-uniform qtys (150/150/300), which fails the all-qtys-equal check used to emit 'Qty N' and falls back to the 'Scenario N' label. The fix described in the spec (RightDashboard.jsx buildItems L156: isMatched broadcast of top-level set qtys × pcs/set to all components) is NOT in effect in the current served bundle."
+}

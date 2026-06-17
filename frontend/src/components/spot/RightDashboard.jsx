@@ -153,7 +153,8 @@ function FreightPanel({ s }) {
         qtys: s.qtys || [],
       }];
     }
-    const isMatched = s.pricingMode === "Matched Set";
+    // Matched Set is the MP default; Individual is the explicit opt-in.
+    const isMatched = (s.pricingMode || "Matched Set") !== "Individual";
     return items.map((it, i) => {
       const st = (i === activeIdx)
         ? { boardGrade: s.boardGrade, flute: s.flute,
