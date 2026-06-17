@@ -134,15 +134,16 @@ async def create_version(label: str, config: Dict[str, Any], *,
                          source_file: Optional[str] = None,
                          notes: Optional[str] = None,
                          created_by: Optional[str] = None,
-                         activate: bool = False) -> Dict[str, Any]:
-    """Persist a new pricing version. If activate=True, flip it active and
-    archive the previously-active version."""
+                         status: str = "draft") -> Dict[str, Any]:
+    """Persist a new pricing version. status: 'draft' (default, import lands
+    here for review) | 'active' (archives the previously-active) | 'archived'."""
     # Keep only the recognized pricing keys in config.
     clean = {k: config[k] for k in PRICING_KEYS if k in config}
+    activate = status == "active"
     v = PricingVersion(
         label=label,
         effective_date=effective_date,
-        status="active" if activate else "archived",
+        status=status,
         config=clean,
         change_summary=change_summary,
         source_file=source_file,
@@ -156,10 +157,21 @@ async def create_version(label: str, config: Dict[str, Any], *,
     await db[COL_PRICING_VERSIONS].insert_one(v.model_dump())
     await db[COL_AUDIT_LOG].insert_one({
         "type": "pricing_version_create",
-        "version_id": v.id, "label": label, "activated": activate,
+        "version_id": v.id, "label": label, "status": status,
         "user": created_by, "timestamp": _now(),
     })
     return v.model_dump()
+
+
+async def delete_version(version_id: str) -> bool:
+    """Delete a DRAFT version only — never active or baseline."""
+    v = await get_version(version_id)
+    if not v:
+        return False
+    if v.get("status") == "active" or v.get("is_baseline"):
+        raise ValueError("Cannot delete the active or baseline pricing version")
+    await db[COL_PRICING_VERSIONS].delete_one({"id": version_id})
+    return True
 
 
 async def activate_version(version_id: str, user_email: Optional[str] = None) -> Dict[str, Any]:
