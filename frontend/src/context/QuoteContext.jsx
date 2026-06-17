@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, engineManifest } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, updateQuote, engineManifest } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
 import {
@@ -69,8 +69,10 @@ export function QuoteProvider({ children }) {
   const activeVerRef = useRef(null);
   const frozenWarnedRef = useRef(new Set());
   const frozenGuardRef = useRef({});
+  const initialsRef = useRef("");
   useEffect(() => { tabsRef.current = tabs; }, [tabs]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  useEffect(() => { initialsRef.current = initials; }, [initials]);
 
   // Resolve the currently-active board-pricing version id once (manifest with no
   // version arg returns the ACTIVE version). Used to flag frozen (older-pinned) quotes.
@@ -114,17 +116,31 @@ export function QuoteProvider({ children }) {
     if (!qid) return;
     try {
       const copy = await copyQuote(qid);
-      // reset warn/guard for this tab (replaceState below also does this)
-      replaceStateRef.current({
+      // Give the duplicate a FRESH estimate # (don't keep the "-COPY" suffix) and
+      // persist it back to the saved copy record so the DB matches the UI.
+      const freshEst = generateEstNum(initialsRef.current || "");
+      const newState = {
         ...(copy.state || {}),
+        estNum: freshEst,
+        estNumAuto: false,
         quoteId: copy.id,
         quoteStatus: copy.status || "draft",
         pricingVersionId: copy.pricing_version_id || null,
         pricingVersionLabel: null,
         pricingIsCurrent: true,
-        estNum: copy.est_num || tab?.state?.estNum,
-      });
-      pushToast(`Duplicated at current pricing → ${copy.est_num}`, "ok");
+      };
+      try {
+        await updateQuote(copy.id, {
+          est_num: freshEst,
+          state: newState,
+          status: copy.status || "draft",
+          customer_code: copy.customer_code || newState.custCode || null,
+          customer_name: copy.customer_name || newState.custName || null,
+        });
+      } catch (_) {}
+      // reset warn/guard for this tab (replaceState below also does this)
+      replaceStateRef.current(newState);
+      pushToast(`Duplicated at current pricing → ${freshEst}`, "ok");
     } catch (e) {
       pushToast(`Duplicate failed — ${e?.response?.data?.detail || e.message}`, "err");
     }

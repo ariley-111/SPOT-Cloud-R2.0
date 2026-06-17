@@ -1,0 +1,32 @@
+{
+  "summary": "Verified the follow-up behavior change: 'Duplicate at current pricing' from the frozen-edit warning modal now produces a FRESH generated Estimate # (no '-COPY' suffix). End-to-end UI test PASSED all 5 assertions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "1_login_and_open_frozen_v1": "PASS — admin login OK, Load → Saved Quotes → Team scope shown, exact-match row 'FROZEN-TEST-V1' located (id bb2518ee-702f-4208-91a2-1d270462fcfe). Pre-edit est#='FROZEN-TEST-V1', frozen-chip visible.",
+    "2_material_edit_triggers_warn": "PASS — after 4.5s settle, setting input-qty-0=999 opens [data-testid='frozen-edit-warn'].",
+    "3_duplicate_generates_fresh_est_num": "PASS — clicking frozen-duplicate-btn produces est#='SA-260617-174137'. Matches pattern ^[A-Za-z]+-\\d{6}-\\d{6}$ (initials 'SA' from 'SPOT Admin' user). Does NOT contain 'COPY'. NOT equal to 'FROZEN-TEST-V1'.",
+    "4_duplicated_tab_is_non_frozen": "PASS — active tab data-active='1', data-frozen='0'. No [data-testid='frozen-chip'] present in the Estimate Info header.",
+    "5_est_num_locked_on_duplicate": "PASS — [data-testid='input-est-num'] disabled=true AND readOnly=true (saved quote)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "duplicateFrozenAtCurrent() correctly chains copyQuote → generateEstNum(initials) → updateQuote(copy.id, est_num) → replaceState into active tab. The fresh est# now persists end-to-end (UI and server).",
+    "Initials resolved to 'SA' (SPOT Admin) — the review-request example was 'ADM' but the format.js implementation derives initials from first letters of name parts, so 'SPOT Admin' → 'SA'. This is consistent and not a defect.",
+    "Pre-existing console warning unrelated to this change: React 'mixing shorthand/non-shorthand border styles during rerender' in TabBar.jsx frozen tab styling. Cosmetic; recommend normalizing border vs borderBottom inline styles.",
+    "Pre-existing infra issue from iteration_33 still applies: /api/auth/entra/login returns HTTP 500 (not 503) when ENTRA_TENANT_ID is a placeholder. Did not affect this test (used [data-testid='login-submit-btn']) but flagging again."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request)", "frontend": "100% (5/5 assertions)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md). Initials resolve to 'SA' (SPOT Admin).",
+  "seed_data_creation": "Created one server-side duplicate of FROZEN-TEST-V1 as 'SA-260617-174137' (non-frozen, pinned to current pricing). FROZEN-TEST-V1 (id bb2518ee) baseline is intact.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "There are now MULTIPLE 'FROZEN-TEST-V1*' rows in the team-saved Load list (the original 'FROZEN-TEST-V1', the legacy 'FROZEN-TEST-V1-COPY' from iteration_33, and now 'SA-260617-174137' from this iteration). When locating the frozen row, always match est# EXACTLY === 'FROZEN-TEST-V1'. Use [data-testid='login-submit-btn'] (not 'Sign in' text — that matches Microsoft SSO and 500s). After clicking 'Duplicate at current pricing', wait ≥4.5s before reading the est# input (server roundtrip: copyQuote then updateQuote(est_num) then replaceState).",
+  "rca of the issue": "N/A — no bugs. The 1-line behavior change is verified working in the UI: duplicateFrozenAtCurrent generates a fresh INITIALS-YYMMDD-HHMMSS est# via generateEstNum(initials), persists it through updateQuote, and replaceState wires it into the active tab. Observed est# = 'SA-260617-174137'."
+}
