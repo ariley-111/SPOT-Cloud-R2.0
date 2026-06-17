@@ -1025,7 +1025,9 @@ async def calculate_multi_part(
                     row = next((r for r in c["rows"] if r["slotIdx"] == slot_i), None)
                     items_for_slot.append({
                         "idx": c["itemIndex"], "type": c["type"],
-                        "oMSF": float((row or {}).get("oMSF") or 0), "row": row,
+                        "oMSF": float((row or {}).get("oMSF") or 0),
+                        "shipWeight": float((row or {}).get("shipWeight") or 0),  # for By-Weight alloc
+                        "row": row,
                     })
                 if freight_scope == "Per Job":
                     raw = job_freight_by_slot.get(str(slot_i)) if isinstance(job_freight_by_slot, dict) else None

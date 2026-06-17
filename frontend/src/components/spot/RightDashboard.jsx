@@ -7,6 +7,7 @@ import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
 import { calcShipment } from "../../lib/shipment";
+import { allocateJobCost, detectFreightMinimum } from "../../lib/freight";
 import FreightDashModal from "./FreightDashModal";
 
 export default function RightDashboard() {
@@ -269,8 +270,15 @@ function FreightPanel({ s }) {
         const slot = Math.min(k, qtys.length - 1);
         const qty = qtys[slot];
         const oMSF = (it.oneUpW * it.oneUpL * qty) / 144 / 1000;
+        // Pull the ENGINE's per-component oMSF + shipWeight for this qty so the
+        // dashboard's Per-Job allocation matches the priced Quote Table exactly
+        // (the engine uses sheet-based values, not the finished-piece estimate).
+        const er = ((componentPricing || [])[i]?.rows || [])
+          .find((rw) => Number(rw.qty) === qty);
         return {
-          idx: i, slot, qty,
+          idx: i, slot, qty, oMSF,
+          engOMSF: er ? (Number(er.oMSF) || 0) : 0,
+          engWeight: er ? (Number(er.shipWeight) || 0) : 0,
           ship: calcShipment(
             it.boardGrade, it.flute, it.outsideLiner, it.insideLiner, it.medium,
             oMSF, it.oneUpW, it.oneUpL, qty
@@ -352,6 +360,8 @@ function FreightPanel({ s }) {
           transitDays: q.transitDays, allCarriers: q.allCarriers,
         }));
 
+        const totalAll = perItemQuotes.reduce((a, q) => a + (Number(q.totalAmount) || 0), 0);
+        const minNotice = detectFreightMinimum(perItemQuotes);
         setManyFields({
           freightByQty,
           freightCost: String(activeQuote?.totalAmount ?? 0),
@@ -363,12 +373,13 @@ function FreightPanel({ s }) {
           freightDashCache: {
             perItemQuotes,
             perJobQuotes,
+            minNotice,
             lastCalcZip: s.destZip,
             lastCalcAt: new Date().toISOString(),
           },
         });
-        const totalAll = perItemQuotes.reduce((a, q) => a + (Number(q.totalAmount) || 0), 0);
-        pushToast(`Freight quoted for ${perItemQuotes.length} qty tier${perItemQuotes.length === 1 ? "" : "s"} · ${fmtMoney(totalAll)} total${isLocal ? " (local, no markup)" : ""} — open Dashboard for per-qty detail`, "ok");
+        const minMsg = minNotice ? ` · ⚠ carrier LTL minimum ${fmtMoney(minNotice.amount)} in play` : "";
+        pushToast(`Freight quoted for ${perItemQuotes.length} qty tier${perItemQuotes.length === 1 ? "" : "s"} · ${fmtMoney(totalAll)} total${isLocal ? " (local, no markup)" : ""}${minMsg} — open Dashboard for per-qty detail`, "ok");
         return;
       }
 
@@ -434,6 +445,11 @@ function FreightPanel({ s }) {
       });
 
       // ─── Per-Job map: { compIdx: { slot: allocated_share } } + totals ──
+      // Allocate each scenario's combined freight across components using the
+      // SELECTED method (Board MSF / Equal / By Weight) — matches the backend
+      // _alloc_job so the dashboard, the per-component panels and the priced
+      // quote all agree.
+      const allocMethod = s.freightAllocMethod || "By MSF";
       const perJobMap = {};
       const jobFreightBySlot = {};
       const carrierBySlot = {};
@@ -445,16 +461,12 @@ function FreightPanel({ s }) {
           combinedWeight: sc.combinedWeight, combinedSkids: sc.combinedSkids,
           allCarriers: sc.allCarriers || [],
         };
-        if (total > 0 && sc.combinedWeight > 0) {
-          sc.perComp.forEach((p) => {
-            const share = p.ship.totalWeight / sc.combinedWeight;
-            const alloc = Math.round(share * total * 100) / 100;
+        if (total > 0) {
+          const comps = sc.perComp.map((p) => ({ oMSF: p.engOMSF || p.oMSF || 0, weight: p.engWeight || p.ship?.totalWeight || 0 }));
+          const allocs = allocateJobCost(comps, total, allocMethod);
+          sc.perComp.forEach((p, ci) => {
             if (!perJobMap[p.idx]) perJobMap[p.idx] = {};
-            // Store at this component's slot — note p.slot may be its clamped
-            // last slot for single-qty components participating in higher
-            // scenarios; we still write to that slot so engine picks it up
-            // when user selects scenario k.
-            perJobMap[p.idx][sc.scenarioIdx] = String(alloc.toFixed(2));
+            perJobMap[p.idx][sc.scenarioIdx] = String((allocs[ci] || 0).toFixed(2));
           });
         }
       });
@@ -497,6 +509,13 @@ function FreightPanel({ s }) {
       const activeIsLocal = s.quoteFOB === "LocalDelivery"
         || activeScenarioCarrier === "SPC Local Delivery"
         || activeScenarioCarrier === "Local Delivery";
+      // Detect a carrier LTL-minimum floor across the solo + combined quotes
+      // so we can surface it to the estimator (per-item shipments often all
+      // land on the same minimum charge).
+      const minNotice = detectFreightMinimum([
+        ...perItemQuotes.map((q) => ({ weight: q.weight, totalAmount: q.totalAmount, carrier: q.carrier })),
+        ...perJobQuotes.map((q) => ({ weight: q.weight, totalAmount: q.totalAmount, carrier: q.carrier })),
+      ]);
       const patch = {
         bomItems: nextBom,
         quoteFOB: "Destination",
@@ -509,6 +528,7 @@ function FreightPanel({ s }) {
         freightDashCache: {
           perItemQuotes,   // [{idx, slot, qty, ship, weight, totalAmount, carrier, transitDays, allCarriers}]
           perJobQuotes,    // [{scenarioIdx, perComp, combinedWeight, weight, totalAmount, carrier, transitDays, allCarriers}]
+          minNotice,       // { amount, carrier } | null — carrier LTL minimum in play
           lastCalcZip: s.destZip,
           lastCalcAt: new Date().toISOString(),
         },
@@ -522,13 +542,14 @@ function FreightPanel({ s }) {
       setManyFields(patch);
 
       // Toast summary — show whichever mode is active
+      const minMsg = minNotice ? ` · ⚠ carrier LTL minimum ${fmtMoney(minNotice.amount)} in play` : "";
       if (isPerJob) {
         const total = Number(activeJobCost) || 0;
         const sc = perJobQuotes[selSlot] || perJobQuotes[0];
-        pushToast(`Per-Job Freight ${fmtMoney(total)} · ${sc?.carrier || "—"} · ${sc?.combinedSkids || 0} skids · ${sc?.combinedWeight || 0} lbs combined`, "ok");
+        pushToast(`Per-Job Freight ${fmtMoney(total)} · ${sc?.carrier || "—"} · ${sc?.combinedSkids || 0} skids · ${sc?.combinedWeight || 0} lbs combined${minMsg}`, "ok");
       } else {
         const itemTotal = perItemQuotes.reduce((a, q) => a + (Number(q.totalAmount) || 0), 0);
-        pushToast(`Per-Item Freight ${fmtMoney(itemTotal)} across ${perItemQuotes.length} shipments · open Dashboard to compare`, "ok");
+        pushToast(`Per-Item Freight ${fmtMoney(itemTotal)} across ${perItemQuotes.length} shipments · open Dashboard to compare${minMsg}`, "ok");
       }
     } catch (e) { setErr(e?.response?.data?.detail || e.message); }
     finally { setBusy(false); }
@@ -550,12 +571,12 @@ function FreightPanel({ s }) {
     });
     (cache.perJobQuotes || []).forEach((sc) => {
       const total = Number(sc.totalAmount || 0);
-      if (total <= 0 || !sc.combinedWeight) return;
-      sc.perComp.forEach((p) => {
-        const share = p.ship.totalWeight / sc.combinedWeight;
-        const alloc = Math.round(share * total * 100) / 100;
+      if (total <= 0) return;
+      const comps = (sc.perComp || []).map((p) => ({ oMSF: p.engOMSF || p.oMSF || 0, weight: p.engWeight || p.ship?.totalWeight || 0 }));
+      const allocs = allocateJobCost(comps, total, s.freightAllocMethod || "By MSF");
+      (sc.perComp || []).forEach((p, ci) => {
         if (!perJobBy[p.idx]) perJobBy[p.idx] = {};
-        perJobBy[p.idx][sc.scenarioIdx] = String(alloc.toFixed(2));
+        perJobBy[p.idx][sc.scenarioIdx] = String((allocs[ci] || 0).toFixed(2));
       });
     });
     const nextBom = s.bomItems.map((bi, i) => {

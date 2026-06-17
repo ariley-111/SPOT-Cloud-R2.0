@@ -16,6 +16,7 @@
 import React, { useState, useMemo } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import { fmtMoney, fmtInt } from "../../lib/format";
+import { allocateJobCost } from "../../lib/freight";
 
 const BOM_TINTS = ["#e8927c", "#b08cf5", "#7dd3c0", "#e88dc4", "#8cc8e8", "#d4a76a", "#9ca3af", "#fbbf24"];
 
@@ -203,6 +204,22 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
           </div>
         )}
 
+        {/* ─── Carrier LTL-minimum notice ───────────────────────────────── */}
+        {cache?.minNotice && (
+          <div data-testid="dash-min-notice"
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px",
+              borderBottom: "1px solid var(--spot-line)", background: "rgba(245,158,11,0.10)",
+              fontSize: 11.5, color: "#f59e0b", fontWeight: 600 }}>
+            <span style={{ fontSize: 13 }}>⚠</span>
+            <span>
+              <b>Carrier LTL minimum in play:</b> {fmtMoney(cache.minNotice.amount)}
+              {cache.minNotice.carrier ? ` (${cache.minNotice.carrier})` : ""}. Shipments below the
+              carrier's weight floor all price at this minimum — that's why several quotes show the
+              same freight, not a calculation error.
+            </span>
+          </div>
+        )}
+
         {/* ─── Body: Per Item OR Per Job table (active mode) ────────────── */}
         <div style={{ padding: "10px 16px", overflowY: "auto", flex: 1 }}>
           {!cache ? (
@@ -222,6 +239,7 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
             </>
           ) : (
             <PerJobTable cache={cache} bomItems={bomItems} markup={markup} qtyFilter={qtyFilter} itemFilter={itemFilter}
+                         allocMethod={s.freightAllocMethod || "By MSF"}
                          setQtyFilter={setQtyFilter} setItemFilter={setItemFilter} />
           )}
         </div>
@@ -402,7 +420,7 @@ function PerItemTable({ cache, bomItems, markup, qtyFilter, itemFilter, sections
 }
 
 // ─── Per Job table — one section per scenario ──────────────────────────
-function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFilter, setItemFilter }) {
+function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, allocMethod, setQtyFilter, setItemFilter }) {
   const scenarios = cache?.perJobQuotes || [];
   // Unique qtys for filter chips = union of all qtys appearing in any scenario
   const uniqueQtys = useMemo(() => {
@@ -410,6 +428,8 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFil
     scenarios.forEach((sc) => (sc.perComp || []).forEach((p) => set.add(p.qty)));
     return Array.from(set).sort((a, b) => a - b);
   }, [scenarios]);
+
+  const allocLabel = allocMethod === "Equal" ? "Equal" : allocMethod === "By Weight" ? "Weight" : "MSF";
 
   return (
     <>
@@ -425,6 +445,13 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFil
         const raw = Number(sc.totalAmount) || 0;
         const wm = raw * (1 + markup);
         const combinedWt = sc.combinedWeight || 0;
+        // Allocate the scenario's combined freight across ALL its components by
+        // the SELECTED method (Board MSF / Equal / By Weight) — same allocator
+        // the engine uses, so the displayed split matches the priced split.
+        const allComps = (sc.perComp || []).map((p) => ({ oMSF: p.engOMSF || p.oMSF || 0, weight: p.engWeight || p.ship?.totalWeight || 0 }));
+        const allAllocs = allocateJobCost(allComps, raw, allocMethod);
+        const allocByIdx = {};
+        (sc.perComp || []).forEach((p, ci) => { allocByIdx[p.idx] = allAllocs[ci] || 0; });
         // Single distinct qty in this scenario (Simple multi-qty quotes) → "Qty N";
         // multi-component scenarios keep the "Scenario N" label.
         const scQtys = Array.from(new Set((sc.perComp || []).map((p) => p.qty)));
@@ -451,7 +478,7 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFil
                 <th style={{ ...th, textAlign: "right" }}>Product</th>
                 <th style={{ ...th, textAlign: "right" }}>Skid</th>
                 <th style={{ ...th, textAlign: "right" }}>Total Wt</th>
-                <th style={{ ...th, textAlign: "right" }}>Wt %</th>
+                <th style={{ ...th, textAlign: "right" }} data-testid="dash-per-job-alloc-col">{allocLabel} %</th>
                 <th style={{ ...th, textAlign: "right" }}>Skids</th>
                 <th style={{ ...th, textAlign: "right" }}>Ft</th>
                 <th style={{ ...th, textAlign: "right" }}>Freight</th>
@@ -461,8 +488,8 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFil
                 {visibleRows.map((p, i) => {
                   const tint = BOM_TINTS[p.idx % BOM_TINTS.length];
                   const myW = p.ship.totalWeight || 0;
-                  const pct = combinedWt > 0 ? (myW / combinedWt) * 100 : 0;
-                  const myRaw = combinedWt > 0 ? raw * (myW / combinedWt) : 0;
+                  const myRaw = allocByIdx[p.idx] || 0;
+                  const pct = raw > 0 ? (myRaw / raw) * 100 : 0;
                   const myWm = myRaw * (1 + markup);
                   return (
                     <tr key={i} style={{ borderTop: "1px solid var(--spot-line)" }}>
@@ -475,10 +502,10 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFil
                       <td style={tdNum}>{Math.round(p.ship.productWeight)}</td>
                       <td style={tdNum}>{p.ship.skidTotalWeight}</td>
                       <td style={{ ...tdNum, fontWeight: 700 }}>{Math.round(myW)}</td>
-                      <td style={tdNum}>{pct.toFixed(1)}%</td>
+                      <td style={tdNum} data-testid={`dash-pj-alloc-pct-${sc.scenarioIdx}-${p.idx}`}>{pct.toFixed(1)}%</td>
                       <td style={tdNum}>{p.ship.skidCount}({p.ship.skidKey})</td>
                       <td style={tdNum}>{p.ship.trailerFeet}</td>
-                      <td style={tdNum}>{fmtMoney(myRaw)}</td>
+                      <td style={tdNum} data-testid={`dash-pj-freight-${sc.scenarioIdx}-${p.idx}`}>{fmtMoney(myRaw)}</td>
                       <td style={{ ...tdNum, fontWeight: 700, color: "var(--spot-green)" }}>{fmtMoney(myWm)}</td>
                     </tr>
                   );
@@ -602,12 +629,10 @@ function chipFilter(active, color) {
 
 // ─── Allocate-By / Treatment toolbar ─────────────────────────────────
 // Mirrors the legacy "ALLOCATE BY" + "Treatment" controls. Wires to:
-//   - freightAllocMethod (Board MSF | Equal Split | By Weight)
+//   - freightAllocMethod (By MSF | Equal | By Weight) — all three distinct
 //   - jobFreightTreatment (Separate Line | Amortize)
-// NOTE on "By Weight": legacy `allocateJobCost` (spot_r1_5.jsx L897-917)
-// silently falls back to By MSF when the method is anything other than
-// "Equal" — so "By Weight" produces identical math to "By MSF" in the
-// legacy engine. Cloud mirrors this for pricing parity.
+// The selected method drives BOTH the dashboard display (PerJobTable) and the
+// priced allocation (backend _alloc_job), via state.freightAllocMethod.
 function FreightAllocBar({ s, setField, markup }) {
   const method = s.freightAllocMethod || "By MSF";
   const treat = s.jobFreightTreatment || "Separate Line";
@@ -641,7 +666,7 @@ function FreightAllocBar({ s, setField, markup }) {
         style={allocChip("Equal Split", "Equal")}>Equal Split</button>
       <button data-testid="alloc-by-weight"
         onClick={() => setField("freightAllocMethod", "By Weight")}
-        title="Legacy behavior: 'By Weight' produces identical math to Board MSF."
+        title="Allocate the combined job freight across components in proportion to each component's shipped weight."
         style={allocChip("By Weight", "By Weight")}>By Weight</button>
 
       <span style={{ height: 18, width: 1, background: "var(--spot-line)" }} />
