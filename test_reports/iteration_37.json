@@ -1,0 +1,121 @@
+{
+  "summary": "INVESTIGATION run for Quote SA-260604-165816 (Apex Display Group / 30 Ct. Jerky, ZIP 19446, Multi-Part Matched Set, 3 components × 2 set qtys 100/150). Logged in as admin, loaded the quote from Team Saved Quotes, opened Freight Dashboard, ran Update All Rates (~85s for 8 UTS quotes), then captured Per Item and Per Job views, the comparison banner, the Allocate-by toolbar, and the right-side Quote Table freight column. All requested numeric values are captured below in test_results. NO pass/fail judgments — observation only. Two SCREENSHOTS saved: /app/test_reports/dash_per_item.png and /app/test_reports/dash_per_job.png. Note: the closing right-panel 'Item Freight' card was not in view after Per Job switch (the dashboard's Per Job toggle changed the right-side Type to Per Job, which collapses the per-item card into the per-job card).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "01_quote_load": {
+      "est_number": "SA-260604-165816",
+      "customer": "Apex Display Group",
+      "project": "30 Ct. Jerky",
+      "quote_type": "Multi-Part · Matched Set",
+      "components_visible_in_BOM": ["Display Base (35 × 49, B-200, Kemi/Kraft, IN STOCK)", "60ct. Tray", "Header"],
+      "qtys": [100, 150],
+      "ship_to_zip": "19446 (read from header SHIP TO field and dashboard SHIP TO chip)",
+      "markup": "0.15 (15.0%)",
+      "fob_default": "Ship (Destination)",
+      "type_default": "Per Item"
+    },
+    "02_dashboard_initial": {
+      "button_label": "Update All Rates (not 'Calculate Freight')",
+      "banner_BEFORE_update": {
+        "ship_individually_total": "$969.36",
+        "ship_together_total": "$362.12",
+        "savings": "$607.24"
+      },
+      "note": "Cache was already populated from a prior run, so banner numbers were present before the click. After Update All Rates the same values were re-rendered (cache refresh, no change)."
+    },
+    "03_per_item_view_AFTER_update": {
+      "banner": {"ship_individually": "$969.36 (w/ markup $1,114.76, 6 solo shipments)", "ship_together": "$362.12 (w/ markup $416.44, 2 combined shipments)", "savings": "$607.24 (62.6% cheaper together)"},
+      "qty_100_section (dash-per-item-slot-0)": {
+        "header": "Qty 100 · 548 lbs · 3 skids · 13 ft",
+        "raw_total": "$484.68",
+        "w_markup_total": "$557.38",
+        "rows": [
+          {"component": "Display Base", "qty": 100, "product_wt": 144, "skid_wt": 100, "total_wt_lbs": 244, "skids": "1(L)", "ft": 5, "freight": "$161.56", "w_markup": "$185.79"},
+          {"component": "60ct. Tray",   "qty": 100, "product_wt": 120, "skid_wt":  75, "total_wt_lbs": 195, "skids": "1(S)", "ft": 4, "freight": "$161.56", "w_markup": "$185.79"},
+          {"component": "Header",       "qty": 100, "product_wt":  34, "skid_wt":  75, "total_wt_lbs": 109, "skids": "1(S)", "ft": 4, "freight": "$161.56", "w_markup": "$185.79"}
+        ]
+      },
+      "qty_150_section (dash-per-item-slot-1)": {
+        "header": "Qty 150 · 696 lbs · 3 skids · 13 ft",
+        "raw_total": "$484.68",
+        "w_markup_total": "$557.38",
+        "rows": [
+          {"component": "Display Base", "qty": 150, "product_wt": 216, "skid_wt": 100, "total_wt_lbs": 316, "skids": "1(L)", "ft": 5, "freight": "$161.56", "w_markup": "$185.79"},
+          {"component": "60ct. Tray",   "qty": 150, "product_wt": 180, "skid_wt":  75, "total_wt_lbs": 255, "skids": "1(S)", "ft": 4, "freight": "$161.56", "w_markup": "$185.79"},
+          {"component": "Header",       "qty": 150, "product_wt":  50, "skid_wt":  75, "total_wt_lbs": 125, "skids": "1(S)", "ft": 4, "freight": "$161.56", "w_markup": "$185.79"}
+        ]
+      },
+      "observation": "EVERY component row in BOTH qty sections shows IDENTICAL freight ($161.56 raw / $185.79 w/markup), even though total weights, skid sizes, and footprints differ significantly across components (Display Base 244/316 lbs, 1L skid 5ft vs Header 109/125 lbs, 1S skid 4ft). Section Raw totals are identical too ($484.68 = 3 × $161.56) for BOTH qty 100 and qty 150 — qty 150 has 148 lbs more product weight but produces the same per-item freight totals. This matches the user-reported symptom 'freight is not being applied per item correctly'."
+    },
+    "04_per_job_view": {
+      "allocate_by_toolbar": {"present": true, "options": ["Board MSF (selected)", "Equal Split", "By Weight"]},
+      "treatment_toolbar": {"options": ["Line Item (selected)", "Amortize"]},
+      "header_chip": "Job Freight: $185.79 · Markup: 15.0%",
+      "qty_100_scenario (dash-per-job-scenario-0)": {
+        "header": "Qty 100 · 548 lbs · 3 skids · 13 ft combined",
+        "raw_total": "$161.56",
+        "w_markup_total": "$185.79",
+        "rows": [
+          {"component": "Display Base", "qty": 100, "total_wt": 244, "wt_pct": "44.5%", "skids": "1(L)", "ft": 5, "alloc_freight": "$71.94", "w_markup": "$82.73"},
+          {"component": "60ct. Tray",   "qty": 100, "total_wt": 195, "wt_pct": "35.6%", "skids": "1(S)", "ft": 4, "alloc_freight": "$57.49", "w_markup": "$66.11"},
+          {"component": "Header",       "qty": 100, "total_wt": 109, "wt_pct": "19.9%", "skids": "1(S)", "ft": 4, "alloc_freight": "$32.14", "w_markup": "$36.96"},
+          {"component": "Combined",     "qty": 300, "total_wt": 548, "wt_pct": "100.0%","skids": 3,      "ft": 13,"alloc_freight": "$161.56","w_markup": "$185.79"}
+        ]
+      },
+      "qty_150_scenario (dash-per-job-scenario-1)": {
+        "header": "Qty 150 · 696 lbs · 3 skids · 13 ft combined",
+        "raw_total": "$200.56",
+        "w_markup_total": "$230.64",
+        "rows": [
+          {"component": "Display Base", "qty": 150, "total_wt": 316, "wt_pct": "45.4%", "skids": "1(L)", "ft": 5, "alloc_freight": "$91.06", "w_markup": "$104.72"},
+          {"component": "60ct. Tray",   "qty": 150, "total_wt": 255, "wt_pct": "36.6%", "skids": "1(S)", "ft": 4, "alloc_freight": "$73.48", "w_markup": "$84.50"},
+          {"component": "Header",       "qty": 150, "total_wt": 125, "wt_pct": "18.0%", "skids": "1(S)", "ft": 4, "alloc_freight": "$36.02", "w_markup": "$41.42"},
+          {"component": "Combined",     "qty": 450, "total_wt": 696, "wt_pct": "100.0%","skids": 3,      "ft": 13,"alloc_freight": "$200.56","w_markup": "$230.64"}
+        ]
+      },
+      "carrier_options_for_active_scenario": [
+        {"carrier": "PITT OHIO EXPRESS", "active": true, "rate": "$161.56", "w_markup": "$185.79", "transit": "1 day"},
+        {"carrier": "R&L CARRIERS INC", "rate": "$172.39", "w_markup": "$198.25", "transit": "1 day"},
+        {"carrier": "WARD TRUCKING LLC", "rate": "$203.45", "w_markup": "$233.97", "transit": "1 day"},
+        {"carrier": "FEDEX FREIGHT ECONOMY", "rate": "$261.10", "w_markup": "$300.27", "transit": "2 days"},
+        {"carrier": "FEDEX FREIGHT PRIORITY", "rate": "$271.97", "w_markup": "$312.77", "transit": "1 day"}
+      ],
+      "observation": "Per-Job correctly differentiates by qty (Qty 100 raw $161.56 vs Qty 150 raw $200.56) and produces sensible weight-proportional allocations across components. wt% sums to 100.0% in both scenarios. This view appears internally consistent."
+    },
+    "05_quote_table_after_dashboard_close": {
+      "qt_row_0 (Qty 100, SEL)": {"sell_set": "$39.64", "gm_pct": "37.5%", "gm_dollar": "$1,488.42", "total": "$3,964.32", "per_msf": "$871.28", "cost_msf": "$544.16", "freight_column": "$185.79", "sheet": "60×120", "out": 2, "route": "CAD"},
+      "qt_row_1 (Qty 150)":      {"sell_set": "$34.99", "gm_pct": "35.3%", "gm_dollar": "$1,854.02", "total": "$5,248.53", "per_msf": "$777.56", "cost_msf": "$502.89", "freight_column": "$185.79", "sheet": "60×120", "out": 2, "route": "CAD"},
+      "observation": "After clicking the dashboard's green 'Per Job' button (in the Recommendation banner), the right-side Freight panel switched from 'Per Item' to 'Per Job' mode (the right panel header read 'PER-JOB FREIGHT $1,521.50 · Allocated by MSF across 3 components' in the final screenshot). The Quote Table freight column then read $185.79 for BOTH qty rows. NOTE: Before opening the dashboard, the freight footer read 'QTY 100 Items: $3,964.32 Freight: $557.38' and the right-side Item Freight card read 'ITEM 1 · FREIGHT · QTY 100  $185.79  ($161.56 + 15% markup)' (i.e. per-component, not per-set). The Quote Table FREIGHT column at that pre-dashboard moment read $557.38 for BOTH the qty 100 and qty 150 rows — same number for two different set quantities."
+    },
+    "06_item_freight_card_at_end": "Not captured directly — after the Per Job switch the right-side panel rendered the Per-Job freight card instead of the per-item card. The Per-Job card showed 'PER-JOB FREIGHT $1,521.50' with subtitle '$161.56 + 15% markup · Allocated by MSF across 3 components'. The dashboard 'Type: Per Job' toggle had been engaged."
+  },
+  "key_findings_for_diagnosis": [
+    "Per-Item dashboard: ALL component rows show the SAME freight ($161.56 raw / $185.79 w/markup) for BOTH qty 100 and qty 150 — independent of component weight, skid size, footprint, or set qty. This is the user-reported defect.",
+    "Per-Item section RAW totals are identical for qty 100 and qty 150 ($484.68 each), even though qty 150 has +148 lbs more total weight. Per-Item view is NOT differentiating by qty either.",
+    "Per-Job view DOES correctly differentiate: Qty 100 = $161.56 (548 lbs), Qty 150 = $200.56 (696 lbs). Weight-proportional component allocation in Per-Job looks correct (wt% sums to 100%).",
+    "Pre-dashboard Quote Table FREIGHT column showed $557.38 for BOTH qty rows (= 3 × $185.79 component freight); after switching to Per Job mode it showed $185.79 for BOTH qty rows (also identical across qtys — should be $185.79 for qty 100 vs $230.64 for qty 150 if per-qty allocation were live).",
+    "Hypothesis (for main agent): in RightDashboard.jsx updateFreight() MP branch (L375-515), the perItemMap appears to be built from a single per-component UTS quote rather than firing one UTS quote per (component × qty) slot. The values $161.56 / $185.79 are exactly the Per-Job qty-100 carrier rate ($161.56) — suggesting the per-item path is reusing the qty-100 combined-job rate as each component's per-item rate, not running independent solo-component quotes. Compare to the qty-150 per-job rate ($200.56) which IS distinct, indicating qty differentiation works on the per-job path but is lost on the per-item path.",
+    "Also: the right-side Quote Table FREIGHT column appears to read from a single scalar (state.freightCost or similar) rather than from freightByQty[slot], so both qty rows render the same number both before and after switching freight type — this is a separate but related quote-table binding issue."
+  ],
+  "test_report_links": ["/app/test_reports/dash_per_item.png", "/app/test_reports/dash_per_job.png", "/app/test_reports/quote_loaded.png", "/app/test_reports/final_quote_table.png"],
+  "action_items": [
+    "FIX (HIGH): In RightDashboard.jsx updateFreight() MP branch, ensure perItemMap is built by firing a separate solo UTS quote for EACH (component, qty) slot (expect 6 quotes total for 3 components × 2 qtys), not by reusing the combined Per-Job rate as each component's solo rate. Currently every Per-Item row collapses to the same $161.56 value.",
+    "FIX (HIGH): Quote Table FREIGHT column must read per-row from freightByQty[slot] (matching the Item Freight card binding fixed in iteration_35/36), not from a scalar. Both qty 100 and qty 150 rows currently show the same freight before AND after switching Per Item/Per Job.",
+    "VERIFY: Per-Job allocation (Qty 100 = $161.56 / Qty 150 = $200.56) is already correct — preserve this when fixing Per-Item.",
+    "VERIFY: backend engine/runner.py build_prod_inputs freightByQty per-slot lookup was recently fixed for string keys — confirm the perItemMap keys produced by the frontend match the slot keys the backend expects after the fix."
+  ],
+  "critical_code_review_comments": [
+    "RightDashboard.jsx updateFreight() MP branch (L375-515) — the perItemMap construction needs to be audited: it appears to iterate components but not (component × qty), OR it's overwriting per-qty entries with a single value. The fact that qty 100 and qty 150 produce identical Per-Item totals ($484.68 each) is the smoking gun.",
+    "FreightDashModal.jsx PerItemTable L321 — renders directly from state.freightDashCache; the data shape coming in already has identical $161.56 values across slots, so the bug is upstream in the cache builder, not the renderer.",
+    "Recommend logging the perItemMap and freightByQty objects in updateFreight() right before commit so the next investigation iteration can see exactly what slot keys are being written."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (frontend-only investigation)", "frontend": "100% observation completed — all requested numeric values captured"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (used [data-testid='login-submit-btn'], NOT Microsoft SSO).",
+  "seed_data_creation": "None. Quote SA-260604-165816 was opened in read mode; no Save was clicked. Two transient DRAFT tabs from prior iterations (SA-260617-181007, SA-260617-180904) remain in the tab bar but were not modified.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Quote SA-260604-165816 / ZIP 19446 / 3 components (Display Base, 60ct. Tray, Header) × 2 qtys (100, 150). Reference numbers for regression after main-agent fix: PER-ITEM should produce DIFFERENT freight per (component × qty) combo (6 distinct values expected); Per-Job already correct (Qty 100 → $161.56 / $185.79 w/markup, Qty 150 → $200.56 / $230.64 w/markup). Update All Rates takes ~85s. The Recommendation banner's green 'Per Job' button changes the right-panel freight Type to Per Job — be aware this affects subsequent Quote Table reads.",
+  "rca of the issue": "Reproduction: 1) Login admin / open Team-saved SA-260604-165816 / open Freight Dashboard / Update All Rates / view Per Item. 2) Observe identical $161.56 raw / $185.79 w/markup on all 3 components in BOTH qty 100 and qty 150 sections; Per-Item section raw total $484.68 = 3 × $161.56 in BOTH sections. Expected: each (component × qty) should produce its own UTS-quoted solo-shipment rate that varies by total weight (244/195/109 lbs at qty 100, 316/255/125 lbs at qty 150) and skid size (1L vs 1S). Root cause (hypothesis, awaits main-agent code dive): RightDashboard.jsx updateFreight() MP branch is not firing independent per-component-per-qty solo UTS quotes; instead each Per-Item slot is being populated with the qty-100 combined Per-Job rate ($161.56), then copied across components and qtys. Per-Job code path uses a different (correct) UTS call sequence which is why it shows distinct qty-100 vs qty-150 totals. Mitigation: rebuild perItemMap with 2 nested loops (components × slotQtys) firing one UTS quote per pair, key results by `${slotIdx}:${componentIdx}` (or compatible string key the backend runner accepts), then render PerItemTable from that map. Separately, fix the Quote Table FREIGHT column to read freightByQty[slot] per row instead of a scalar so qty 100 and qty 150 rows display their own values."
+}
