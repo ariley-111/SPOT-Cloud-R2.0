@@ -26,7 +26,7 @@ export default function FreightDashModal({ open, onClose, applyScopeFromCache, u
   const bomItems = Array.isArray(s.bomItems) && s.bomItems.length > 0
     ? s.bomItems
     // Single-Part: synthesize a 1-item BOM so the dashboard renders cleanly
-    : (s.quoteType === "Multi-Part" ? [] : [{ desc: s.itemDescription || "Single Item" }]);
+    : (s.quoteType === "Multi-Part" ? [] : [{ desc: s.itemDesc || "Single Item" }]);
   const cache = s.freightDashCache || null;
   const currentMode = s.freightScope === "Per Job" ? "Per Job" : "Per Item";
   const isSinglePart = !Array.isArray(s.bomItems) || s.bomItems.length === 0;
@@ -343,10 +343,14 @@ function PerItemTable({ cache, bomItems, markup, qtyFilter, itemFilter, sections
         const totalFt = visible.reduce((a, r) => a + (r.ship.trailerFeet || 0), 0);
         const rawTotal = visible.reduce((a, r) => a + (Number(r.totalAmount) || 0), 0);
         const wmTotal = rawTotal * (1 + markup);
+        // Section header: for a single qty in this slot (always true for Simple
+        // multi-qty quotes) label it "Qty N"; otherwise fall back to "Slot N".
+        const slotQtys = Array.from(new Set(rows.map((r) => r.qty)));
+        const hdrLabel = slotQtys.length === 1 ? `Qty ${fmtInt(slotQtys[0])}` : `Slot ${slot + 1}`;
         return (
           <div key={slot} style={tierBox} data-testid={`dash-per-item-slot-${slot}`}>
             <div style={tierHdr}>
-              <span style={{ fontWeight: 800, fontSize: 14 }}>Slot {slot + 1}</span>
+              <span style={{ fontWeight: 800, fontSize: 14 }}>{hdrLabel}</span>
               <span style={tierMeta}>{fmtInt(totalLbs)} lbs · {totalSkids} skid{totalSkids !== 1 ? "s" : ""} · {totalFt} ft</span>
               <span style={{ marginLeft: "auto", fontSize: 12 }}>
                 <span style={{ color: "var(--spot-text3)" }}>Raw:</span> <b>{fmtMoney(rawTotal)}</b>
@@ -421,11 +425,15 @@ function PerJobTable({ cache, bomItems, markup, qtyFilter, itemFilter, setQtyFil
         const raw = Number(sc.totalAmount) || 0;
         const wm = raw * (1 + markup);
         const combinedWt = sc.combinedWeight || 0;
+        // Single distinct qty in this scenario (Simple multi-qty quotes) → "Qty N";
+        // multi-component scenarios keep the "Scenario N" label.
+        const scQtys = Array.from(new Set((sc.perComp || []).map((p) => p.qty)));
+        const scHdr = scQtys.length === 1 ? `Qty ${fmtInt(scQtys[0])}` : `Scenario ${sc.scenarioIdx + 1}`;
         return (
           <div key={sc.scenarioIdx} style={tierBox} data-testid={`dash-per-job-scenario-${sc.scenarioIdx}`}>
             <div style={tierHdr}>
               <span style={{ fontWeight: 800, fontSize: 14 }}>
-                Scenario {sc.scenarioIdx + 1}
+                {scHdr}
               </span>
               <span style={tierMeta}>
                 {fmtInt(Math.round(combinedWt))} lbs · {sc.combinedSkids} skid{sc.combinedSkids !== 1 ? "s" : ""} · {sc.combinedFt} ft combined

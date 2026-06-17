@@ -854,7 +854,15 @@ function FreightPanel({ s }) {
               const idx = Number(s.activeItemIdx ?? 0);
               const tint = isMP ? TINTS[idx % TINTS.length] : "var(--spot-accent)";
               const tintSoft = isMP ? `${tint}18` : "var(--spot-accent-soft)";
-              const raw = Number(s.freightCost) || 0;
+              // Show the freight for the CURRENTLY SELECTED qty tier (driven by the
+              // Quote Table row selection, s.selSlot). Per-slot value comes from
+              // freightByQty; fall back to the flat freightCost if not yet quoted.
+              const selSlot = Number(s.selSlot || 0);
+              const fbq = s.freightByQty || {};
+              const perSlot = fbq[selSlot] ?? fbq[String(selSlot)];
+              const hasPerSlot = perSlot != null && perSlot !== "" && perSlot !== "null";
+              const raw = Number(hasPerSlot ? perSlot : s.freightCost) || 0;
+              const selQty = Number((s.qtys || [])[selSlot]) || 0;
               const _isLocal2 = s.quoteFOB === "LocalDelivery";
               const mk  = Number(s.freightMarkup ?? (_isLocal2 ? 0 : 0.15)) || 0;
               const total = raw * (1 + mk);
@@ -866,6 +874,12 @@ function FreightPanel({ s }) {
                   <div style={{ fontSize: 10, fontWeight: 700, color: tint,
                     textTransform: "uppercase", letterSpacing: ".06em" }}>
                     {isMP ? `Item ${idx + 1} · Freight` : "Item Freight"}
+                    {selQty > 0 && (
+                      <span data-testid="freight-item-qty"
+                        style={{ color: "var(--spot-text3)", fontWeight: 700 }}>
+                        {" · Qty "}{selQty.toLocaleString()}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between",
                     alignItems: "baseline", marginTop: 2 }}>
@@ -875,7 +889,7 @@ function FreightPanel({ s }) {
                     </span>
                     <span style={{ fontSize: 16, fontWeight: 800, color: tint }}
                       data-testid="freight-amount-display"
-                      title={`Total to ship individually (cost + markup)`}>
+                      title={`Total to ship the selected qty (cost + markup)`}>
                       {fmtMoney(total)}
                     </span>
                   </div>
