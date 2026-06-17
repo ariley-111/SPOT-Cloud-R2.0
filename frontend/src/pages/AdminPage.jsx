@@ -459,11 +459,12 @@ function AuditPanel() {
               <th style={th}>Field</th>
               <th style={th}>Before</th>
               <th style={th}>After</th>
+              <th style={th}>Pricing Version</th>
               <th style={th}>By User</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={7} style={{ ...td, color: "var(--spot-text3)" }}>Loading…</td></tr>
-              : rows.length === 0 ? <tr><td colSpan={7} style={{ ...td, color: "var(--spot-text3)" }}>No quote activity yet</td></tr>
+              {loading ? <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>Loading…</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={8} style={{ ...td, color: "var(--spot-text3)" }}>No quote activity yet</td></tr>
               : rows.map((r, i) => {
                   // Pretty event label
                   let eventLabel = r.field;
@@ -484,6 +485,7 @@ function AuditPanel() {
                       <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace" }}>{r.field}</td>
                       <td style={{ ...td, color: "var(--spot-text3)" }}>{before || "—"}</td>
                       <td style={{ ...td, color: "var(--spot-warn)", fontWeight: 600 }}>{after || "—"}</td>
+                      <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>{r.pricing_version_label || "—"}</td>
                       <td style={{ ...td, fontSize: 10, color: "var(--spot-text3)" }}>{r.user_name || r.user_id || "—"}</td>
                     </tr>
                   );

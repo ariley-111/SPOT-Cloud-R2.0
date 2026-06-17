@@ -338,11 +338,22 @@ async def list_quote_audit(
             if d.get("old_value"):
                 all_uids.append(d["old_value"])
     name_map = await _user_name_map(all_uids)
+    # Attach the quote's pinned board-pricing version label per row, so the
+    # Quote Activity audit can show a Pricing Version column.
+    q_ids = list({d.get("quote_id") for d in docs if d.get("quote_id")})
+    qver: Dict[str, Optional[str]] = {}
+    if q_ids:
+        async for q in db[COL_QUOTES].find(
+            {"id": {"$in": q_ids}}, {"_id": 0, "id": 1, "pricing_version_id": 1}):
+            qver[q["id"]] = q.get("pricing_version_id")
+    from services.pricing_versions import list_versions
+    vmap = {v["id"]: v.get("label") for v in await list_versions()}
     return [
         {
             **d,
             "user_name": name_map.get(d.get("user_id"), d.get("user_id")),
             "old_value_name": name_map.get(d.get("old_value")) if d.get("field") == "owner_id" else None,
+            "pricing_version_label": vmap.get(qver.get(d.get("quote_id"))),
         }
         for d in docs
     ]

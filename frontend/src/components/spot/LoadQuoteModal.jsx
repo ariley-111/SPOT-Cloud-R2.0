@@ -7,7 +7,7 @@ import {
 } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
 import { useAuth } from "../../context/AuthContext";
-import { Paperclip } from "lucide-react";
+import { Paperclip, AlertTriangle } from "lucide-react";
 
 // ─── Owner color dots — stable hash → tint ─────────────────────────────
 const OWNER_TINTS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#3b82f6","#84cc16"];
@@ -249,7 +249,7 @@ export default function LoadQuoteModal({ onClose }) {
           {/* Header row */}
           {tab === "saved" && (
             <div style={{
-              display: "grid", gridTemplateColumns: "1.4fr 1.6fr 1.2fr 1fr 0.9fr 220px",
+              display: "grid", gridTemplateColumns: "1.3fr 1.5fr 1.1fr 0.85fr 1.05fr 0.75fr 210px",
               gap: 8, padding: "6px 10px", borderBottom: "2px solid var(--spot-line)",
               fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
               textTransform: "uppercase", letterSpacing: ".06em",
@@ -258,6 +258,7 @@ export default function LoadQuoteModal({ onClose }) {
               <div>Customer</div>
               <div>Owner</div>
               <div>Updated</div>
+              <div>Pricing Version</div>
               <div>Status</div>
               <div style={{ textAlign: "right" }}>Actions</div>
             </div>
@@ -268,7 +269,7 @@ export default function LoadQuoteModal({ onClose }) {
             return tab === "saved" ? (
               <div key={it.id} data-testid={`load-row-${it.id}`}
                 style={{
-                  display: "grid", gridTemplateColumns: "1.4fr 1.6fr 1.2fr 1fr 0.9fr 220px",
+                  display: "grid", gridTemplateColumns: "1.3fr 1.5fr 1.1fr 0.85fr 1.05fr 0.75fr 210px",
                   gap: 8, padding: "8px 10px",
                   borderBottom: "1px solid var(--spot-line)", alignItems: "center",
                   background: "transparent", transition: "background .12s",
@@ -276,45 +277,53 @@ export default function LoadQuoteModal({ onClose }) {
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--spot-bg3)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                 <div style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 13,
-                  display: "flex", alignItems: "center", gap: 6 }}>
-                  {it.est_num || "(no est#)"}
+                  display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {it.est_num || "(no est#)"}
+                  </span>
                   {it.file_count > 0 && (
                     <span data-testid={`load-files-badge-${it.id}`}
                       title={`${it.file_count} attached file${it.file_count === 1 ? "" : "s"}`}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                      style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0,
                         fontSize: 10, fontWeight: 700, color: "#06b6d4",
                         background: "#06b6d418", border: "1px solid #06b6d455",
                         borderRadius: 10, padding: "1px 6px" }}>
                       <Paperclip size={11} /> {it.file_count}
                     </span>
                   )}
-                  {it.pricing_version_label && (
-                    <span data-testid={`load-pricing-badge-${it.id}`}
-                      title={it.pricing_is_current
-                        ? `Priced on the current board-pricing list (${it.pricing_version_label})`
-                        : `Priced on an older board-pricing list (${it.pricing_version_label}). Duplicate to re-price at current rates.`}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 3,
-                        fontSize: 10, fontWeight: 700,
-                        color: it.pricing_is_current ? "var(--spot-text3)" : "#b8860b",
-                        background: it.pricing_is_current ? "transparent" : "#b8860b18",
-                        border: `1px solid ${it.pricing_is_current ? "var(--spot-border)" : "#b8860b66"}`,
-                        borderRadius: 10, padding: "1px 6px" }}>
-                      {it.pricing_is_current ? "" : "⚠ "}priced {it.pricing_version_label}
-                    </span>
-                  )}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--spot-text2)" }}>
+                <div style={{ fontSize: 12, color: "var(--spot-text2)", overflow: "hidden",
+                  textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {it.customer_name || (it.state || {}).custName || "—"}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: ownerTint(it.owner_id) }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, minWidth: 0 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: ownerTint(it.owner_id) }} />
                   <span style={{ color: isMine ? "var(--spot-accent)" : "var(--spot-text2)",
-                    fontWeight: isMine ? 700 : 500 }}>
+                    fontWeight: isMine ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {isMine ? "You" : (it.owner_name || it.owner_id)}
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
                   {it.updated_at ? new Date(it.updated_at).toLocaleDateString() : ""}
+                </div>
+                <div>
+                  {it.pricing_version_label ? (
+                    <span data-testid={`load-pricing-badge-${it.id}`}
+                      title={it.pricing_is_current
+                        ? `Priced on the current board-pricing list (${it.pricing_version_label})`
+                        : `Priced on an older board-pricing list (${it.pricing_version_label}). Duplicate to re-price at current rates.`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                        fontSize: 11, fontWeight: 600,
+                        color: it.pricing_is_current ? "var(--spot-text2)" : "#b8860b",
+                        background: it.pricing_is_current ? "transparent" : "#b8860b18",
+                        border: `1px solid ${it.pricing_is_current ? "var(--spot-border)" : "#b8860b66"}`,
+                        borderRadius: 4, padding: "2px 7px", whiteSpace: "nowrap" }}>
+                      {!it.pricing_is_current && <AlertTriangle size={11} />}
+                      {it.pricing_version_label}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>—</span>
+                  )}
                 </div>
                 <div><StatusPill status={it.status} /></div>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>

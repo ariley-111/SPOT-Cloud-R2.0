@@ -11,8 +11,8 @@ Append-only log of shipped features and fixes.
 Append-only log of shipped features and fixes.
 
 ## 2026-06-17 — Board Pricing · saved-quote pricing-version tag (Phase 2 follow-up)
-- **Load Quote → Saved Quotes** list now shows a per-quote pricing-version tag (`routes/quotes.py` list attaches `pricing_version_label` + `pricing_is_current` via one versions lookup; `LoadQuoteModal.jsx` renders it next to the est#/📎 badge).
-- Subtle/neutral when on the CURRENT active list; **amber "⚠ priced {date}"** when on an older list — so estimators can spot quotes worth re-confirming after a price increase. Verified: 6 saved quotes show "⚠ priced 2025-04-14" while 2026-06-15 is active.
+- **Load Quote → Saved Quotes** list now has a dedicated **"Pricing Version"** column (own grid column, aligned rows) — pill shows the version date only (no "priced" word); amber + ⚠ icon when on an older list, neutral when current. Backend `routes/quotes.py` list attaches `pricing_version_label` + `pricing_is_current` via one versions lookup.
+- **Admin → Audit Log → Quote Activity** now has a **"Pricing Version"** column (each row shows the quote's pinned version label; backend joins quote→version label in `list_quote_audit`).
 - Clarified prod rollout: pricing versions are per-environment (separate DBs). Deploy auto-seeds prod's v1 baseline + backfills prod quotes (zero movement); admin then Imports + Activates the new list in prod's Board Pricing tab (deliberate go-live).
 
 
