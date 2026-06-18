@@ -20,11 +20,12 @@ from typing import List, Dict
 logger = logging.getLogger("spot.parser.tiles")
 
 # Tuning constants
-TARGET_DPI = 150        # render DPI for large sheets (6pt text ≈ 12px → legible)
-MAX_EDGE = 1456         # keep each tile's long edge ≤ this (Anthropic optimum ≤1568)
+TARGET_DPI = 220        # render DPI for large sheets — high enough that a tenths
+                        # decimal in a dimension callout (e.g. "1930.1") stays crisp
+MAX_EDGE = 1568         # keep each tile's long edge ≤ this (Anthropic optimum)
 LARGE_PAGE_IN = 17.0    # only tile pages whose long edge exceeds this (> tabloid)
 OVERLAP = 0.10          # fraction of tile size to overlap so straddling parts survive
-MAX_TILES = 16          # hard cap on tiles per document (token/cost guard)
+MAX_TILES = 20          # hard cap on tiles per document (token/cost guard)
 
 
 def render_pdf_tiles(pdf_bytes: bytes) -> List[Dict[str, str]]:
