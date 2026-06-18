@@ -56,6 +56,35 @@ def build_board_spec(json: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _resolve_misc_per_slot(misc_charges: Any, slot_index: int) -> List[Dict[str, Any]]:
+    """Resolve each misc charge's per-qty cost for THIS slot.
+
+    A misc charge may carry an optional ``costByQty`` map keyed by slot index
+    (e.g. {"0": "50", "2": "300"}) so estimators can associate a DIFFERENT flat
+    dollar amount with each quantity tier (e.g. 50 clips @ qty1, 300 @ qty3).
+    When a per-slot value is present it overrides the flat ``cost`` for that
+    tier; otherwise the flat ``cost`` applies (preserving current behavior).
+    """
+    out: List[Dict[str, Any]] = []
+    for mc in (misc_charges or []):
+        if not isinstance(mc, dict):
+            continue
+        cost = mc.get("cost")
+        cbq = mc.get("costByQty")
+        per = None
+        if isinstance(cbq, dict):
+            per = cbq.get(str(slot_index))
+            if per is None:
+                per = cbq.get(slot_index)
+        elif isinstance(cbq, list) and 0 <= slot_index < len(cbq):
+            per = cbq[slot_index]
+        if per is not None and str(per).strip() != "":
+            cost = per
+        out.append({**mc, "cost": cost})
+    return out
+
+
+
 def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
                       layout: Dict[str, Any], asmp: Dict[str, Any]) -> Dict[str, Any]:
     prepress_treat_raw = json.get("prepressTreatment", "Auto")
@@ -151,7 +180,7 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
         "dieMarkup": json.get("dieMarkup", "0.15"),
         "dieAmortMethod": json.get("dieAmortMethod", "Markup"),
         "_dieAutoApplied": die_auto_applied,
-        "miscCharges": json.get("miscCharges", []),
+        "miscCharges": _resolve_misc_per_slot(json.get("miscCharges", []), json.get("_slotIndex", 0)),
         "miscChargeMarkup": json.get("miscChargeMarkup", "0.15"),
         "prepressCost": prepress_cost,
         "prepressTreatment": "None" if prepress_treat_raw == "None" else prepress_treat,

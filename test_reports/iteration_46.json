@@ -1,0 +1,66 @@
+{
+  "summary": "PASS — Per-qty custom misc charges flow end-to-end correctly. Validated on SA-260617-163552-TEST PDF LINE ITEMS (Simple, qtys 500/1000/2000, dims 30.75x33.5, print ON). UI per-qty inputs (data-testid='misc-perqty-input-0-{0,1,2}') wire through useEngine.buildPayload → backend _resolve_misc_per_slot → calc_wf miscChargeMarkup (15%) → QuoteTable order-total-misc-0 → PreviewPdfModal By Part 'CLIPS' column AND Lump Sum descriptive lines. Regression: 2nd misc charge (Foil, flat=$80, no per-qty overrides) correctly applies the SAME $92.00 (= 80×1.15) to all 3 tiers, confirming the override-only-when-set semantics.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "ui_inputs_rendered": {
+      "status": "PASS",
+      "btn_add_misc": "data-testid='btn-add-misc' present",
+      "misc_charge_0": "rendered after click",
+      "misc_perqty_0_block": "data-testid='misc-perqty-0' visible (qtyTiers.length > 1)",
+      "per_qty_inputs": ["misc-perqty-input-0-0 → 50", "misc-perqty-input-0-1 → '' (blank, inherits flat 100)", "misc-perqty-input-0-2 → 300"]
+    },
+    "quote_table_per_tier_misc": {
+      "status": "PASS",
+      "expected_with_15pct_markup": {"500": "$57.50 (50×1.15)", "1000": "$115.00 (100 flat ×1.15)", "2000": "$345.00 (300×1.15)"},
+      "actual_from_order_total_misc_0": {
+        "slot_0_qty500":  {"misc": "Clips: $57.50",  "order_total": "$7,220.88"},
+        "slot_1_qty1000": {"misc": "Clips: $115.00", "order_total": "$12,499.06"},
+        "slot_2_qty2000": {"misc": "Clips: $345.00", "order_total": "$23,122.81"}
+      },
+      "tiers_differ_correctly": true
+    },
+    "preview_by_part_clips_column": {
+      "status": "PASS",
+      "headers": ["QTY","EACH","PER/M","TOTAL","DIE","FREIGHT","CLIPS","QUOTE TOTAL"],
+      "clips_column": {"qty_500": "$57.50", "qty_1000": "$115.00", "qty_2000": "$345.00"},
+      "die_column_500_dash": true,
+      "quote_totals": {"500": "$7,220.88", "1000": "$12,499.06", "2000": "$23,122.81"}
+    },
+    "preview_lump_sum_lines": {
+      "status": "PASS",
+      "block_testid": "preview-lumpsum-charges present",
+      "lines": [
+        "Freight + Clips @ Qty 500 → $571.64 (= 514.14 + 57.50 ✓)",
+        "Freight + Die + Clips @ Qty 1,000 → $2,145.77 (= 650.77 + 1380 + 115 ✓)",
+        "Freight + Die + Clips @ Qty 2,000 → $2,760.28 (= 1035.28 + 1380 + 345 ✓)"
+      ],
+      "per_tier_clips_amount_differs": true,
+      "die_correctly_omitted_at_qty500": true
+    },
+    "regression_flat_only_misc": {
+      "status": "PASS",
+      "scenario": "2nd misc 'Foil' added with treatment=Line, flat cost=80, NO per-qty overrides (costByQty={})",
+      "result": {"qty_500": "Foil: $92.00", "qty_1000": "Foil: $92.00", "qty_2000": "Foil: $92.00"},
+      "expected": "80 × 1.15 = 92.00 across all 3 tiers (unchanged behavior)",
+      "passes": true
+    }
+  },
+  "test_report_links": ["/app/test_reports/iter46_lumpsum.png", "/app/backend/tests/test_misc_per_qty.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ItemSetupSec.jsx OneTimeCosts (L908-928): per-qty override block correctly gated on `mc.treatment !== 'None' && qtyTiers.length > 1`, so a single-qty quote won't show the block — good. Placeholder shows the flat cost so users see what 'blank' will inherit. Empty string clears via setMiscQty writing/removing costByQty[slot] — confirmed by blank slot 1 inheriting flat=100.",
+    "useEngine.js correctly serialises miscCharges (incl. costByQty) in both buildPayload (simple) and buildMpPayload (per component); backend engine/runner.py _resolve_misc_per_slot resolves override-else-flat per slot, then calc_wf applies miscChargeMarkup (0.15). Math verified live: 50→57.50, 100→115.00, 300→345.00.",
+    "PreviewPdfModal By Part dynamically discovers the 'Clips' miscName from row.miscLineItems[].name so custom names appear as their own column (not bucketed under generic 'Misc') — consistent with iter45 fix.",
+    "Lump Sum descriptive lines join only charge TYPES whose values are >0 per tier, so the label correctly omits 'Die' for qty 500 (where Die=0). Sum math is per-tier: misc, freight, and die summed independently per slot.",
+    "Minor enhancement (non-blocking): the per-qty inputs accept negative tabs via type='number' min='0' — confirmed min is enforced. No accessibility label (aria-label) on the small inputs; only the small qty label above is visual. Could add aria-label=`Clips override for qty ${q}` for screen readers but not required."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "verified by existing pytest test_misc_per_qty.py (6/6 PASS per E1)", "frontend": "100% (7/7 sub-checks PASS including regression)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None — reused existing draft SA-260617-163552-TEST PDF LINE ITEMS (Simple, qtys 500/1000/2000). Test added 2 misc charges in-session (Clips with per-qty overrides + Foil flat-only) but did not Save, so the seed quote is unmodified for future test agents.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To re-verify: login admin → toolbar-load → click load-row-204be315-8f2d-40e5-9ab5-43b2a9decdc5 (Drafts tab; saved-tab also works with load-action-open-{id}) → in One-Time Costs panel click btn-add-misc → fill name input with 'Clips' → click the 'Line' treatment tile → fill the visible number input with 100 → wait for misc-perqty-0 to appear → fill misc-perqty-input-0-0=50, misc-perqty-input-0-2=300 (leave -0-1 blank) → wait ~2s for engine debounce → click qt-row-{0,1,2} and read order-total-misc-0 (expect Clips: $57.50 / $115.00 / $345.00). Then toolbar-preview → preview-charges-by-part to see 'CLIPS' column with $57.50/$115.00/$345.00 → preview-charges-lump-sum to see preview-lumpsum-line-{0,1,2} with per-tier sums.",
+  "rca of the issue": "Not a bug fix — feature validation. E1's implementation correctly threads costByQty through: (a) ItemSetupSec.OneTimeCosts addMisc seeds costByQty:{} and setMiscQty(idx, slot, val) writes/clears entries based on whether the input is non-empty; (b) the override block is gated on treatment!=='None' && qtyTiers.length>1 so single-qty quotes still see only a flat input; (c) useEngine.buildPayload/buildMpPayload pass miscCharges with the costByQty map; (d) backend engine/runner.py _resolve_misc_per_slot(miscCharges, slot_index) returns costByQty[slot_index] if present (and finite & >0 — blank/null falls through) else mc.cost; (e) calc_wf multiplies by miscChargeMarkup (0.15) producing the final line charge; (f) the row's miscLineItems carries the resolved name+amt up to QuoteTableSec order-total-misc-{i} and PreviewPdfModal By Part column / Lump Sum sum. End-to-end math verified to the cent at all 3 tiers, and the regression (no overrides → same value across tiers) is preserved."
+}

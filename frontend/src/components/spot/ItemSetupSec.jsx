@@ -764,8 +764,22 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
   const setMisc = (idx, patch) => {
     setField("miscCharges", (s.miscCharges || []).map((c, i) => i === idx ? { ...c, ...patch } : c));
   };
-  const addMisc = () => setField("miscCharges", [...(s.miscCharges || []), { id: "mc_" + Date.now(), name: "", cost: "0", treatment: "Separate Line" }]);
+  const addMisc = () => setField("miscCharges", [...(s.miscCharges || []), { id: "mc_" + Date.now(), name: "", cost: "0", treatment: "Separate Line", costByQty: {} }]);
   const rmMisc = (idx) => setField("miscCharges", (s.miscCharges || []).filter((_, i) => i !== idx));
+  // Per-qty override: store a flat $ for a specific qty-slot in costByQty.
+  // Blank clears the override (the charge falls back to the flat `cost`).
+  const setMiscQty = (idx, slot, val) => {
+    setField("miscCharges", (s.miscCharges || []).map((c, i) => {
+      if (i !== idx) return c;
+      const cbq = { ...(c.costByQty || {}) };
+      if (val === "" || val == null) delete cbq[slot];
+      else cbq[slot] = val;
+      return { ...c, costByQty: cbq };
+    }));
+  };
+  // Active qty tiers (index preserved so it aligns with the engine slot index).
+  const qtyTiers = (s.qtys || []).map((q, i) => ({ i, q: parseInt(q, 10) }))
+    .filter((t) => Number.isFinite(t.q) && t.q > 0);
 
   return (
     <div data-testid="one-time-costs" style={{
@@ -888,6 +902,30 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
             <Tile label="Line"  active={mc.treatment === "Separate Line"} onClick={() => setMisc(mi, { treatment: "Separate Line" })} small />
             <Tile label="Amort" active={mc.treatment === "Amortize"}      onClick={() => setMisc(mi, { treatment: "Amortize" })} small />
           </div>
+          {/* Per-qty override — associate a DIFFERENT flat $ with each quantity
+              tier (e.g. 50 clips @ qty1, 300 @ qty3). Blank inherits the flat
+              cost above. Only shown for multi-qty quotes. */}
+          {mc.treatment !== "None" && qtyTiers.length > 1 && (
+            <div style={{ marginTop: 3, paddingLeft: 2 }} data-testid={`misc-perqty-${mi}`}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--spot-text3)",
+                textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>
+                Per-qty $ (blank = ${Number(mc.cost || 0).toFixed(2)})
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {qtyTiers.map((t) => (
+                  <div key={t.i} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: "var(--spot-text3)" }}>{t.q.toLocaleString()}</span>
+                    <input className="sp-input" type="number" step="0.01" min="0"
+                      data-testid={`misc-perqty-input-${mi}-${t.i}`}
+                      value={(mc.costByQty && mc.costByQty[t.i] != null) ? mc.costByQty[t.i] : ""}
+                      placeholder={Number(mc.cost || 0).toFixed(2)}
+                      onChange={(e) => setMiscQty(mi, t.i, e.target.value)}
+                      style={{ width: 56, padding: "3px 5px", fontSize: 11, textAlign: "right" }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ))}
       <button onClick={addMisc} data-testid="btn-add-misc" style={{
