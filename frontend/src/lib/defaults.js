@@ -115,7 +115,7 @@ export const DEFAULT_STATE = Object.freeze({
   freightCost: "0",
   freightMarkup: "0.15",
   freightScope: "None",                // None | Per Item | Per Job
-  jobFreightTreatment: "Separate Line",
+  jobFreightTreatment: "Amortize",
   jobFreightCost: "0",
   freightByQty: {},
   quoteShipTo: "",

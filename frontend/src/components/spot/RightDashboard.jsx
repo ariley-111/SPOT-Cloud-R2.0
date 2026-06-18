@@ -405,7 +405,7 @@ function FreightPanel({ s }) {
           quoteFOB: "Destination",
           freightCarrier: activeQuote?.carrier || "",
           freightTransit: activeQuote?.transitDays != null ? String(activeQuote.transitDays) : "",
-          freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
+          freightTreatment: s.freightTreatment === "None" ? "Amortize" : s.freightTreatment,
           freightMarkup: isLocal ? "0" : "0.15",
           freightDashCache: {
             perItemQuotes,
@@ -535,7 +535,7 @@ function FreightPanel({ s }) {
             freightByQty: itemPerItem,           // always store the solo map here
             perJobFreightByQty: itemPerJob,      // and the allocated map here
             freightCost: liveCost,                // engine reads this for active mode
-            freightTreatment: bi.state?.freightTreatment === "None" ? "Separate Line" : (bi.state?.freightTreatment || "Separate Line"),
+            freightTreatment: bi.state?.freightTreatment === "None" ? "Amortize" : (bi.state?.freightTreatment || "Amortize"),
             freightCarrier: (isPerJob ? carrierBySlot[currentSlot]?.carrier : perItemQuotes.find((q) => q.idx === i && q.slot === currentSlot)?.carrier) || "",
             freightTransit: (isPerJob ? carrierBySlot[currentSlot]?.transit : (perItemQuotes.find((q) => q.idx === i && q.slot === currentSlot)?.transitDays != null ? String(perItemQuotes.find((q) => q.idx === i && q.slot === currentSlot).transitDays) : "")) || "",
             quoteFOB: "Destination",
@@ -564,10 +564,10 @@ function FreightPanel({ s }) {
       const patch = {
         bomItems: nextBom,
         quoteFOB: "Destination",
-        freightTreatment: s.freightTreatment === "None" ? "Separate Line" : s.freightTreatment,
+        freightTreatment: s.freightTreatment === "None" ? "Amortize" : s.freightTreatment,
         jobFreightBySlot,
         jobFreightCost: activeJobCost,
-        jobFreightTreatment: s.jobFreightTreatment || "Separate Line",
+        jobFreightTreatment: s.jobFreightTreatment || "Amortize",
         freightMarkup: activeIsLocal ? "0" : "0.15",
         // Snapshot the full cache so the Dashboard renders without re-fetching
         freightDashCache: {
@@ -738,9 +738,9 @@ function FreightPanel({ s }) {
                   quoteFOB: "Destination",
                   localDeliveryZone: null,
                   jobFreightCost: "",
-                  jobFreightTreatment: "Separate Line",
+                  jobFreightTreatment: "Amortize",
                   freightScope: "None",   // "None" actually means Per Item in legacy
-                  freightTreatment: "Separate Line",
+                  freightTreatment: "Amortize",
                 };
                 setManyFields(patch);
               }}
@@ -791,19 +791,19 @@ function FreightPanel({ s }) {
                 <span style={lbl}>Treatment</span>
                 {s.freightScope === "Per Job" ? (
                   <div style={{ display: "flex", gap: 2 }} data-testid="freight-treatment-mp-perjob">
-                    <Tile label="Line"  active={(s.jobFreightTreatment || "Separate Line") === "Separate Line"}
+                    <Tile label="Line"  active={s.jobFreightTreatment === "Separate Line"}
                       onClick={() => setField("jobFreightTreatment", "Separate Line")} small tint="#22c55e"
                       data-testid="tile-jobfreight-line" />
-                    <Tile label="Amort" active={s.jobFreightTreatment === "Amortize"}
+                    <Tile label="Amort" active={(s.jobFreightTreatment || "Amortize") === "Amortize"}
                       onClick={() => setField("jobFreightTreatment", "Amortize")} small
                       data-testid="tile-jobfreight-amort" />
                   </div>
                 ) : (
                   <div style={{ display: "flex", gap: 2 }} data-testid="freight-treatment-mp-peritem">
-                    <Tile label="Line"  active={(s.freightTreatment || "Separate Line") === "Separate Line"}
+                    <Tile label="Line"  active={s.freightTreatment === "Separate Line"}
                       onClick={() => setField("freightTreatment", "Separate Line")} small tint="#22c55e"
                       data-testid="tile-itemfreight-line" />
-                    <Tile label="Amort" active={s.freightTreatment === "Amortize"}
+                    <Tile label="Amort" active={!s.freightTreatment || s.freightTreatment === "Amortize"}
                       onClick={() => setField("freightTreatment", "Amortize")} small
                       data-testid="tile-itemfreight-amort" />
                   </div>
