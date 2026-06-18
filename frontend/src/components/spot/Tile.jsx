@@ -29,10 +29,10 @@ export default function Tile({ label, active, onClick, tint, small, glow, disabl
 }
 
 /** Num — numeric input with consistent styling. */
-export function Num({ value, onChange, step = "0.01", min, max, style, "data-testid": dti, placeholder, onKeyDown, inputRef }) {
+export function Num({ value, onChange, step = "0.01", min, max, style, "data-testid": dti, placeholder, onKeyDown, inputRef, title }) {
   return (
     <input ref={inputRef} type="number" step={step} min={min} max={max}
-      data-testid={dti} placeholder={placeholder}
+      data-testid={dti} placeholder={placeholder} title={title}
       value={value ?? ""} onKeyDown={onKeyDown}
       onChange={(e) => {
         let v = e.target.value;

@@ -891,16 +891,9 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
               onChange={(e) => setMisc(mi, { name: e.target.value })}
               style={{ flex: 1, fontSize: 11, padding: "3px 6px" }} />
             {mc.treatment !== "None" && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                <Num value={mc.cost} onChange={(v) => setMisc(mi, { cost: v })} step="0.01" min="0"
-                  style={{ width: 60, padding: "3px 6px", fontSize: 11 }} />
-                {qtyTiers.length > 1 && (
-                  <span style={{ fontSize: 8, color: "var(--spot-text3)", lineHeight: 1.1,
-                    marginTop: 1, textAlign: "right", maxWidth: 60 }}>
-                    applies to all qtys
-                  </span>
-                )}
-              </div>
+              <Num value={mc.cost} onChange={(v) => setMisc(mi, { cost: v })} step="0.01" min="0"
+                title="Default charge — applies to all quantities (unless overridden per qty below)"
+                style={{ width: 60, padding: "3px 6px", fontSize: 11 }} />
             )}
             <span onClick={() => rmMisc(mi)} data-testid={`misc-rm-${mi}`}
               style={{ fontSize: 16, fontWeight: 700, color: "var(--spot-err)", cursor: "pointer", padding: "0 4px" }}>×</span>
@@ -921,6 +914,7 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
                     <span style={{ fontSize: 9, color: "var(--spot-text3)" }}>{t.q.toLocaleString()}</span>
                     <input className="sp-input" type="number" step="0.01" min="0"
                       data-testid={`misc-perqty-input-${mi}-${t.i}`}
+                      title={`Per-qty charge for ${t.q.toLocaleString()} — overrides the default for this quantity (blank uses the default)`}
                       value={(mc.costByQty && mc.costByQty[t.i] != null) ? mc.costByQty[t.i] : ""}
                       placeholder={Number(mc.cost || 0).toFixed(2)}
                       onChange={(e) => setMiscQty(mi, t.i, e.target.value)}
