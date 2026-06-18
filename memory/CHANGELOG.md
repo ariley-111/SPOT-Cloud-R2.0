@@ -2,6 +2,21 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Per-qty custom misc charges ✅
+- Custom misc charges (e.g. "Clips") can now carry a DIFFERENT flat $ per quantity
+  tier. Each misc charge has an optional `costByQty` map keyed by slot index; a
+  per-slot value overrides the flat `cost`, blank inherits it. Markup still applies.
+- **Backend** `engine/runner.py`: new `_resolve_misc_per_slot()` resolves the
+  per-slot cost inside `build_prod_inputs` (uses the existing `_slotIndex`); works
+  for both Simple and Multi-Part (per-component, item-level miscCharges).
+- **Frontend** `ItemSetupSec.jsx` One-Time Costs: each misc charge shows a
+  "Per-qty $" override row (one input per active qty tier, blank = flat default).
+  `costByQty` flows through `buildPayload`/`buildMpPayload`.
+- Verified iter46 — qty 500/1000/2000 → Clips $57.50/$115/$345 (50/flat-100/300 ×1.15)
+  across Quote Table, PDF By Part "Clips" column, and Lump Sum lines. Flat-cost
+  charge (no overrides) still applies equally to all tiers. Tests: `test_misc_per_qty.py` 6/6.
+
+
 ### 2026-06-18 — PDF / Quote-Preview charge-mode overhaul ✅
 - **#1 Removed "View Kit Matrix"** (MP Individual + Matched Set) — deleted the
   `KitMatrixModal` + trigger button from `QuoteTableSec.jsx` (redundant).
