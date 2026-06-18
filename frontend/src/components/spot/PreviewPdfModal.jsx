@@ -698,8 +698,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
       if (isExcl(c.itemId, r.slotIdx)) return;
       const q = Number(r.qty) || 0;
       if (q <= 0) return;
-      const lineTotal = Number(r.itemSell || 0) + Number(r.freightLine || 0)
-        + Number(r.dieLineCost || 0) + Number(r.prepressLineCost || 0);
+      const lineTotal = Number(r.sellTotal || 0);
       tierMap.set(q, (tierMap.get(q) || 0) + lineTotal);
     });
   });

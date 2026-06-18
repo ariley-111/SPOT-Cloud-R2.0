@@ -2,6 +2,24 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — MP-Individual PDF per-qty Quote Summary (legacy parity) ✅
+- The MP-Individual Quote Preview/PDF summary previously lumped ALL component
+  rows across ALL qtys into one "Items (base sell) / Quote Total" (~$7,490),
+  which looked wildly off vs legacy's per-qty totals.
+- Now renders a per-qty table: QTY | COMPONENTS | PRICE/SET | QUOTE TOTAL — one
+  row per qty tier combining EVERY component at that qty (e.g. qty100 = Shoe
+  Box@100 + Boot Box@100). Components sum = Σ component `sellTotal` at that qty
+  (includes per-item freight/die/prepress/misc, matching the per-component TOTAL
+  cells); Price/Set = total ÷ qty. Mirrored in `routes/pdf.py` for Export.
+- Verified iter47 (table structure + grouping) + follow-up fix to include misc
+  (Clips) in the summed total so it reconciles with the per-component totals.
+- PRICING SANITY CHECK (user concern): cloud vs legacy on SA-260618-085911 —
+  per-qty combined totals were ~+1.6% (qty100) / ~+2.5% (qty200), fully within
+  the expected ~6.5% material-price delta (material ≈ 20% of total) plus differing
+  liner specs entered (cloud "Kla/Kraft" vs legacy "Kla-White/Kraft"). Engine is
+  NOT diverged; the big perceived gap was purely the broken all-qty lump summary.
+
+
 ### 2026-06-18 — Per-qty custom misc charges ✅
 - Custom misc charges (e.g. "Clips") can now carry a DIFFERENT flat $ per quantity
   tier. Each misc charge has an optional `costByQty` map keyed by slot index; a

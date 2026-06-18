@@ -616,8 +616,9 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 q = float(r.get("qty") or 0)
                 if q <= 0:
                     continue
-                line_total = (float(r.get("itemSell") or 0) + float(r.get("freightLine") or 0)
-                              + float(r.get("dieLineCost") or 0) + float(r.get("prepressLineCost") or 0))
+                # sellTotal already includes per-item charges (freight/die/
+                # prepress/misc), matching the per-component TOTAL column.
+                line_total = float(r.get("sellTotal") or 0)
                 tier_totals[q] = tier_totals.get(q, 0.0) + line_total
 
         summary_rows: List[str] = []
