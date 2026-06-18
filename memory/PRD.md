@@ -662,3 +662,22 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 
 **Test status**: 110/113 backend pass (3 pre-existing failures: 2 Entra config tests expecting 503 in unconfigured env + 1 admin RBAC test). Engine parity suite (matched_set_parity, multi_part, route_parity, pre_buy_min_snapshot, below_min) — 33/33 PASS. Browser verification: Matched Set tile-pricing toggle confirmed working; Quote Table cycle confirmed (Set $0.93 → Ea $0.93 → M $926.20 on a single-component-priced quote, identical because only the active component had a non-zero sell).
 
+
+### 2026-06-18 — P0: Async parse + Internal Cost Report ✅
+- **Async RFQ parsing** (fixes 502/520 on large CADs): `POST /api/parser/parse-rfq-async`
+  returns a `job_id` (202) immediately; background `asyncio` task runs the slow Anthropic
+  call; `GET /api/parser/jobs/{id}` polled every 3s by the frontend. `parser_jobs`
+  collection with a 24h TTL index. Sync endpoint kept for compat. Tests + iter49 PASS.
+- **Internal Cost Report modal** (legacy spot_r1_5.jsx L8021-8252 parity): per-component
+  17-column cost-buildup cards + Kit Rollup for Multi-Part. Backend componentPricing rows
+  enriched with Material/Print/Cutter/Finish/OH/Sheets breakdown. Tests + iter50 PASS.
+
+### Next P0/P1 backlog (post this session)
+- **P0: DB backup strategy** (see MONDAY_LAUNCH_QUESTIONS.md §G — needs frequency/
+  retention/destination decision before go-live; sane default = nightly on-disk gz JSON
+  dumps + admin "Download Backup" button until SharePoint lands).
+- **P1: Per-component validation badges** (Multi-Part — amber on missing dims/qty/etc.).
+- **P2: Saved-quote categorization & filters** in Load Quote modal (quote type / customer /
+  project name / status).
+- **P2/P3: Phase 5 — Ignition customer sync (mocked today), SharePoint PDF archive,
+  Cover Letter note field, Admin approval-workflow governance.**

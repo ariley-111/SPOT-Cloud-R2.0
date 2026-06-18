@@ -2,6 +2,38 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Async RFQ parsing (502 timeout fix) + Internal Cost Report port ✅
+**Async parse (P0 — fixes 502/520 on large CADs)**
+- Anthropic Opus parses of large CAD files run ~120s, exceeding the 60s K8s ingress
+  idle-timeout → spurious 502/520 even though the upstream call eventually succeeds.
+- Refactored `routes/parser.py`: extracted `_prepare_content()` (reads+persists uploads,
+  builds the Anthropic content payload — fast, runs inside the request) and
+  `_run_parse_and_log()` (the slow Anthropic call + usage logging) as shared helpers.
+- New `POST /api/parser/parse-rfq-async` → reads/persists files, inserts a `parser_jobs`
+  doc, spawns `asyncio.create_task(_run_parse_job)`, returns `{job_id, status:'pending'}`
+  with HTTP 202 immediately. New `GET /api/parser/jobs/{job_id}` → `{status: pending|done
+  |error, result, error, status_code}`. Legacy sync `POST /parse-rfq` kept for compat.
+- `parser_jobs` collection (`db.py` COL_PARSER_JOBS) + TTL index on `created_at`
+  (expireAfterSeconds=86400) created at server startup → jobs auto-purge after 24h.
+- Frontend `api/spot.js`: `parseRfqAsync`, `getParseJob`, `parseRfqPolling` (submit +
+  3s poll loop, 10-min ceiling). `FilesSec.runParseDirect` now calls `parseRfqPolling`;
+  the existing inline "PARSING RFQ" pill shows during polling; Review modal opens on done.
+- Tests: `tests/test_parser_async.py` (6/6). Iter49 frontend+backend 100% PASS.
+
+**Internal Cost Report modal (P0 — legacy parity port of spot_r1_5.jsx L8021-8252)**
+- Rebuilt `CostReportModal.jsx` from a flat-table stub to full legacy parity: summary bar
+  (FOB / Freight / Prepress / Pricing), one detail card per component with the 17-column
+  table (Qty·Sheets·MSF·Sheet·Route·Material·Print·Cutter·Finish·Frt·OH·Tot Mfg·$/MSF·
+  Sell·S/MSF·GM%·GM$), and a Kit Rollup table for Multi-Part 2+ components (Set Qty·
+  Components·Total Cost·Charges·Total Sell·GM$·GM%·Price/Set when Matched Set). Print button.
+- Backend `engine_routes.py`: componentPricing `rows_out` now surfaces
+  matTotal/matMakeready/printDirect/cutterDirect/saberCost/assemblyCost/overhead/sheetsReq
+  (needed for the per-component column breakdown); `board_spec_view` now carries
+  printReq/printMode/printSides for the card header.
+- Tests: `tests/test_cost_report_fields.py` (4/4). Iter50 frontend Simple + Multi-Part
+  (with Kit Rollup) 100% PASS.
+
+
 ### 2026-06-18 — Parser refinements: orientation, strip, liners, metric, .xls ✅
 - **Corrugate/grain orientation**: `oneUpW` is now defined as the corrugate-direction
   dimension. Determination priority: explicit "C" mark → grain/corr text (vert/horiz/
