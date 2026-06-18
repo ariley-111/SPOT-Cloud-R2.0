@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -17,6 +18,36 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 # Process-wide semaphore: UTS returns HTTP 500 if multiple rateestimate calls
 # arrive concurrently on the same auth session, so we funnel them one-at-a-time.
 _UTS_LOCK = asyncio.Lock()
+
+# Short-TTL result cache keyed by (destZip, weight, class). UTS rates don't move
+# minute-to-minute, so this (a) dedups identical shipments within a large batch —
+# many components/tiers of a matched set resolve to the same weight+ZIP — and
+# (b) makes re-running "Update All Rates" / reopening the dashboard instant.
+# Exact weights preserved (key rounded to 3 decimals only to absorb float noise).
+_UTS_CACHE: Dict[tuple, tuple] = {}      # key -> (expiry_ts, result)
+_UTS_CACHE_TTL = 900.0                    # 15 minutes
+
+def _uts_cache_key(dest_zip: str, weight_lbs: float, freight_class: str) -> tuple:
+    return (str(dest_zip).strip(), round(float(weight_lbs), 3), str(freight_class))
+
+def _uts_cache_get(key: tuple):
+    hit = _UTS_CACHE.get(key)
+    if hit and hit[0] > time.time():
+        return hit[1]
+    if hit:
+        _UTS_CACHE.pop(key, None)
+    return None
+
+def _uts_cache_put(key: tuple, result: Dict[str, Any]) -> None:
+    # Light pruning to bound memory.
+    if len(_UTS_CACHE) > 2000:
+        now = time.time()
+        for k in [k for k, v in _UTS_CACHE.items() if v[0] <= now]:
+            _UTS_CACHE.pop(k, None)
+        if len(_UTS_CACHE) > 2000:
+            _UTS_CACHE.clear()
+    _UTS_CACHE[key] = (time.time() + _UTS_CACHE_TTL, result)
+
 
 from models.schemas import User
 from routes.auth import get_current_user
@@ -147,9 +178,21 @@ async def _uts_rate_estimate(dest_zip: str, weight_lbs: float, freight_class: st
     """Verbatim port of legacy utsRateEstimate() — calls UTS /v1/rateestimate.
     Serializes all UTS calls behind a process-wide asyncio.Lock — concurrent
     calls were observed returning HTTP 500 (UTS appears to reject parallel
-    requests on the same auth session)."""
+    requests on the same auth session). A short-TTL cache dedups identical
+    (ZIP, weight, class) shipments so large batches & re-quotes avoid redundant
+    ~10s UTS round-trips."""
+    key = _uts_cache_key(dest_zip, weight_lbs, freight_class)
+    cached = _uts_cache_get(key)
+    if cached is not None:
+        return {**cached, "cached": True}
     async with _UTS_LOCK:
-        return await _uts_rate_estimate_inner(dest_zip, weight_lbs, freight_class)
+        # Re-check under the lock: a concurrent caller may have just populated it.
+        cached = _uts_cache_get(key)
+        if cached is not None:
+            return {**cached, "cached": True}
+        res = await _uts_rate_estimate_inner(dest_zip, weight_lbs, freight_class)
+    _uts_cache_put(key, res)
+    return res
 
 
 async def _uts_rate_estimate_inner(dest_zip: str, weight_lbs: float, freight_class: str = "70") -> Dict[str, Any]:
