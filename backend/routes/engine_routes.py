@@ -793,6 +793,9 @@ async def calculate_multi_part(
             "oneUpW":       ist.get("oneUpW") or "",
             "oneUpL":       ist.get("oneUpL") or "",
             "custIdent":    item.get("custIdent") or ist.get("custIdent") or "",
+            "printReq":     ist.get("printReq") or "Yes",
+            "printMode":    ist.get("printMode") or "Satin",
+            "printSides":   ist.get("printSides") or "1-Sided",
         }
 
         # Determine the qty list for this component
@@ -896,6 +899,17 @@ async def calculate_multi_part(
                 "dieBase": float(r.get("dieBase") or 0),
                 "dieAutoApplied": bool(r.get("dieAutoApplied")),
                 "stripCost": float(r.get("stripCost") or 0),
+                # Cost Report (internal) column breakdown — legacy spot_r1_5.jsx
+                # cost-report parity. Surfaced per-row so the Cost Report modal
+                # can render Material/Print/Cutter/Finish/OH columns per component.
+                "matTotal": float(r.get("matTotal") or 0),
+                "matMakeready": float(r.get("matMakeready") or 0),
+                "printDirect": float(r.get("printDirect") or 0),
+                "cutterDirect": float(r.get("cutterDirect") or 0),
+                "saberCost": float(r.get("saberCost") or 0),
+                "assemblyCost": float(r.get("assemblyCost") or 0),
+                "overhead": float(r.get("overhead") or 0),
+                "sheetsReq": float(r.get("sheetsReq") or 0),
                 "prepressLineCost": float(r.get("prepressLineCost") or 0),
                 "miscLineCost": float(r.get("miscLineCost") or 0),
                 "sellTotal": sell_total
