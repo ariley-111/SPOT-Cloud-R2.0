@@ -891,8 +891,16 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
               onChange={(e) => setMisc(mi, { name: e.target.value })}
               style={{ flex: 1, fontSize: 11, padding: "3px 6px" }} />
             {mc.treatment !== "None" && (
-              <Num value={mc.cost} onChange={(v) => setMisc(mi, { cost: v })} step="0.01" min="0"
-                style={{ width: 60, padding: "3px 6px", fontSize: 11 }} />
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                <Num value={mc.cost} onChange={(v) => setMisc(mi, { cost: v })} step="0.01" min="0"
+                  style={{ width: 60, padding: "3px 6px", fontSize: 11 }} />
+                {qtyTiers.length > 1 && (
+                  <span style={{ fontSize: 8, color: "var(--spot-text3)", lineHeight: 1.1,
+                    marginTop: 1, textAlign: "right", maxWidth: 60 }}>
+                    applies to all qtys
+                  </span>
+                )}
+              </div>
             )}
             <span onClick={() => rmMisc(mi)} data-testid={`misc-rm-${mi}`}
               style={{ fontSize: 16, fontWeight: 700, color: "var(--spot-err)", cursor: "pointer", padding: "0 4px" }}>×</span>
@@ -907,10 +915,6 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
               cost above. Only shown for multi-qty quotes. */}
           {mc.treatment !== "None" && qtyTiers.length > 1 && (
             <div style={{ marginTop: 3, paddingLeft: 2 }} data-testid={`misc-perqty-${mi}`}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--spot-text3)",
-                textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>
-                Per-qty $ (blank = ${Number(mc.cost || 0).toFixed(2)})
-              </div>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {qtyTiers.map((t) => (
                   <div key={t.i} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
