@@ -2,6 +2,25 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Parser refinements: orientation, strip, liners, metric, .xls ✅
+- **Corrugate/grain orientation**: `oneUpW` is now defined as the corrugate-direction
+  dimension. Determination priority: explicit "C" mark → grain/corr text (vert/horiz/
+  long/short) → flute picture on CAD → DEFAULT (blank-size only) = Width is corrugate.
+- **Center holes → stripping**: interior cut-outs auto-set `handStripping="Yes"` +
+  `strippingComplexity="Standard"` (placeholder) with a confirm ask. (Fixed field
+  names to match the engine — were wrongly `stripReq`/`stripDifficulty`.)
+- **Liner detection** broadened: many more synonyms/abbreviations (WT/MW/BW/CCK/etc.),
+  weight-prefix overrides, single-vs-both-side rules, never emit literal "Kraft".
+- **Metric → imperial**: detect mm/cm and CONVERT to inches (÷25.4 / ÷2.54), populate
+  oneUpW/L/D; ask only confirms units. Forbidden to defer with "divide by 25.4" when
+  the number is legible. Verified on the Amon Ra CAD: metric correctly detected
+  (dims left null only because that 32-part overview sheet was illegible per-part).
+- **.xls support**: legacy binary Excel now read via `xlrd` (openpyxl can't); both the
+  RFQ parse path and the file-preview path handle .xls. `.xlsx`/`.xlsm` unchanged.
+- NOTE: large PDFs still 502 at the 60s proxy limit (separate P1 async-parse backlog);
+  parse completed in ~120s when called direct.
+
+
 ### 2026-06-18 — Fix: frozen/legacy-pricing guard inverted after mid-session activation ✅
 - **Symptom (prod)**: after activating a new board-pricing version, the frozen
   guard fired on NEW active-priced quotes and NOT on old/inactive ones — backwards.

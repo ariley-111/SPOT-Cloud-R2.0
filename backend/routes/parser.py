@@ -152,6 +152,31 @@ def _extract_xlsx_text(content: bytes, fname: str) -> str:
         return f"<unable to read .xlsx: {e}>"
 
 
+def _extract_xls_text(content: bytes, fname: str) -> str:
+    """Dump every cell from every sheet of a LEGACY binary .xls (BIFF) workbook.
+
+    openpyxl only reads the .xlsx (OOXML) format and raises on old .xls files,
+    so legacy Excel attachments were failing. xlrd reads the BIFF .xls format.
+    """
+    try:
+        import xlrd
+        book = xlrd.open_workbook(file_contents=content)
+        out: List[str] = []
+        for sheet in book.sheets():
+            out.append(f"---- SHEET: {sheet.name} ----")
+            for r in range(sheet.nrows):
+                vals = []
+                for cell in sheet.row(r):
+                    v = cell.value
+                    vals.append("" if v is None else (str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)))
+                if any(v.strip() for v in vals):
+                    out.append("\t".join(vals))
+            out.append("")
+        return "\n".join(out)
+    except Exception as e:
+        return f"<unable to read .xls — recommend re-sending as .xlsx or PDF: {e}>"
+
+
 def _extract_docx_text(content: bytes, fname: str) -> str:
     """Pull paragraphs + table cells from a .docx so Claude can read RFQ Word documents."""
     try:
@@ -632,7 +657,13 @@ async def parse_rfq(
                 "source": {"type": "base64", "media_type": media_type, "data": b64},
             })
             file_summary.append({"name": fname, "type": "image", "size": size})
-        elif (fname or "").lower().endswith((".xlsx", ".xls")):
+        elif (fname or "").lower().endswith(".xls"):
+            # Legacy binary Excel (BIFF) — openpyxl can't read it; use xlrd.
+            text = _extract_xls_text(content, fname)
+            content_parts.append({"type": "text", "text": f"SPREADSHEET ({fname}):\n\n{text[:80000]}"})
+            file_summary.append({"name": fname, "type": "xls", "size": size})
+
+        elif (fname or "").lower().endswith((".xlsx", ".xlsm")):
             # Spreadsheets — extract per-sheet cell values as plain text. Excel is
             # how some customers send RFQ qty/spec tables.
             text = _extract_xlsx_text(content, fname)
@@ -860,8 +891,23 @@ def _build_preview_payload(filename: str, mime: str, raw: bytes) -> Dict[str, An
         except Exception as e:
             return {**meta, "kind": "binary", "data": f"Could not render docx: {e}"}
 
-    # Excel (.xlsx / .xls) — first 50 rows of every sheet as table data
-    if ext in {".xlsx", ".xlsm", ".xls"}:
+    # Legacy binary Excel (.xls) — openpyxl can't read BIFF; use xlrd.
+    if ext == ".xls":
+        try:
+            import xlrd
+            book = xlrd.open_workbook(file_contents=raw)
+            sheets = []
+            for sh in book.sheets():
+                rows = []
+                for ri in range(min(sh.nrows, 50)):
+                    rows.append(["" if c.value is None else str(c.value) for c in sh.row(ri)])
+                sheets.append({"name": sh.name, "rows": rows, "truncated": sh.nrows > 50})
+            return {**meta, "kind": "sheet", "data": {"sheets": sheets}}
+        except Exception as e:
+            return {**meta, "kind": "binary", "data": f"Could not render xls: {e}"}
+
+    # Excel (.xlsx / .xlsm) — first 50 rows of every sheet as table data
+    if ext in {".xlsx", ".xlsm"}:
         try:
             from io import BytesIO
             import openpyxl as _xl
