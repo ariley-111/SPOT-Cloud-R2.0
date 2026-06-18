@@ -30,3 +30,4 @@ COL_SHEETS = "sheet_library"           # Admin-managed sheet adds / edits / disa
 COL_BOM_TEMPLATES = "bom_templates"    # Personal + team BOM templates
 COL_PARSER_FILES = "parser_files"      # Saved raw uploads — metadata + path; lifetime = quote lifetime
 COL_PRICING_VERSIONS = "pricing_versions"  # Versioned board-supplier pricing snapshots (base_matrix etc.)
+COL_PARSER_JOBS = "parser_jobs"        # Async RFQ parse jobs — status + result; TTL-purged after 24h

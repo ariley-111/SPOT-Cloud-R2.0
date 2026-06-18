@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS
+from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS, COL_PARSER_JOBS
 from models.schemas import User
 from routes.auth import get_current_user
 from parser_knowledge import build_knowledge_prompt, EXTRACTION_INSTRUCTIONS
@@ -424,36 +424,21 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
     }
 
 
-@router.post("/parse-rfq")
-async def parse_rfq(
-    files: List[UploadFile] = File(default=[]),
-    email_body: Optional[str] = Form(default=None),
-    notes: Optional[str] = Form(default=None),
-    customer_code: Optional[str] = Form(default=None),
-    customer_name: Optional[str] = Form(default=None),
-    est_initials: Optional[str] = Form(default=None),
-    quote_id: Optional[str] = Form(default=None),
-    u: User = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """Parse one or more RFQ attachments + optional email body into a structured estimate.
+async def _prepare_content(
+    files: List[Any],
+    email_body: Optional[str],
+    notes: Optional[str],
+    persist_for: Optional[str],
+    user_email: str,
+):
+    """Read + persist uploads, expand zip/email, and build the Anthropic
+    content payload. Runs INSIDE the HTTP request (fast — no Anthropic call)
+    so UploadFile streams are consumed before the request returns.
 
-    Accepts PDF, PNG, JPEG, WebP, GIF, plain text, .zip (members extracted),
-    .eml/.msg (body + attachments extracted). Each file becomes a content
-    block; email body (if provided) becomes a text block. Output matches the
-    legacy {parsed, sources, method, asks, confidence} contract.
-
-    If `quote_id` is provided (the active quote/draft id), every uploaded raw
-    file is persisted via services.parser_files.save_parser_file so the
-    estimator can re-download / re-open the source documents later. Lifetime
-    is tied to the quote — purge_quote_files runs on quote deletion.
+    Returns (content_parts, file_summary, persisted_files).
     """
-    if not files and not email_body and not notes:
-        raise HTTPException(400, "Must provide at least one file or email_body")
-
     # Lazy import: avoid mongo import explosion when running pytest in isolation.
     from services.parser_files import save_parser_file
-    persist_for = (quote_id or "").strip() or None
-    user_email = getattr(u, "email", "") or getattr(u, "id", "") or ""
 
     content_parts: List[Dict[str, Any]] = []
     file_summary: List[Dict[str, Any]] = []
@@ -697,13 +682,28 @@ async def parse_rfq(
             content_parts.append({"type": "text", "text": f"ATTACHMENT ({fname}):\n\n{text[:50000]}"})
             file_summary.append({"name": fname, "type": "text", "size": size})
 
-    # ─── Call Anthropic (with usage logging) ────────────────────────
+    return content_parts, file_summary, persisted_files
+
+
+async def _run_parse_and_log(
+    content_parts: List[Dict[str, Any]],
+    file_summary: List[Dict[str, Any]],
+    persisted_files: List[Dict[str, Any]],
+    *,
+    user_email: str,
+    est_initials: Optional[str],
+    customer_code: Optional[str],
+    customer_name: Optional[str],
+) -> Dict[str, Any]:
+    """Call Anthropic, log usage (success + failure), and return the client
+    payload. Shared by the synchronous endpoint and the async job worker.
+    Re-raises HTTPException after logging the failure row.
+    """
     try:
         result = await _call_anthropic(content_parts)
-        # Log usage row — success path
         u_usage = result.get("usage") or {}
         await _usage.log_parse(
-            user_email=u.email,
+            user_email=user_email,
             est_initials=est_initials,
             customer_code=customer_code,
             customer_name=customer_name,
@@ -717,9 +717,8 @@ async def parse_rfq(
             success=True,
         )
     except HTTPException as e:
-        # Log usage row — failure path (no cost; record the error for visibility)
         await _usage.log_parse(
-            user_email=u.email,
+            user_email=user_email,
             est_initials=est_initials,
             customer_code=customer_code,
             customer_name=customer_name,
@@ -736,6 +735,158 @@ async def parse_rfq(
     result.pop("_call_cost_usd", None)
     result.pop("_resolved_model", None)
     return {**result, "files": file_summary, "persistedFiles": persisted_files}
+
+
+@router.post("/parse-rfq")
+async def parse_rfq(
+    files: List[UploadFile] = File(default=[]),
+    email_body: Optional[str] = Form(default=None),
+    notes: Optional[str] = Form(default=None),
+    customer_code: Optional[str] = Form(default=None),
+    customer_name: Optional[str] = Form(default=None),
+    est_initials: Optional[str] = Form(default=None),
+    quote_id: Optional[str] = Form(default=None),
+    u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Synchronous parse — kept for small RFQs + backwards compatibility.
+
+    Accepts PDF, PNG, JPEG, WebP, GIF, plain text, .zip (members extracted),
+    .eml/.msg (body + attachments extracted). Output matches the legacy
+    {parsed, sources, method, asks, confidence} contract.
+
+    NOTE: large CAD files can exceed the 60s K8s ingress timeout here — the
+    frontend uses POST /parse-rfq-async + GET /jobs/{id} polling for those.
+    """
+    if not files and not email_body and not notes:
+        raise HTTPException(400, "Must provide at least one file or email_body")
+
+    persist_for = (quote_id or "").strip() or None
+    user_email = getattr(u, "email", "") or getattr(u, "id", "") or ""
+
+    content_parts, file_summary, persisted_files = await _prepare_content(
+        files, email_body, notes, persist_for, user_email,
+    )
+    return await _run_parse_and_log(
+        content_parts, file_summary, persisted_files,
+        user_email=u.email, est_initials=est_initials,
+        customer_code=customer_code, customer_name=customer_name,
+    )
+
+
+# ─── Async parse job (2026-06-18) ──────────────────────────────────────
+# Large CAD PDFs make the Anthropic Opus call run ~120s — well past the 60s
+# K8s ingress idle-timeout, which returns a spurious 502/520 even though the
+# upstream parse eventually succeeds. Solution: submit reads + persists the
+# files INSIDE the request (fast), then runs the slow Anthropic call as an
+# asyncio background task, recording status in the parser_jobs collection.
+# The frontend polls GET /jobs/{id} every ~3s. Jobs TTL-purge after 24h.
+
+async def _run_parse_job(
+    job_id: str,
+    content_parts: List[Dict[str, Any]],
+    file_summary: List[Dict[str, Any]],
+    persisted_files: List[Dict[str, Any]],
+    *,
+    user_email: str,
+    est_initials: Optional[str],
+    customer_code: Optional[str],
+    customer_name: Optional[str],
+) -> None:
+    """Background worker — runs the Anthropic call and writes the outcome to
+    the parser_jobs collection. Never raises (errors are persisted)."""
+    try:
+        result = await _run_parse_and_log(
+            content_parts, file_summary, persisted_files,
+            user_email=user_email, est_initials=est_initials,
+            customer_code=customer_code, customer_name=customer_name,
+        )
+        await db[COL_PARSER_JOBS].update_one(
+            {"job_id": job_id},
+            {"$set": {"status": "done", "result": result,
+                      "finished_at": datetime.now(timezone.utc).isoformat()}},
+        )
+    except HTTPException as e:
+        await db[COL_PARSER_JOBS].update_one(
+            {"job_id": job_id},
+            {"$set": {"status": "error",
+                      "error": str(e.detail), "status_code": e.status_code,
+                      "finished_at": datetime.now(timezone.utc).isoformat()}},
+        )
+    except Exception as e:  # pragma: no cover — defensive
+        logger.exception(f"parse job {job_id} crashed")
+        await db[COL_PARSER_JOBS].update_one(
+            {"job_id": job_id},
+            {"$set": {"status": "error", "error": f"Internal parser error: {e}",
+                      "status_code": 500,
+                      "finished_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+
+@router.post("/parse-rfq-async", status_code=202)
+async def parse_rfq_async(
+    files: List[UploadFile] = File(default=[]),
+    email_body: Optional[str] = Form(default=None),
+    notes: Optional[str] = Form(default=None),
+    customer_code: Optional[str] = Form(default=None),
+    customer_name: Optional[str] = Form(default=None),
+    est_initials: Optional[str] = Form(default=None),
+    quote_id: Optional[str] = Form(default=None),
+    u: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Submit an RFQ parse as a background job. Reads + persists the uploads
+    inside the request (fast), then kicks off the slow Anthropic call as an
+    asyncio task and returns a job_id immediately (HTTP 202). Poll
+    GET /jobs/{job_id} for the result."""
+    if not files and not email_body and not notes:
+        raise HTTPException(400, "Must provide at least one file or email_body")
+
+    persist_for = (quote_id or "").strip() or None
+    user_email = getattr(u, "email", "") or getattr(u, "id", "") or ""
+
+    # Read + persist files + build content payload while the streams are open.
+    content_parts, file_summary, persisted_files = await _prepare_content(
+        files, email_body, notes, persist_for, user_email,
+    )
+
+    import uuid as _uuid
+    job_id = _uuid.uuid4().hex
+    await db[COL_PARSER_JOBS].insert_one({
+        "job_id": job_id,
+        "status": "pending",
+        "owner": u.email,
+        "quote_id": persist_for,
+        "files": file_summary,
+        "persistedFiles": persisted_files,
+        "created_at": datetime.now(timezone.utc),  # TTL anchor (BSON date)
+    })
+
+    # Fire-and-forget background task on the running event loop.
+    import asyncio
+    asyncio.create_task(_run_parse_job(
+        job_id, content_parts, file_summary, persisted_files,
+        user_email=u.email, est_initials=est_initials,
+        customer_code=customer_code, customer_name=customer_name,
+    ))
+
+    return {"job_id": job_id, "status": "pending",
+            "files": file_summary, "persistedFiles": persisted_files}
+
+
+@router.get("/jobs/{job_id}")
+async def get_parse_job(job_id: str, u: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Poll an async parse job. Returns {status: pending|done|error, ...}.
+    On done, `result` carries the full {parsed, sources, method, asks,
+    confidence, files, persistedFiles} payload. On error, `error` +
+    `status_code` describe the failure."""
+    doc = await db[COL_PARSER_JOBS].find_one({"job_id": job_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Parse job not found (may have expired)")
+    # created_at is a BSON date used only for the TTL index — drop it.
+    doc.pop("created_at", None)
+    return doc
+
+
+
 
 
 # ─── Parser file storage management (2026-06-12) ─────────────────────────

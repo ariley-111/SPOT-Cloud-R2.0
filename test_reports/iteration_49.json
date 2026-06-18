@@ -1,0 +1,51 @@
+{
+  "summary": "PASS — Async RFQ parser job+polling flow verified end-to-end. Backend: 6/6 pytest tests pass (async submit returns 202 with job_id+pending+files+persistedFiles; GET /jobs/{id} transitions pending→done in ~13s with all required result keys; unknown job_id returns 404; empty submit returns 400 on both async and legacy sync endpoints; legacy sync POST /parse-rfq still works and returns identical shape). Frontend: logged in as admin, uploaded a small 1-line RFQ via the hidden files-browse-input, clicked Build Estimate; the parser-inline-spinner appeared, 5 GET /jobs/{id} polls fired at ~3s each (200 OK), then the parse-review-modal auto-opened showing Method M1 / Confidence 45%, and the spinner hid as expected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "backend_pytest": {
+      "file": "/app/backend/tests/test_parser_async.py",
+      "passed": 6, "failed": 0, "duration_s": 28.26,
+      "cases": [
+        "test_parse_rfq_async_returns_202 — 202 + {job_id, status:'pending', files, persistedFiles} ✓",
+        "test_async_job_completes_with_expected_shape — pending→done, result has parsed/sources/method/asks/confidence/files/persistedFiles ✓",
+        "test_get_unknown_job_returns_404 ✓",
+        "test_async_empty_submit_returns_400 ✓",
+        "test_legacy_sync_parse_still_works — same result shape as async ✓",
+        "test_sync_empty_submit_returns_400 ✓"
+      ]
+    },
+    "frontend_ui_flow": {
+      "login": "admin@standardprinting.com via /api/auth/login → 200, redirected to /",
+      "files_section": "sec-files visible by default; default draft tab open",
+      "upload": "set_input_files on hidden files-browse-input with 56-byte rfq.txt — file staged, Build Estimate enabled",
+      "build_estimate_click": "btn-build-estimate clicked (enabled, not in cached state)",
+      "spinner": "parser-inline-spinner appeared immediately (PASS)",
+      "network_trace": [
+        "202 POST /api/parser/parse-rfq-async",
+        "200 GET /api/parser/jobs/777f9b8181b54b94b2d6e23b42b8b45f (x5, ~3s apart)",
+        "200 GET /api/parser/budget (refreshed after success)"
+      ],
+      "modal": "parse-review-modal opened within ~15s of click — method='Method M1', confidence='Confidence 45%'",
+      "spinner_after_done": "hidden (busy=false) as expected"
+    }
+  },
+  "test_report_links": ["/app/backend/tests/test_parser_async.py", "/app/test_reports/pytest/iter49_parser_async.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "parser.py _run_parse_job correctly handles HTTPException and bare Exception, persisting status/error/status_code to parser_jobs — no unhandled crashes leak.",
+    "parse_rfq_async reads + persists files INSIDE the request before returning 202 (per design), so the UploadFile streams aren't consumed inside the background task — verified via 202 response carrying persistedFiles and TTL doc inserted before asyncio.create_task fires.",
+    "get_parse_job correctly projects out MongoDB _id and pops the BSON created_at TTL anchor before returning — no ObjectId serialization issue.",
+    "TTL index on parser_jobs.created_at (expireAfterSeconds=86400) created at server startup — verified by collection name COL_PARSER_JOBS='parser_jobs' in db.py.",
+    "Frontend FilesSec.runParseDirect cleanly resets parseResult/parserError before polling, opens the Review modal only on success, and refreshes saved files in the finally block (so files persist even on parser failure). UX is correct.",
+    "Minor (informational): if asyncio.create_task fires AFTER the response is sent but the worker hasn't started, a poll arriving within ~10ms of the 202 may see 'pending' before the Anthropic call even begins — this is harmless and matches the documented contract. No fix needed."
+  ],
+  "updated_files": ["/app/backend/tests/test_parser_async.py (new)"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (spinner + polling + modal + result fields all verified)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "Two pending+done parser_jobs docs were created during testing (job_id 777f9b8181b54b94b2d6e23b42b8b45f from UI + two from pytest). All will auto-purge in 24h via the TTL index. Two persisted RFQ files (rfq.txt) were attached to the test draft quote 74af98a7-631f-4641-8ec1-2416b927aeaa — left in place; they're tiny.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Async parser flow is stable. Test file at /app/backend/tests/test_parser_async.py runs in ~28s and is a good regression for any future parser changes. Frontend testids of interest: sec-files, files-browse-input (hidden, use set_input_files), btn-build-estimate (disabled until an RFQ-class file is staged), parser-inline-spinner (only visible while busy), parse-review-modal, parse-method, parse-confidence, parser-error. Login uses LoginPage testids: login-email-input/login-password-input/login-submit-btn — do NOT click entra-sso-btn (Entra creds are empty in preview and that endpoint returns 500).",
+  "rca of the issue": "N/A — no bugs found. The refactor from sync→async job+polling is correctly implemented: files are read inside the request (avoiding consumed-stream issues), TTL-indexed parser_jobs collection persists state, asyncio.create_task runs the Anthropic call on the event loop, GET /jobs/{id} returns the canonical result shape on done, and the frontend parseRfqPolling helper drives the 3s poll loop with the spinner+modal UX. End-to-end latency observed: ~13-16s for a 1-line RFQ."
+}

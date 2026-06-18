@@ -82,6 +82,13 @@ async def on_startup():
     from services.pricing_versions import ensure_initialized
     active_pv = await ensure_initialized()
     logger.info(f"Pricing versions initialized; active={active_pv}")
+    # Async parse jobs — TTL index purges completed/abandoned jobs after 24h.
+    from db import db as _dbj, COL_PARSER_JOBS
+    try:
+        await _dbj[COL_PARSER_JOBS].create_index("created_at", expireAfterSeconds=86400)
+        await _dbj[COL_PARSER_JOBS].create_index("job_id", unique=True)
+    except Exception as e:
+        logger.warning(f"parser_jobs index create skipped: {e}")
     # One-time admin role grants. Idempotent — only updates when role differs.
     from db import db as _db, COL_USERS
     admin_grants = ["rwalter@standardprinting.com"]

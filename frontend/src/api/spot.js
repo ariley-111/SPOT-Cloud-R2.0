@@ -191,6 +191,60 @@ export const parseRfq = (files, emailBody, notes, opts = {}) => {
     .then((r) => r.data);
 };
 
+// Async parse: submit returns a job_id immediately (HTTP 202); poll
+// getParseJob until status === "done" | "error". Used for large CAD files
+// whose Anthropic call exceeds the 60s ingress idle-timeout.
+export const parseRfqAsync = (files, emailBody, notes, opts = {}) => {
+  const fd = new FormData();
+  for (const f of files || []) fd.append("files", f);
+  if (emailBody) fd.append("email_body", emailBody);
+  if (notes) fd.append("notes", notes);
+  if (opts.customerCode) fd.append("customer_code", opts.customerCode);
+  if (opts.customerName) fd.append("customer_name", opts.customerName);
+  if (opts.estInitials)  fd.append("est_initials",  opts.estInitials);
+  if (opts.quoteId)      fd.append("quote_id",      opts.quoteId);
+  // Submit is fast (file read + persist only) — short timeout is fine.
+  return api
+    .post("/parser/parse-rfq-async", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    })
+    .then((r) => r.data);
+};
+export const getParseJob = (jobId) =>
+  api.get(`/parser/jobs/${encodeURIComponent(jobId)}`).then((r) => r.data);
+// Submit + poll loop. Resolves with the completed parse result payload, or
+// rejects with an Error carrying the backend detail on failure.
+export const parseRfqPolling = async (files, emailBody, notes, opts = {}) => {
+  const sub = await parseRfqAsync(files, emailBody, notes, opts);
+  const jobId = sub.job_id;
+  if (!jobId) throw new Error("No job_id returned from parser");
+  const POLL_MS = 3000;
+  const MAX_MS = 10 * 60 * 1000; // 10-minute ceiling
+  const start = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await new Promise((res) => setTimeout(res, POLL_MS));
+    let job;
+    try {
+      job = await getParseJob(jobId);
+    } catch (e) {
+      // Transient network/proxy blip — keep polling until the ceiling.
+      if (Date.now() - start > MAX_MS) throw e;
+      continue;
+    }
+    if (job.status === "done") return job.result;
+    if (job.status === "error") {
+      const err = new Error(job.error || "Parsing failed");
+      err.statusCode = job.status_code;
+      throw err;
+    }
+    if (Date.now() - start > MAX_MS) {
+      throw new Error("Parsing timed out — try splitting the RFQ into smaller files.");
+    }
+  }
+};
+
 export const sheetLibraryPriced = (body) =>
   api.post("/engine/sheet-library", body).then((r) => r.data);
 

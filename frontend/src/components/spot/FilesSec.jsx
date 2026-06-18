@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfq, listParserFiles, deleteParserFile, uploadParserFiles } from "../../api/spot";
+import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
 import FilePreviewModal from "./FilePreviewModal";
@@ -106,7 +106,7 @@ export default function FilesSec() {
     if (!rfqFiles || rfqFiles.length === 0 || busy) return;
     setBusy(true); setParserError(""); setParseResult(null);
     try {
-      const r = await parseRfq(rfqFiles, "", "", {
+      const r = await parseRfqPolling(rfqFiles, "", "", {
         customerCode: s.custCode || "",
         customerName: s.custName || "",
         estInitials:  s.estInitials || "",
