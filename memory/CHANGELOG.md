@@ -2,6 +2,27 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Blank `medium` → spurious Buy-Min warning 🐛✅
+**Symptom:** Parsed CADs with no medium spec left `medium` empty (not "None"). A
+board e.g. "200 B Kemi/Kla" then showed a **Buy-Min warning in preview** but
+**In-Stock in prod**. Manually re-selecting medium="None" fixed it.
+**Root cause:** stock-sheet matching compares the stocked sheet's `md=="None"`; an
+empty/null medium never matches → board forced to a custom mill order → Buy-Min.
+`build_board_spec` used `dict.get("medium","None")`, which only defaults on an
+ABSENT key — a parsed `""`/`null` slipped through.
+**Fixes (3 layers):**
+- `engine/runner.py`: `_canon_medium()` coerces ""/null/"none"/"kraft"/"n/a" → "None";
+  `_canon_field()` does the same for flute/grade/liners. Covers simple + multi-part +
+  manual + legacy-data paths (single chokepoint in build_board_spec).
+- `parser_knowledge.py`: medium MUST default to "None", never blank, unless an explicit
+  doublewall medium is called out.
+- `FilesSec.jsx` parse-import: coerce blank board fields on MP component apply so the UI
+  dropdowns + pricing are correct (not just calc).
+**Verified:** all medium variants now resolve `stockMode=True / buyMinActive=False`;
+explicit `33#` medium preserved. Tests: `test_medium_normalization.py` (8) + multi-part
++ matched-set parity = 25/25 pass.
+
+
 ### 2026-06-18 — Parser CAD dimension accuracy (metric/grain/resolution) 🐛✅
 **Symptom:** On a dense 32-component CAD ("C140631 Amon Ra Lobby Unit"), Top Header
 A/B parsed as 64.1×38.58 (one run) or raw mm `1830.1` with `oneUpW=null` (another),

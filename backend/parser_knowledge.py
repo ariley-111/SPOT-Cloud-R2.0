@@ -59,6 +59,7 @@ EMBEDDED_BOARD_LIBRARY = "\n".join([
     "**Outside liner options (canonical engine values):** None (=kraft), 42# Kla-White, 42# Kemi-Lite, 42# Bleached White, 33# Kla-White, 56# Kla-White. NEVER emit the string \"Kraft\" or \"42# Kraft\" — always emit \"None\" for kraft callouts (CAD says K, K/K, brown, kraft, plain → emit None).",
     "**Inside liner options:** same as outside, with None being the most common (= unbleached kraft, what most CADs spec as \"K\" or \"K/K\").",
     "**Medium options:** None, 26#, 33#, 35HPL#, 40#, 42# Bl",
+    "**Medium MUST default to the literal string \"None\" — NEVER leave it blank/null/empty.** Only emit a non-None medium when the CAD explicitly calls out a doublewall medium weight (e.g. a 'DW' grade with a 26#/33#/40# medium spec). Single-wall boards (the vast majority) have NO medium → emit medium=\"None\". Leaving medium unset/empty breaks stock-sheet matching and forces a spurious Buy-Min / custom-order warning, so an unspecified medium is ALWAYS \"None\", not blank.",
     "",
     "**Liner upgrade rules (engine `liner_upgrades`):**",
     "- 33# Kla-White: allowed on 175 / ECT 32 only",

@@ -445,9 +445,23 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
         // Per-item state: coerce numeric strings, default qtys array, etc.
         const itemQtys = Array.isArray(rawState.qtys) ? rawState.qtys.map(String) : [];
         while (itemQtys.length < 5) itemQtys.push("");
+        // Canonical board fields: a parser can emit "" / null (e.g. no medium
+        // on the CAD) which would overwrite the form default and break stock
+        // matching (blank medium ≠ stocked "None" → spurious Buy-Min). Coerce
+        // blanks back to the canonical defaults so dropdowns + pricing are right.
+        const _canon = (v, d) => (v == null || String(v).trim() === "" ? d : v);
+        const _canonMedium = (v) => {
+          const s = v == null ? "" : String(v).trim().toLowerCase();
+          return (s === "" || ["none", "null", "kraft", "n/a", "na"].includes(s)) ? "None" : v;
+        };
         const itemState = freshItemState({
           ...rawState,
           qtys: itemQtys.slice(0, 5),
+          flute: _canon(rawState.flute, "B"),
+          boardGrade: _canon(rawState.boardGrade, "200"),
+          outsideLiner: _canon(rawState.outsideLiner, "42# Kemi-Lite"),
+          insideLiner: _canon(rawState.insideLiner, "None"),
+          medium: _canonMedium(rawState.medium),
           itemDesc: raw.desc || rawState.itemDesc || `Item ${i + 1}`,
           boxStyle: rawState.boxStyle || "",
           custIdent: raw.custIdent || rawState.custIdent || "",

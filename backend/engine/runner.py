@@ -38,13 +38,35 @@ def build_asmp(rate_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any
     return {**ASMP_DEFAULTS, **(rate_overrides or {})}
 
 
+def _canon_field(v: Any, default: str) -> str:
+    """Coerce a missing/blank board-spec field to its canonical default.
+    A parsed payload can carry "" or null (not just an absent key), which
+    `dict.get(k, default)` does NOT catch — and an empty/variant value breaks
+    stock-sheet matching (e.g. medium "" never equals a stock sheet's "None"),
+    silently forcing a custom mill order + spurious Buy-Min warning."""
+    s = "" if v is None else str(v).strip()
+    if s == "":
+        return default
+    return v
+
+
+def _canon_medium(v: Any) -> str:
+    """Medium has no stocked layer unless an explicit doublewall medium is
+    called out. Treat blank / 'none' / 'kraft' / 'n/a' variants as 'None' so
+    single-wall boards always match their stocked sheet."""
+    s = "" if v is None else str(v).strip()
+    if s == "" or s.lower() in ("none", "null", "kraft", "n/a", "na"):
+        return "None"
+    return v
+
+
 def build_board_spec(json: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "flute": json.get("flute", "B"),
-        "boardGrade": json.get("boardGrade", "200"),
-        "outsideLiner": json.get("outsideLiner", "42# Kemi-Lite"),
-        "insideLiner": json.get("insideLiner", "None"),
-        "medium": json.get("medium", "None"),
+        "flute": _canon_field(json.get("flute"), "B"),
+        "boardGrade": _canon_field(json.get("boardGrade"), "200"),
+        "outsideLiner": _canon_field(json.get("outsideLiner"), "42# Kemi-Lite"),
+        "insideLiner": _canon_field(json.get("insideLiner"), "None"),
+        "medium": _canon_medium(json.get("medium")),
         "fscEnabled": bool(json.get("fscEnabled")),
         "fscFee": pn(json.get("fscFee", "25")),
         "kemiTariff": pn(json.get("kemiTariff", "2.50")),
