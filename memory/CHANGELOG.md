@@ -2,6 +2,20 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — MP-Individual fixes: per-qty misc per-tier + qty-row → economics ✅
+- **Bug 1**: Per-qty custom misc (e.g. Clips) only applied to qty 100. Root cause:
+  the MP-Individual per-component pricing path always priced each row at slot 0
+  (`use_slot=0`), so `_resolve_misc_per_slot` (and freightByQty) only ever read
+  slot 0. Fix (`engine_routes.py` ~L839): price each row at its REAL top-level
+  slot index. Now Clips = $57.50@qty100 / $345@qty200 (50/300 ×1.15).
+- **Bug 2**: Clicking a qty row inside a component's quote-table section didn't
+  update the right-rail Economics/Cost Buildup (it only set local state). Fix
+  (`QuoteTableSec.jsx` ComponentLayout `onSelectRow`): also `switchBomItem()` to
+  that component and `setField('selSlot', row.slotIdx)` so the panels reflect the
+  clicked component at the selected qty. Cross-component switching works too.
+- Verified iter48 — both PASS end-to-end on SA-260618-085911; regressions intact.
+
+
 ### 2026-06-18 — MP-Individual PDF per-qty Quote Summary (legacy parity) ✅
 - The MP-Individual Quote Preview/PDF summary previously lumped ALL component
   rows across ALL qtys into one "Items (base sell) / Quote Total" (~$7,490),
