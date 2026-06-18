@@ -1,5 +1,5 @@
 /* eslint-disable */
-import api from "./client";
+import api, { apiStatusBusy } from "./client";
 
 // ─── Auth ───────────────────────────────────────────────
 export const authLogin = (email, password) =>
@@ -216,32 +216,41 @@ export const getParseJob = (jobId) =>
 // Submit + poll loop. Resolves with the completed parse result payload, or
 // rejects with an Error carrying the backend detail on failure.
 export const parseRfqPolling = async (files, emailBody, notes, opts = {}) => {
-  const sub = await parseRfqAsync(files, emailBody, notes, opts);
-  const jobId = sub.job_id;
-  if (!jobId) throw new Error("No job_id returned from parser");
-  const POLL_MS = 3000;
-  const MAX_MS = 10 * 60 * 1000; // 10-minute ceiling
-  const start = Date.now();
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    await new Promise((res) => setTimeout(res, POLL_MS));
-    let job;
-    try {
-      job = await getParseJob(jobId);
-    } catch (e) {
-      // Transient network/proxy blip — keep polling until the ceiling.
-      if (Date.now() - start > MAX_MS) throw e;
-      continue;
+  // Keep the toolbar status pill solid for the entire async parse — the submit
+  // + per-poll requests are marked quiet in client.js, so this is the only
+  // driver of the "Anthropic · parsing RFQ" pill (no blinking on each poll).
+  const doneStatus = apiStatusBusy("Anthropic · parsing RFQ");
+  try {
+    const sub = await parseRfqAsync(files, emailBody, notes, opts);
+    const jobId = sub.job_id;
+    if (!jobId) throw new Error("No job_id returned from parser");
+    const POLL_MS = 3000;
+    const MAX_MS = 10 * 60 * 1000; // 10-minute ceiling
+    const start = Date.now();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      await new Promise((res) => setTimeout(res, POLL_MS));
+      let job;
+      try {
+        job = await getParseJob(jobId);
+      } catch (e) {
+        // Transient network/proxy blip — keep polling until the ceiling.
+        if (Date.now() - start > MAX_MS) throw e;
+        continue;
+      }
+      if (job.status === "done") { doneStatus(); return job.result; }
+      if (job.status === "error") {
+        const err = new Error(job.error || "Parsing failed");
+        err.statusCode = job.status_code;
+        throw err;
+      }
+      if (Date.now() - start > MAX_MS) {
+        throw new Error("Parsing timed out — try splitting the RFQ into smaller files.");
+      }
     }
-    if (job.status === "done") return job.result;
-    if (job.status === "error") {
-      const err = new Error(job.error || "Parsing failed");
-      err.statusCode = job.status_code;
-      throw err;
-    }
-    if (Date.now() - start > MAX_MS) {
-      throw new Error("Parsing timed out — try splitting the RFQ into smaller files.");
-    }
+  } catch (e) {
+    doneStatus(true);  // emit "err" so the pill clears (and flashes the failure)
+    throw e;
   }
 };
 
