@@ -837,10 +837,14 @@ async def calculate_multi_part(
                 set_qty_for_ful = (iq // pcs_per_set) if pcs_per_set > 0 else iq
                 r = _calc_fulfillment(item, slot_i, set_qty_for_ful, ful_margin, payload)
             else:
-                # Manufactured — run engine
-                # Build a 5-slot qtys array with `iq` at slot 0 (or matching slot)
-                item_qtys = ["", "", "", "", ""]
-                use_slot = 0
+                # Manufactured — run engine.
+                # Place `iq` at the REAL top-level slot index (slot_i) and price
+                # that slot, so per-slot resolutions (per-qty misc costByQty,
+                # freightByQty) pick the value for THIS quantity tier — not always
+                # slot 0. (Bug: per-qty Clips only applied to qty 100.)
+                n_slots = max(5, slot_i + 1)
+                item_qtys = ["" for _ in range(n_slots)]
+                use_slot = slot_i
                 item_qtys[use_slot] = str(iq)
                 item_payload = _build_item_payload(item, payload, item_qtys)
                 try:

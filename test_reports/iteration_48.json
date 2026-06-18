@@ -1,0 +1,90 @@
+{
+  "summary": "PASS — Both MP-Individual bugs fixed and verified end-to-end on SA-260618-085911 (Tavens, 2 components, qtys 100/200, Will-Call). Bug 1: per-qty Clips override now resolves PER TIER on Manufactured rows ($57.50@qty100 / $345.00@qty200 — DIFFERENT, not stuck on slot-0). Bug 2: clicking a qty row inside a component's quote-table section drives the global selSlot AND switches the active component, so the right-rail Economics and Cost Buildup panels update with the clicked row (qty + component + sell + cost + margin). Cross-component switching (Shoe Box) also works. Regression intact: per-component section header totals, Quote Summary table (per-qty), and Preview totals all reconcile to the cent.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "estimate_opened": "SA-260618-085911 (Tavens — TR-08411 Max Pack Shoe & Boot Boxes), MP / Individual / Per Item, qtys 100 & 200, FOB Will-Call. 2 components: 'Shoe Box (1 Shoe Dagger)' (itemIndex=0) and 'Boot Box 2' (itemIndex=1).",
+    "setup": "Boot Box 2 already had Clips misc charge (Line, flat=100). Reset per-qty inputs: misc-perqty-input-0-0=50, misc-perqty-input-0-1=300. Initial state of -0-1 was 100.00 (stale from earlier session); after fill+blur the engine recomputed cleanly.",
+    "bug1_per_tier_clips": {
+      "status": "PASS",
+      "boot_box_2_qty_table_rows": {
+        "qt-comp-1-row-0 (qty100)": "TOTAL $1,667.79 (= 1,610.29 base + 57.50 Clips)",
+        "qt-comp-1-row-1 (qty200)": "TOTAL $3,111.04 (= 2,766.04 base + 345.00 Clips)"
+      },
+      "differs_per_tier": true,
+      "no_flat_fallback_at_qty200": "qty200 NOT showing $115.00 (=100×1.15) — confirms slot_i indexing on Manufactured rows is correct",
+      "expected_per_request": {"qty100": "$57.50 (50×1.15)", "qty200": "$345.00 (300×1.15)"},
+      "preview_pdf_modal_by_type": {
+        "boot_box_2_qty100_total": "$1,667.79",
+        "boot_box_2_qty200_total": "$3,111.04"
+      }
+    },
+    "bug2_right_rail_econ_follows_clicked_row": {
+      "status": "PASS",
+      "click_boot_box_2_qty200_row": {
+        "economics_panel_header": "Economics · QTY 200",
+        "active_component_label": "Boot Box 2 — 200 pcs",
+        "metric-sell-total": "$2,766.04",
+        "econ_misc_inline": "clips: $345.00",
+        "econ_order_inline": "Order: $3,111.04",
+        "metric-gm-pct": "31.4%",
+        "metric-gm-dollar": "$869.13",
+        "metric-total-cost": "$1,896.91",
+        "qt-comp-1-sel-total_header": "@200: $3,111.04"
+      },
+      "click_boot_box_2_qty100_row": {
+        "economics_panel_header": "Economics · QTY 100",
+        "active_component_label": "Boot Box 2 — 100 pcs",
+        "metric-sell-total": "$1,610.29",
+        "econ_misc_inline": "clips: $57.50",
+        "econ_order_inline": "Order: $1,667.79",
+        "metric-gm-pct": "35.9%",
+        "qt-comp-1-sel-total_header": "@100: $1,667.79"
+      },
+      "switches_back_correctly": true
+    },
+    "bug2_cross_component_switch": {
+      "status": "PASS",
+      "click_shoe_box_qty200_row (qt-comp-0-row-1)": {
+        "economics_panel_header": "Economics · QTY 200",
+        "active_component_label": "Shoe Box (1 Shoe Dagger) — 200 pcs",
+        "metric-sell-total": "$1,976.27",
+        "metric-gm-pct": "36.1%",
+        "metric-total-cost": "$1,263.55",
+        "no_misc_lines": "Shoe Box has no misc charges — econ shows Freight: $0.00 · Order: $1,976.27 (correct)"
+      },
+      "active_component_changed": "From Boot Box 2 to Shoe Box (1 Shoe Dagger) — switchBomItem(c.itemIndex) call fires when itemIndex !== activeItemIdx"
+    },
+    "regression": {
+      "status": "PASS",
+      "per_component_header_totals": {
+        "boot_box_2_qty100_sel": "@100: $1,667.79 (incl clips)",
+        "boot_box_2_qty200_sel": "@200: $3,111.04 (incl clips)"
+      },
+      "quote_summary_table_per_qty": {
+        "tier_100": {"components": "$2,805.31", "price_per_set": "$28.05", "quote_total": "$2,805.31"},
+        "tier_200": {"components": "$5,087.31", "price_per_set": "$25.44", "quote_total": "$5,087.31"},
+        "math_check_qty100": "$1,137.51 (Shoe Box) + $1,667.79 (Boot Box incl Clips $57.50) = $2,805.30 ≈ $2,805.31 ✓",
+        "math_check_qty200": "$1,976.27 (Shoe Box) + $3,111.04 (Boot Box incl Clips $345.00) = $5,087.31 ✓",
+        "note": "Quote Summary now INCLUDES misc per-tier (was excluded in iter47). This resolves the visual asymmetry flagged in iter47 — sum of per-component TOTAL column now equals Quote Summary COMPONENTS/QUOTE TOTAL."
+      }
+    }
+  },
+  "test_report_links": ["/app/test_reports/iter48_preview.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "engine_routes.py (~L839) MP-Individual Manufactured branch correctly threads the REAL top-level slot index (use_slot=slot_i) and qty (item_qtys[slot_i]) into the per-component pricing, so _resolve_misc_per_slot resolves costByQty[slot_i] for each tier instead of always 0. Verified by-the-cent for slots 0/1.",
+    "QuoteTableSec.jsx ComponentLayout onSelectRow (~L749) correctly invokes switchBomItem(c.itemIndex) when the clicked component differs from activeItemIdx, then setField('selSlot', compRows[idx].slotIdx). This is exactly the data plumbing the right-rail Economics/Cost Buildup needs (RightDashboard reads s.selSlot + activeItemIdx).",
+    "RightDashboard.jsx itemResultWithLines merges componentPricing[activeItemIdx].rows[selSlot] line-charge fields (freightLine/dieLineCost/prepressLineCost/miscLineCost/sellTotal/miscLineItems) onto the per-component result so the panels show per-tier values including misc names (clips: $57.50 / $345.00). Verified: switching slot redraws the inline line items.",
+    "Quote Summary aggregator in PreviewPdfModal.jsx now reconciles with per-component TOTAL column (iter47 design-issue note resolved): qty100 = 2,805.31, qty200 = 5,087.31 match per-component sums exactly.",
+    "Minor (informational): React console warning 'mix shorthand and non-shorthand style properties' appears on row click. Not blocking; cosmetic style refactor opportunity in QuoteTableSec ComponentSubTable row style object."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (already verified per E1 — calculate-multi-part returns $57.50@slot0 / $345.00@slot1)", "frontend": "100% (all bug scenarios + regression PASS)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None — re-used existing saved estimate SA-260618-085911. The Clips per-qty input qty200 was reset from 100.00 → 300 during the test session (per the request spec). Did NOT click Save, so the persisted record is unchanged.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both MP-Individual bugs (per-qty misc per-tier + right-rail Economics/Cost Buildup follows clicked qty row) are fixed and stable. Key testids: qt-comp-{itemIndex}-row-{rowIdx} for the qty rows inside each component section, qt-comp-{itemIndex}-sel-total for the section header total, metric-sell-total/metric-gm-pct/metric-total-cost for econ readouts, economics-panel root. To re-verify: login admin → toolbar-load → Saved tab → search SA-260618-085911 → open → ensure Boot Box 2 has Clips misc 50/300 per qty → click qt-comp-1-row-1 and read metric-sell-total ($2,766.04) and inline 'clips: $345.00' → click qt-comp-1-row-0 → ($1,610.29 + clips $57.50) → click qt-comp-0-row-1 → confirm Shoe Box (1 Shoe Dagger) active at 200 pcs.",
+  "rca of the issue": "Bug 1 root cause: MP-Individual Manufactured per-component pricing loop in engine_routes.py priced every qty row at slot_index=0, so the runner's _resolve_misc_per_slot(miscCharges, 0) only ever returned costByQty[0]. Fix: pass the real loop index slot_i (and item_qtys[slot_i]) so each tier resolves its own override. Bug 2 root cause: ComponentSubTable row click only updated local selRowByComp state; the right rail reads s.selSlot + activeItemIdx so it never refreshed. Fix: onSelectRow now also calls switchBomItem(c.itemIndex) (when changing component) and setField('selSlot', compRows[idx].slotIdx). Both fixes verified to the cent — no regressions observed in section header totals, Quote Summary, or Preview PDF modal."
+}

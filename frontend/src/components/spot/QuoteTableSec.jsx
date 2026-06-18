@@ -746,7 +746,17 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
               <ComponentSubTable
                 comp={c}
                 selRowIdx={selRowIdx}
-                onSelectRow={(idx) => setSelRowByComp((p) => ({ ...p, [k]: idx }))}
+                onSelectRow={(idx) => {
+                  setSelRowByComp((p) => ({ ...p, [k]: idx }));
+                  // Drive the right-rail Economics & Cost Buildup: make THIS
+                  // component active and select its qty-row's slot so those
+                  // panels reflect this component at the chosen quantity.
+                  const slotIdx = (compRows[idx] || {}).slotIdx ?? idx;
+                  if (typeof switchBomItem === "function" && c.itemIndex !== activeItemIdx) {
+                    switchBomItem(c.itemIndex);
+                  }
+                  setField("selSlot", slotIdx);
+                }}
                 isRowExcluded={isRowExcluded}
                 toggleRowExclude={toggleRowExclude}
                 freightDisplayMode={
