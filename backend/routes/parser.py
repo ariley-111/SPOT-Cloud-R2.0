@@ -636,6 +636,33 @@ async def _prepare_content(
                 "source": {"type": "base64", "media_type": "application/pdf", "data": b64},
             })
             file_summary.append({"name": fname, "type": "pdf", "size": size})
+            # Large-format CAD sheets render at ~40 DPI under Anthropic's native
+            # PDF downsampling → dimension callouts become illegible. Attach
+            # high-DPI zoom tiles so the model can READ the exact numbers/flute.
+            try:
+                from services.pdf_tiles import render_pdf_tiles
+                tiles = render_pdf_tiles(content)
+            except Exception as _te:
+                logger.warning(f"pdf tiling failed for {fname}: {_te}")
+                tiles = []
+            if tiles:
+                content_parts.append({"type": "text", "text": (
+                    f"HIGH-RESOLUTION ZOOM TILES of the CAD sheet '{fname}' follow "
+                    f"({len(tiles)} tiles). They are OVERLAPPING zoomed sections of the SAME single "
+                    "sheet shown in the PDF above. Use these tiles to READ the small dimension-arrow "
+                    "numbers and flute/grain (Short Flute / Long Flute / flute-swatch) marks ACCURATELY "
+                    "— the full PDF is downsampled and its tiny callouts are unreliable. RULES: "
+                    "(1) Do NOT count or list components from the tiles — they overlap and one component "
+                    "may appear in two tiles; use the full PDF for the authoritative component list. "
+                    "(2) For each component, read BOTH overall dimension arrows from whichever tile shows "
+                    "them most clearly. (3) Any value > 120 is millimeters → divide by 25.4."
+                )})
+                for t in tiles:
+                    content_parts.append({"type": "text", "text": f"[{t['label']}]"})
+                    content_parts.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": t["b64"]},
+                    })
         elif media_type.startswith("image/"):
             content_parts.append({
                 "type": "image",

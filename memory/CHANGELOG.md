@@ -2,6 +2,31 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Parser CAD dimension accuracy (metric/grain/resolution) 🐛✅
+**Symptom:** On a dense 32-component CAD ("C140631 Amon Ra Lobby Unit"), Top Header
+A/B parsed as 64.1×38.58 (one run) or raw mm `1830.1` with `oneUpW=null` (another),
+vs truth 36.855×75.998 in (936×1930 mm). Non-deterministic, all wrong.
+**Root causes (3):**
+1. mm not converted — model left raw mm or eyeballed inches despite instructions.
+2. Only ONE dimension captured per component (oneUpW=null).
+3. "Short Flute" grain callout ignored ("no grain visible").
+4. **Underlying:** the CAD is a single 38.9×16.9in large-format sheet; Anthropic's
+   native PDF support downsamples it to ~1568px (~40 DPI) → dimension arrows ~3px →
+   illegible → misreads/guesses.
+**Fixes:**
+- `parser_knowledge.py` prompt hardening: HARD rule "any value >120 = mm, divide by
+  25.4, never emit raw >120 or null"; "READ BOTH dimension arrows (W and L)"; Short
+  Flute/Long Flute → which dim is oneUpW; explicit "Corrugation Direction"/"Corr Dir"/
+  "Flute Direction" field recognition (Vertical/Horizontal → oneUpW axis).
+- New `services/pdf_tiles.py` (PyMuPDF): renders large-format pages (>17in long edge)
+  at 150 DPI and slices into ≤16 overlapping ≤1456px tiles. `parser.py` attaches these
+  zoom tiles alongside the native PDF with guidance ("read numbers from tiles, count
+  components from the PDF"). PyMuPDF==1.27.2.3 added to requirements.
+**Verified:** re-parse of the same CAD → Top Header A/B now W=36.8504 L=75.9843 (✓,
+both dims, converted, Short-Flute orientation correct); all 32 components read both
+dims in inches. Tests: `tests/test_pdf_tiles.py` (4/4).
+
+
 ### 2026-06-18 — Async RFQ parsing (502 timeout fix) + Internal Cost Report port ✅
 **Async parse (P0 — fixes 502/520 on large CADs)**
 - Anthropic Opus parses of large CAD files run ~120s, exceeding the 60s K8s ingress
