@@ -689,17 +689,24 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
   const perJobFreight = jobTotals?.freightScope === "Per Job" ? Number(jobTotals.jobFreightCost || 0) : 0;
   const perJobPrepress = jobTotals?.prepressScope === "Per Job" ? Number(jobTotals.jobPrepressCost || 0) : 0;
 
-  let baseSell = 0, baseFrt = 0, baseDie = 0, basePrep = 0;
+  // ── Per-qty Quote Summary (legacy parity) ──────────────────────────────
+  // MP-Individual: each qty tier combines EVERY component priced at that qty
+  // (e.g. Shoe Box @100 + Boot Box @100), with the combined price/set and total.
+  const tierMap = new Map();
   componentPricing.forEach((c) => {
     (c.rows || []).forEach((r) => {
       if (isExcl(c.itemId, r.slotIdx)) return;
-      baseSell += Number(r.itemSell || 0);
-      baseFrt += Number(r.freightLine || 0);
-      baseDie += Number(r.dieLineCost || 0);
-      basePrep += Number(r.prepressLineCost || 0);
+      const q = Number(r.qty) || 0;
+      if (q <= 0) return;
+      const lineTotal = Number(r.itemSell || 0) + Number(r.freightLine || 0)
+        + Number(r.dieLineCost || 0) + Number(r.prepressLineCost || 0);
+      tierMap.set(q, (tierMap.get(q) || 0) + lineTotal);
     });
   });
-  const grandTotal = baseSell + baseFrt + baseDie + basePrep + perJobFreight + perJobPrepress;
+  const summaryTiers = [...tierMap.entries()].sort((a, b) => a[0] - b[0]).map(([qty, comp]) => {
+    const total = comp + perJobFreight + perJobPrepress;
+    return { qty, comp: total, perSet: qty > 0 ? total / qty : 0, total };
+  });
 
   return (
     <div data-testid="preview-mp-individual-sections">
@@ -759,7 +766,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
         );
       })}
 
-      {(perJobFreight > 0 || perJobPrepress > 0 || componentPricing.length > 1) && (
+      {summaryTiers.length > 0 && (
         <div data-testid="preview-job-totals" style={{
           marginTop: 12, padding: "10px 14px", borderRadius: 6,
           background: "#f9fafb", border: "1px solid #e5e7eb",
@@ -769,38 +776,37 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
             textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6,
           }}>Quote Summary</div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <tbody>
-              <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Items (base sell)</td>
-                <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(baseSell)}</td></tr>
-              {baseFrt > 0 && (
-                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Item Freight</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(baseFrt)}</td></tr>
-              )}
-              {baseDie > 0 && (
-                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Item Die</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(baseDie)}</td></tr>
-              )}
-              {basePrep > 0 && (
-                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Item Prepress</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(basePrep)}</td></tr>
-              )}
-              {perJobFreight > 0 && (
-                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Job Freight</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(perJobFreight)}</td></tr>
-              )}
-              {perJobPrepress > 0 && (
-                <tr><td style={{ padding: "3px 0", color: "#6b7280" }}>Per-Job Prepress</td>
-                  <td style={{ padding: "3px 0", textAlign: "right" }}>{fmtMoney(perJobPrepress)}</td></tr>
-              )}
-              <tr style={{ borderTop: "1px solid #d1d5db" }}>
-                <td style={{ padding: "6px 0 0", fontWeight: 700, color: "#1e40af" }}>Quote Total</td>
-                <td style={{ padding: "6px 0 0", textAlign: "right", fontWeight: 700,
-                  fontSize: 15, color: "#1e40af" }} data-testid="preview-grand-total">
-                  {fmtMoney(grandTotal)}
-                </td>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #d1d5db" }}>
+                <th style={thL}>Qty</th>
+                <th style={thS}>Components</th>
+                <th style={thS}>Price/Set</th>
+                <th style={{ ...thS, color: "#1e40af" }}>Quote Total</th>
               </tr>
+            </thead>
+            <tbody>
+              {summaryTiers.map((t, i) => (
+                <tr key={t.qty} style={{ borderBottom: "1px solid #e5e7eb",
+                  background: i % 2 === 0 ? "#fff" : "#f9fafb" }}
+                  data-testid={`preview-summary-tier-${t.qty}`}>
+                  <td style={{ padding: "6px 10px", fontWeight: 600 }}>{fmtInt(t.qty)}</td>
+                  <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtMoney(t.comp)}</td>
+                  <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{fmtMoney(t.perSet)}</td>
+                  <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700,
+                    fontSize: 14, color: "#1e40af" }} data-testid={`preview-summary-total-${t.qty}`}>
+                    {fmtMoney(t.total)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+          {(perJobFreight > 0 || perJobPrepress > 0) && (
+            <div style={{ marginTop: 6, fontSize: 10, color: "#6b7280", fontStyle: "italic" }}>
+              Includes job-level{perJobFreight > 0 ? ` freight ${fmtMoney(perJobFreight)}` : ""}
+              {perJobFreight > 0 && perJobPrepress > 0 ? " +" : ""}
+              {perJobPrepress > 0 ? ` prepress ${fmtMoney(perJobPrepress)}` : ""} per quantity.
+            </div>
+          )}
         </div>
       )}
     </div>

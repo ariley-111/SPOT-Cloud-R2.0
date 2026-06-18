@@ -1,0 +1,49 @@
+{
+  "summary": "PASS — Per-qty Quote Summary table in PreviewPdfModal MP-Individual correctly groups each component at each qty tier (legacy parity). Validated on SA-260618-085911 (Tavens, MP, Pricing=Individual, Will-Call, 2 components: 'Shoe Box (1 Shoe Dagger)' & 'Boot Box 2', qtys 100/200). The bottom 'QUOTE SUMMARY' renders a TABLE with columns QTY | COMPONENTS | PRICE/SET | QUOTE TOTAL and one row per qty tier (data-testid='preview-summary-tier-100' and '...-200'). The old single 'Items (base sell)' lump is gone. Per-component sections above the summary remain unchanged (regression intact).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PreviewPdfModal — Quote Preview", "issues": ["Per-component 'TOTAL' column includes misc charges (e.g., Boot Box @qty100 shows $1,725.29 incl. $115 Clips), but new Quote Summary 'COMPONENTS' sum at the same qty uses base sell + freight + die + prepress only (excludes misc/clips), so visual sum of per-component TOTAL cells does not equal Quote Summary COMPONENTS/QUOTE TOTAL. Spec values in the request match what is displayed ($2,747.81 ≈ $2,747.80, $4,742.31), but customers may notice the asymmetry on the printed PDF. Informational only — not a regression."]}
+    ]
+  },
+  "test_results": {
+    "estimate_opened": "SA-260618-085911 (Tavens — TR-08411 Max Pack Shoe & Boot Boxes), MP / Individual / Per Item, qtys 100 & 200, FOB Will-Call",
+    "preview_modal_loaded": true,
+    "per_component_sections_count": 2,
+    "per_component_headers": ["QTY", "EACH", "PER/M", "TOTAL"],
+    "per_component_rows_visible": {
+      "Shoe Box (1 Shoe Dagger)": {"qty100": {"each": "$11.3751", "perM": "$11,375.13", "total": "$1,137.51"}, "qty200": {"each": "$9.8813", "perM": "$9,881.33", "total": "$1,976.27"}},
+      "Boot Box 2":               {"qty100": {"each": "$16.1029", "perM": "$16,102.93", "total": "$1,725.29 (incl. $115 Clips)"}, "qty200": {"each": "$13.8302", "perM": "$13,830.21", "total": "$2,881.04 (incl. $115 Clips)"}}
+    },
+    "quote_summary_table": {
+      "header": "QUOTE SUMMARY",
+      "columns": ["QTY", "COMPONENTS", "PRICE/SET", "QUOTE TOTAL"],
+      "rows": [
+        {"testid_tier": "preview-summary-tier-100", "testid_total": "preview-summary-total-100", "qty": 100, "components": "$2,747.81", "price_per_set": "$27.48", "quote_total": "$2,747.81"},
+        {"testid_tier": "preview-summary-tier-200", "testid_total": "preview-summary-total-200", "qty": 200, "components": "$4,742.31", "price_per_set": "$23.71", "quote_total": "$4,742.31"}
+      ]
+    },
+    "expected_vs_actual": {
+      "qty100_total": {"expected": "≈ $2,747.80 (1137.51 + 1610.29)", "actual": "$2,747.81", "pass": true},
+      "qty200_total": {"expected": "$4,742.31 (1976.27 + 2766.04)", "actual": "$4,742.31", "pass": true},
+      "qty100_price_per_set": {"expected": "≈ $27.48", "actual": "$27.48", "pass": true},
+      "qty200_price_per_set": {"expected": "≈ $23.71", "actual": "$23.71", "pass": true},
+      "old_lump_items_base_sell": {"expected_absent": true, "actually_absent": true, "pass": true}
+    },
+    "regression_per_component_sections": "PASS — both component sections still render with their own qty-tier table; headers and totals unchanged."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PreviewPdfModal.jsx PerComponentSections (lines 692-709): summaryTiers correctly groups by qty via Map; adds perJobFreight and perJobPrepress when scope==='Per Job'. Sum uses itemSell + freightLine + dieLineCost + prepressLineCost — explicitly excludes misc charges. If consistency with per-component 'TOTAL' column (which uses r.sellTotal including misc) is desired in future, consider adding miscLineCost to the summary aggregator or excluding misc from the per-component TOTAL column."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing estimate SA-260618-085911.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend Quote Preview MP-Individual per-qty Quote Summary table is fully implemented and verified. Testids: preview-summary-tier-{qty} (row) and preview-summary-total-{qty} (the Quote Total cell). Backend routes/pdf.py per-qty summary mirror was NOT tested in this iteration (frontend-only scope). If a follow-up iteration covers the PDF export, validate the exported PDF contains the same per-qty rows."
+}
