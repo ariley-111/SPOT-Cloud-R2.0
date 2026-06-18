@@ -5,6 +5,7 @@
  *  See /app/backend/services/rate_overrides.py for the override layer architecture. */
 import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useQuote } from "../context/QuoteContext";
 import {
   adminGetRates, adminGetCategories, adminGetCalibration,
   adminSetRate, adminResetRate, adminResetAll, adminGetAudit,
@@ -33,6 +34,7 @@ const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "board_pricing
 
 export default function AdminPage({ onClose }) {
   const { user } = useAuth();
+  const { refreshActiveVersion } = useQuote();
   const [tab, setTab] = useState("rate");
   const [data, setData] = useState(null);
   const [cats, setCats] = useState(null);
@@ -827,6 +829,9 @@ function BoardPricingPanel({ flash }) {
     try {
       await adminPricingActivate(id);
       flash("✓ Pricing version activated");
+      // Refresh the app-wide active-version id so the frozen/legacy-pricing
+      // guardrail compares against the NEW active version immediately (no reload).
+      if (typeof refreshActiveVersion === "function") await refreshActiveVersion();
       await reload();
       await openVersion(id);
     } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }

@@ -70,22 +70,39 @@ export function QuoteProvider({ children }) {
   const frozenWarnedRef = useRef(new Set());
   const frozenGuardRef = useRef({});
   const initialsRef = useRef("");
+  const userRef = useRef(null);
   useEffect(() => { tabsRef.current = tabs; }, [tabs]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { initialsRef.current = initials; }, [initials]);
+  useEffect(() => { userRef.current = user; }, [user]);
 
-  // Resolve the currently-active board-pricing version id once (manifest with no
-  // version arg returns the ACTIVE version). Used to flag frozen (older-pinned) quotes.
-  useEffect(() => {
-    if (!user) return;
-    engineManifest()
+  // Resolve the currently-active board-pricing version id (manifest with no
+  // version arg returns the ACTIVE version). Used to flag frozen (older-pinned)
+  // quotes. MUST stay fresh: if an admin activates a new pricing version mid-
+  // session, a stale value here inverts the frozen check (new-active quotes
+  // would warn, old ones wouldn't). So we also refresh on window focus and
+  // expose refreshActiveVersion() for the admin activate flow to call.
+  const refreshActiveVersion = useCallback(() => {
+    if (!userRef.current) return;
+    return engineManifest()
       .then((m) => {
         const id = m?.pricing_version?.id || null;
         activeVerRef.current = id;
         setActivePricingVersionId(id);
       })
       .catch(() => {});
-  }, [user]);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    refreshActiveVersion();
+  }, [user, refreshActiveVersion]);
+
+  useEffect(() => {
+    const onFocus = () => refreshActiveVersion();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshActiveVersion]);
 
   // Fire the frozen-edit warning at most once per quote-open for material edits.
   const checkFrozenEdit = useCallback(() => {
@@ -833,6 +850,7 @@ export function QuoteProvider({ children }) {
     toasts, pushToast,
     // Frozen-quote guardrails
     activePricingVersionId, frozenWarnTabId, dismissFrozenWarn, duplicateFrozenAtCurrent,
+    refreshActiveVersion,
   };
   return <QuoteCtx.Provider value={value}>{children}</QuoteCtx.Provider>;
 }

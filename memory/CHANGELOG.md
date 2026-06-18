@@ -2,6 +2,21 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-18 — Fix: frozen/legacy-pricing guard inverted after mid-session activation ✅
+- **Symptom (prod)**: after activating a new board-pricing version, the frozen
+  guard fired on NEW active-priced quotes and NOT on old/inactive ones — backwards.
+- **Root cause**: `activePricingVersionId` (`av`, what the frozen check compares
+  against) was resolved ONCE at login and never refreshed. Activating a new
+  version mid-session left `av` stale at the OLD baseline id, so quotes pinned to
+  the NEW active version looked `!== av` (→ frozen) and old ones `=== av` (→ not).
+- **Fix** (`QuoteContext.jsx`): extracted `refreshActiveVersion()`; now re-resolves
+  on login, on `window` focus, and is exposed via context. `AdminPage.jsx` calls it
+  right after a successful Activate, so the guard compares against the new active
+  version immediately — no reload needed.
+- NOTE: pricing versions are per-environment DB data; production needed its own
+  import+activate (done by user). Code fix must be redeployed to prod.
+
+
 ### 2026-06-18 — MP-Individual fixes: per-qty misc per-tier + qty-row → economics ✅
 - **Bug 1**: Per-qty custom misc (e.g. Clips) only applied to qty 100. Root cause:
   the MP-Individual per-component pricing path always priced each row at slot 0
