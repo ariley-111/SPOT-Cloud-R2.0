@@ -62,6 +62,10 @@ export default function FilesSec() {
       class: isRfqLike(f.name) ? "rfq" : "file", file: f,
     }));
     setFiles((cur) => [...cur, ...arr]);
+    // Staging changed → invalidate any cached parse result so the button
+    // reverts from "Review Build" to "Build Estimate" and parses the NEW set
+    // (lets the user swap a wrong file and re-parse).
+    setParseResult(null); setParserError("");
     // Per user direction (2026-02-15): NO auto-parse on drop. The estimator
     // loads all files first (email + attachments + extra docs), then clicks
     // "Build Estimate" to launch the parser. Removes the surprise factor
@@ -74,7 +78,12 @@ export default function FilesSec() {
     ingestFiles(e.dataTransfer.files);
   };
   const onBrowse = (e) => ingestFiles(e.target.files);
-  const removeFile = (name) => setFiles((cur) => cur.filter((f) => f.filename !== name));
+  const removeFile = (name) => {
+    setFiles((cur) => cur.filter((f) => f.filename !== name));
+    // Removing a staged file also invalidates the cached parse so the user can
+    // re-parse with the corrected file set.
+    setParseResult(null); setParserError("");
+  };
 
   // Attach staged files to the quote for reference WITHOUT parsing. Persists
   // them as saved RFQ files (survive save/reload via the same draft→quote

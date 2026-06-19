@@ -17,6 +17,7 @@ import SheetLibraryModal from "../components/spot/SheetLibraryModal";
 import QuoteHeaderModal from "../components/spot/QuoteHeaderModal";
 import BomBuilderModal from "../components/spot/BomBuilderModal";
 import FrozenEditWarnModal from "../components/spot/FrozenEditWarnModal";
+import CloseTabPrompt from "../components/spot/CloseTabPrompt";
 import { useQuote } from "../context/QuoteContext";
 import { useEngine } from "../hooks/useEngine";
 
@@ -100,6 +101,9 @@ export default function SpotApp({ onOpenAdmin }) {
 
       {/* Frozen-quote material-edit warning (global, driven by context) */}
       <FrozenEditWarnModal />
+
+      {/* Close-tab Save/Discard/Cancel prompt (global, driven by context) */}
+      <CloseTabPrompt />
 
       {/* Initials gate (first-launch popup) */}
       <InitialsGate />

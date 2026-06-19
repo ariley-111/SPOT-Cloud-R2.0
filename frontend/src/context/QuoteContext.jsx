@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, updateQuote, engineManifest } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, createQuote, updateQuote, engineManifest } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
 import {
@@ -33,6 +33,15 @@ const FROZEN_EXCLUDE = new Set([
 ]);
 const isMaterialKey = (k) =>
   typeof k === "string" && !k.startsWith("_") && !FROZEN_EXCLUDE.has(k);
+
+// A tab is "dirty" (has real estimate work worth keeping) when it carries
+// customer / item / dimension / BOM content. A bare est# (auto-stamped on every
+// new tab) does NOT count — otherwise blank tabs would prompt on close.
+const isTabDirty = (st) => !!(st && (
+  st.custName || st.custCode || st.itemDesc || st.custRef || st.poNumber ||
+  (st.oneUpW && st.oneUpL) ||
+  (Array.isArray(st.bomItems) && st.bomItems.length > 0)
+));
 
 const DEFAULT_SEC = {
   job: true, bom: true, qty: true, prod: true, quoteTable: true,
@@ -457,6 +466,102 @@ export function QuoteProvider({ children }) {
     pushToast("Duplicated", "ok");
   }, [active, initials, pushToast]);
 
+  // ─── Load a quote/draft into a tab (keeps the current working tab open) ──
+  //  Smart placement: focus an already-open draft, else reuse the current tab
+  //  ONLY if it's an empty/untouched local tab, else open a fresh tab.
+  //  `opts.draftId` (set when loading an existing DRAFT) preserves the backend
+  //  draft id so auto-save UPDATES it instead of creating a duplicate.
+  const loadIntoTab = useCallback((nextState, opts = {}) => {
+    const applied = applyState(nextState);
+    const label = nextState.custRef || nextState.itemDesc || nextState.custName || nextState.estNum || "Loaded";
+    const settle = (id) => { frozenWarnedRef.current.delete(id); frozenGuardRef.current[id] = Date.now() + 2500; };
+
+    if (opts.draftId) {
+      // Already open as a tab → just focus it (no duplicate).
+      const existing = (tabsRef.current || []).find((t) => t.id === opts.draftId);
+      if (existing) { setActiveId(existing.id); return; }
+      // Add a tab bound to the real draft id; drop the current tab if it's an
+      // empty local scratch tab so we don't leave a stray blank behind.
+      settle(opts.draftId);
+      const cur = (tabsRef.current || []).find((t) => t.id === activeId);
+      const dropBlank = cur && !cur.persisted && !isTabDirty(cur.state);
+      const fresh = { id: opts.draftId, persisted: true, label, state: applied, updatedAt: Date.now() };
+      setTabs((list) => [...(dropBlank ? list.filter((t) => t.id !== cur.id) : list), fresh]);
+      setActiveId(opts.draftId);
+      return;
+    }
+
+    // Saved-quote / copy load → reuse a blank untouched local tab if present.
+    const cur = (tabsRef.current || []).find((t) => t.id === activeId);
+    if (cur && !cur.persisted && !isTabDirty(cur.state)) {
+      settle(cur.id);
+      setTabs((list) => list.map((t) => t.id === cur.id
+        ? { ...t, label, state: applied, updatedAt: Date.now() } : t));
+      return;
+    }
+    const id = "local-" + Math.random().toString(36).slice(2, 10);
+    settle(id);
+    setTabs((list) => [...list, { id, persisted: false, label, state: applied, updatedAt: Date.now() }]);
+    setActiveId(id);
+  }, [activeId]);
+
+  // ─── Close-with-prompt ──────────────────────────────────────
+  //  TabBar's × calls requestCloseTab. Empty tabs close immediately; tabs with
+  //  real content open a Save / Discard / Cancel prompt so work isn't lost.
+  const [closePromptId, setClosePromptId] = useState(null);
+
+  const _removeTab = useCallback((id) => {
+    setTabs((cur) => {
+      const next = cur.filter((t) => t.id !== id);
+      return next.length === 0 ? [makeBlankTab("New Quote", initials)] : next;
+    });
+    setActiveId((cur) => (cur === id ? null : cur));
+  }, [initials]);
+
+  const requestCloseTab = useCallback((id) => {
+    const target = (tabsRef.current || []).find((t) => t.id === id);
+    if (!target) return;
+    if (!isTabDirty(target.state)) {
+      if (target.persisted) { try { deleteDraft(id); } catch (_) {} }
+      _removeTab(id);
+      return;
+    }
+    setClosePromptId(id);
+  }, [_removeTab]);
+
+  const cancelClose = useCallback(() => setClosePromptId(null), []);
+
+  const discardCloseTab = useCallback((id) => {
+    const target = (tabsRef.current || []).find((t) => t.id === id);
+    if (target?.persisted) { try { deleteDraft(id); } catch (_) {} }
+    _removeTab(id);
+    setClosePromptId(null);
+  }, [_removeTab]);
+
+  const saveAndCloseTab = useCallback(async (id) => {
+    const target = (tabsRef.current || []).find((t) => t.id === id);
+    if (!target) { setClosePromptId(null); return; }
+    const st = target.state || {};
+    try {
+      const body = {
+        est_num: st.estNum || `DRAFT-${Date.now()}`,
+        label: st.custRef || st.itemDesc || st.custName || "Untitled",
+        state: st, status: st.quoteStatus || "draft",
+        customer_code: st.custCode || null, customer_name: st.custName || null,
+      };
+      const saved = st.quoteId ? await updateQuote(st.quoteId, body) : await createQuote(body);
+      // Migrate any RFQ files staged under the tab id → the saved quote id.
+      try { if (!st.quoteId && saved.id && target.id !== saved.id) await reassignParserFiles(target.id, saved.id); } catch (_) {}
+      pushToast(`Saved ${saved.est_num || st.estNum || "quote"}`, "ok");
+    } catch (e) {
+      pushToast(`Save failed: ${e?.response?.data?.detail || e.message}`, "err");
+      return;  // keep the tab + prompt open so the user can retry
+    }
+    if (target.persisted) { try { await deleteDraft(id); } catch (_) {} }
+    _removeTab(id);
+    setClosePromptId(null);
+  }, [_removeTab, pushToast]);
+
   // ─── Multi-Part actions ─────────────────────────────────────
   //   Active-item mirror: the top-level state always reflects the currently active
   //   BOM item. When the user switches items we snapshot the current item-level
@@ -839,6 +944,8 @@ export function QuoteProvider({ children }) {
   const value = {
     tabs, activeId, active,
     setActiveId, newTab, closeTab, duplicateTab,
+    loadIntoTab,
+    closePromptId, requestCloseTab, cancelClose, discardCloseTab, saveAndCloseTab,
     deleteDraftById, clearAllDrafts,
     setField, setManyFields, replaceState, setPricingMode,
     // Multi-Part actions

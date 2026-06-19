@@ -68,7 +68,7 @@ function TakeOverConfirm({ row, onCancel, onConfirm }) {
 
 // ─── Main modal ────────────────────────────────────────────────────────
 export default function LoadQuoteModal({ onClose }) {
-  const { replaceState, pushToast, deleteDraftById, clearAllDrafts } = useQuote();
+  const { loadIntoTab, pushToast, deleteDraftById, clearAllDrafts } = useQuote();
   const { user: currentUser } = useAuth();
   const [tab, setTab] = useState("drafts");            // drafts | saved
   const [scope, setScope] = useState("mine");          // mine | team
@@ -145,7 +145,10 @@ export default function LoadQuoteModal({ onClose }) {
         pricingIsCurrent: it.pricing_is_current,
       } : {}),
     };
-    replaceState(stateWithMeta);
+    // Open in a NEW tab (keeps the current working tab open). For a DRAFT we
+    // pass its backend id so auto-save updates it rather than duplicating it;
+    // a saved quote loads as a fresh working tab bound to its quoteId.
+    loadIntoTab(stateWithMeta, tab === "saved" ? {} : { draftId: it.id });
     pushToast(`Loaded ${it.est_num || it.label || "draft"}${it.owner_id !== myUserId ? ` (view only — ${it.owner_name})` : ""}`, "ok");
     onClose();
   };
@@ -153,7 +156,7 @@ export default function LoadQuoteModal({ onClose }) {
   const onTakeOver = async (it) => {
     try {
       const updated = await takeOverQuote(it.id);
-      replaceState({ ...(updated.state || {}), quoteId: updated.id, quoteStatus: updated.status || "draft",
+      loadIntoTab({ ...(updated.state || {}), quoteId: updated.id, quoteStatus: updated.status || "draft",
         pricingVersionId: updated.pricing_version_id || null });
       pushToast(`Took over ${updated.est_num} — you are now the owner`, "ok");
       onClose();
@@ -166,7 +169,7 @@ export default function LoadQuoteModal({ onClose }) {
     try {
       const copy = await copyQuote(it.id);
       // A copy is the RE-PRICE path — backend pins it to the ACTIVE version.
-      replaceState({ ...(copy.state || {}), quoteId: copy.id, quoteStatus: copy.status || "draft",
+      loadIntoTab({ ...(copy.state || {}), quoteId: copy.id, quoteStatus: copy.status || "draft",
         pricingVersionId: copy.pricing_version_id || null });
       pushToast(`Copied ${it.est_num} → new draft (${copy.est_num})`, "ok");
       onClose();

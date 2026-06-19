@@ -5,7 +5,7 @@ import { useQuote } from "../../context/QuoteContext";
 /** Tabs row matching legacy: tab pills + "+" / Duplicate / (Spin Off)
  *  Right side: Expand / Collapse all sections links */
 export default function TabBar() {
-  const { tabs, activeId, setActiveId, closeTab, newTab, duplicateTab,
+  const { tabs, activeId, setActiveId, requestCloseTab, newTab, duplicateTab,
     initials, expandAll, collapseAll, activePricingVersionId } = useQuote();
 
   return (
@@ -57,7 +57,7 @@ export default function TabBar() {
                 </span>
               )}
               <span data-testid={`tab-close-${t.id}`}
-                onClick={(e) => { e.stopPropagation(); closeTab(t.id); }}
+                onClick={(e) => { e.stopPropagation(); requestCloseTab(t.id); }}
                 style={{ marginLeft: 4, color: "var(--spot-text3)", cursor: "pointer", fontSize: 14 }}>×</span>
             </div>
           );
