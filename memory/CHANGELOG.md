@@ -2,6 +2,21 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-19 — Individual-mode scenario freight missing 15% markup 🐛✅
+**Symptom:** Same multi-part quote priced Individual vs Matched-Set returned different
+JOB totals per qty. Items were IDENTICAL ($3,789.92 @100); only freight differed.
+**Proof:** Individual scenario freight $156.58 (raw) vs Matched-Set $180.07 — gap
+$23.49 = exactly 15% × $156.58. Both qty scenarios off by precisely the markup.
+**Root cause:** `QuoteTableSec.jsx` ComponentLayout scenario rows (`perJobBySlot`) pulled
+the per-slot freight straight from `jobFreightBySlot` (RAW carrier cost) WITHOUT applying
+the freight markup, while the footer / per-component rows / Matched-Set all use
+`raw × (1+markup)`. Diverged from legacy (spot_r1_5.jsx L3442 allocateJobCost uses
+raw*(1+freightMarkup)).
+**Fix:** scenario per-slot freight now `Number(v) × (1 + _perJobFreightMk)` (Local
+Delivery markup=0). Individual scenario job totals now equal Matched-Set totals (correct —
+same physical shipment), restoring legacy parity. Frontend-only; needs redeploy for prod.
+
+
 ### 2026-06-19 — Tab UX: load-in-new-tab, close-prompt, re-parse swap ✨
 **1. Load opens in a new tab (keeps current work open):** `QuoteContext.loadIntoTab()`
 — SMART placement: focuses an already-open draft (no duplicate); reuses the current

@@ -812,7 +812,13 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
             : "Per-Job Freight");
         const perJobBySlot = perSlotList.map((p) => {
           const v = jobFreightBySlot[p.slotIdx];
-          const amt = (v !== undefined && v !== "" && v !== null) ? Number(v) : (perJobFreight / Math.max(1, perSlotList.length));
+          // jobFreightBySlot holds the RAW carrier cost per slot — apply the
+          // freight markup so the scenario row matches the footer, the per-
+          // component rows, and Matched-Set (legacy parity: spot_r1_5.jsx L3442
+          // allocateJobCost uses raw*(1+markup)). Local Delivery markup = 0.
+          const amt = (v !== undefined && v !== "" && v !== null)
+            ? Number(v) * (1 + _perJobFreightMk)
+            : (perJobFreight / Math.max(1, perSlotList.length));
           return { ...p, perJobFreightAtSlot: amt };
         });
 
