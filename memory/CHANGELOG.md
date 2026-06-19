@@ -2,6 +2,25 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-19 — Tab UX: load-in-new-tab, close-prompt, re-parse swap ✨
+**1. Load opens in a new tab (keeps current work open):** `QuoteContext.loadIntoTab()`
+— SMART placement: focuses an already-open draft (no duplicate); reuses the current
+tab only if it's a blank/untouched LOCAL tab; otherwise opens a fresh tab.
+`LoadQuoteModal` (openInPlace/onCopy/onTakeOver) now calls `loadIntoTab` instead of
+`replaceState`. Draft loads pass `{draftId}` so auto-save updates the real draft (no dup).
+**2. Close-tab Save/Discard/Cancel prompt:** TabBar × → `requestCloseTab`. Empty tabs
+close silently; tabs with content (custName/dims/BOM via `isTabDirty`) open
+`CloseTabPrompt` (Save&Close = persist as quote + migrate RFQ files; Discard = delete
+draft; Cancel = keep). NOTE: previously closing a tab silently DELETED the draft.
+**3. Re-parse after wrong file:** `FilesSec` ingestFiles/removeFile now invalidate the
+cached parse (`setParseResult(null)`) so adding/removing a staged file reverts the button
+from "Review Build" → "Build Estimate" and re-parses the corrected set.
+**Auto-save clarification (for the record):** drafts auto-save every ~1.5s while open and
+restore on reload; the new close-prompt protects against accidental discard on close.
+**Verified:** iteration_51 (6/7) + live screenshots — new-tab on dirty (6→7), reuse-blank,
+no-dup draft focus, all 3 close actions, silent empty close. Re-parse = code-verified.
+
+
 ### 2026-06-18 — Blank `medium` → spurious Buy-Min warning 🐛✅
 **Symptom:** Parsed CADs with no medium spec left `medium` empty (not "None"). A
 board e.g. "200 B Kemi/Kla" then showed a **Buy-Min warning in preview** but
