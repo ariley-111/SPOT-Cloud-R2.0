@@ -437,7 +437,11 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         f'<th style="{th_s}">{perm_label}</th>',
     ]
     if by_type:
-        header_cells.append(f'<th style="{th_s}">Charges</th>')
+        # When Freight is the ONLY line charge present, the combined column is
+        # simply "Freight" (per user). If Die/Prepress/Misc also appear we keep
+        # the generic "Charges" header for the combined column.
+        _only_freight = s_frt and not (s_die or s_pp or s_misc)
+        header_cells.append(f'<th style="{th_s}">{"Freight" if _only_freight else "Charges"}</th>')
     if by_part:
         if s_die:  header_cells.append(f'<th style="{th_s}">Die</th>')
         if s_frt:  header_cells.append(f'<th style="{th_s}">Freight</th>')
@@ -552,6 +556,17 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             excl_slots = set(excl_map.get(item_id_c) or [])
             rows_c = [r for r in (c.get("rows") or []) if r.get("slotIdx") not in excl_slots]
 
+            # Charge columns appear ONLY when the charge is a separate Line item
+            # for this component (engine zeroes *LineCost for Amortize/None).
+            col_frt  = any(float(r.get("freightLine") or 0) > 0 for r in rows_c)
+            col_die  = any(float(r.get("dieLineCost") or 0) > 0 for r in rows_c)
+            col_prep = any(float(r.get("prepressLineCost") or 0) > 0 for r in rows_c)
+            col_misc = any(float(r.get("miscLineCost") or 0) > 0 for r in rows_c)
+            n_cols = 4 + sum([col_frt, col_die, col_prep, col_misc])
+            _thr = ('padding:6px 10px;text-align:right;font-size:11px;font-weight:700;'
+                    'text-transform:uppercase;letter-spacing:.06em;color:#6b7280')
+            _chg = 'padding:6px 10px;text-align:right;font-size:11px;color:#6b7280'
+
             body_rows_c: List[str] = []
             for ri, r in enumerate(rows_c):
                 qty_c = float(r.get("qty") or 0)
@@ -560,27 +575,37 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 frt_c = float(r.get("freightLine") or 0)
                 die_c = float(r.get("dieLineCost") or 0)
                 prep_c = float(r.get("prepressLineCost") or 0)
+                misc_c = float(r.get("miscLineCost") or 0)
                 total_c = float(r.get("sellTotal") or 0)
                 total_base_sell += float(r.get("itemSell") or 0)
                 total_per_item_frt += frt_c
                 total_per_item_die += die_c
                 total_per_item_prep += prep_c
                 bg_c = "#fff" if ri % 2 == 0 else "#f9fafb"
-                # Per legacy preview (spot_r1_5.jsx L4757-4758): per-component
-                # section table is Qty | Each | Per/M | Total — no freight/die/
-                # prepress columns (those live in the Quote Summary footer).
+                chg_cells = ""
+                if col_frt:  chg_cells += f'<td style="{_chg}">{_fm(frt_c) if frt_c > 0 else DASH}</td>'
+                if col_die:  chg_cells += f'<td style="{_chg}">{_fm(die_c) if die_c > 0 else DASH}</td>'
+                if col_prep: chg_cells += f'<td style="{_chg}">{_fm(prep_c) if prep_c > 0 else DASH}</td>'
+                if col_misc: chg_cells += f'<td style="{_chg}">{_fm(misc_c) if misc_c > 0 else DASH}</td>'
                 body_rows_c.append(
                     f'<tr style="border-bottom:1px solid #e5e7eb;background:{bg_c}">'
                     f'<td style="padding:6px 10px;font-weight:600">{_fn(qty_c, 0)}</td>'
                     f'<td style="padding:6px 10px;text-align:right">{_fm(sell_pc_c)}</td>'
                     f'<td style="padding:6px 10px;text-align:right;color:#6b7280">{_fm(per_m_c)}</td>'
+                    f'{chg_cells}'
                     f'<td style="padding:6px 10px;text-align:right;font-weight:700;color:#1e40af">{_fm(total_c)}</td>'
                     f'</tr>'
                 )
             if not body_rows_c:
                 body_rows_c.append(
-                    f'<tr><td colspan="4" style="padding:14pt;text-align:center;color:#9ca3af;font-size:12px">No qty entered</td></tr>'
+                    f'<tr><td colspan="{n_cols}" style="padding:14pt;text-align:center;color:#9ca3af;font-size:12px">No qty entered</td></tr>'
                 )
+
+            chg_headers = ""
+            if col_frt:  chg_headers += f'<th style="{_thr}">Freight</th>'
+            if col_die:  chg_headers += f'<th style="{_thr}">Die</th>'
+            if col_prep: chg_headers += f'<th style="{_thr}">Prepress</th>'
+            if col_misc: chg_headers += f'<th style="{_thr}">Misc</th>'
 
             sections_html.append(
                 f'<div style="margin-bottom:16px">'
@@ -591,8 +616,9 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 f'<table style="width:100%;border-collapse:collapse">'
                 f'<thead><tr style="border-bottom:1px solid #d1d5db">'
                 f'<th style="padding:6px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Qty</th>'
-                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Each</th>'
-                f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">Per/M</th>'
+                f'<th style="{_thr}">Each</th>'
+                f'<th style="{_thr}">Per/M</th>'
+                f'{chg_headers}'
                 f'<th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e40af">Total</th>'
                 f'</tr></thead>'
                 f'<tbody>{"".join(body_rows_c)}</tbody>'

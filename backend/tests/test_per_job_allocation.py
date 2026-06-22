@@ -351,3 +351,90 @@ class TestMatchedSetPerSlotJobFreight:
                     f"slot {slot_i} comp#{pos}: breakdown {alloc} != componentPricing {expect}")
                 checked += 1
         assert checked >= 4, f"expected to verify multiple comp/slot pairs, only {checked}"
+
+
+# ── Local Delivery (our truck, zip-resolved carrier) → flat rate, NO markup ──
+class TestLocalDeliveryPerJobNoMarkup:
+    @pytest.fixture(scope="class")
+    def resp(self, client):
+        payload = {
+            "quoteType": "Multi-Part",
+            "pricingMode": "Individual",
+            "setMarginPct": "0.40",
+            "setMarginOverride": False,
+            "purchasedMarginPct": "0.40",
+            "fulfillmentMarginPct": "0.45",
+            "qtys": ["42", "168", "2352", "", ""],
+            "bomItems": [
+                {"id": "a", "desc": "Comp A", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["42", "", "", "", ""])},
+                {"id": "b", "desc": "Comp B", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["", "168", "", "", ""])},
+                {"id": "c", "desc": "Comp C", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["", "", "2352", "", ""])},
+            ],
+            "freightScope": "Per Job",
+            "jobFreightCost": "70",
+            "freightAllocMethod": "By MSF",
+            "freightMarkup": "0.15",            # intentionally set — must be ignored
+            "freightCarrier": "SPC Local Delivery",
+            "jobFreightTreatment": "Separate Line",
+        }
+        r = client.post(f"{BASE_URL}/api/engine/calculate-multi-part",
+                        json=payload, timeout=60)
+        assert r.status_code == 200, f"{r.status_code} {r.text[:400]}"
+        return r.json()
+
+    def test_total_freight_is_flat_no_markup(self, resp):
+        total = sum(float(row.get("freightLine") or 0)
+                    for cp in resp["componentPricing"] for row in cp["rows"])
+        assert total == pytest.approx(70.0, abs=0.05), f"Expected flat 70, got {total}"
+
+
+# ── Matched Set + Per Job + Amortize → freight baked in, no separate line ──
+class TestMatchedSetPerJobAmortizeHidesFreightLine:
+    @pytest.fixture(scope="class")
+    def resp(self, client):
+        payload = {
+            "quoteType": "Multi-Part",
+            "pricingMode": "Matched Set",
+            "setMarginPct": "0.40",
+            "setMarginOverride": False,
+            "purchasedMarginPct": "0.40",
+            "fulfillmentMarginPct": "0.45",
+            "qtys": ["1000", "", "", "", ""],
+            "bomItems": [
+                {"id": "a", "desc": "Comp A", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["1000", "", "", "", ""])},
+                {"id": "b", "desc": "Comp B", "type": "Manufactured", "pcsPerSet": 1,
+                 "state": _mfg_state(["1000", "", "", "", ""])},
+            ],
+            "freightScope": "Per Job",
+            "jobFreightCost": "500",
+            "freightAllocMethod": "Equal",
+            "freightMarkup": "0.15",
+            "jobFreightTreatment": "Amortize",
+        }
+        r = client.post(f"{BASE_URL}/api/engine/calculate-multi-part",
+                        json=payload, timeout=60)
+        assert r.status_code == 200, f"{r.status_code} {r.text[:400]}"
+        return r.json()
+
+    def test_aggregate_slot_freight_line_is_zero(self, resp):
+        """Amortize → the aggregate slot freightLine must be 0 (baked into sell)."""
+        for sl in resp["slots"]:
+            if float(sl.get("setQty") or sl.get("qty") or 0) <= 0:
+                continue
+            assert float(sl.get("freightLine") or 0) == pytest.approx(0.0, abs=0.01), (
+                f"Amortize slot should have no freight line, got {sl.get('freightLine')}")
+
+    def test_freight_baked_into_sell_total(self, resp):
+        """Amortized freight (500*1.15=575) must still be in the quote total."""
+        slot0 = next(s for s in resp["slots"] if float(s.get("setQty") or 0) > 0)
+        # sellTotal = job_sell (incl embed) + line_charges(no freight)
+        # Difference between sellTotal and itemSell(no embed in agg) covers it;
+        # simplest invariant: sellTotal > sum of component itemSell by ~575.
+        comp_sell = sum(float(pc.get("itemSell") or 0) for pc in slot0["perComponent"])
+        assert float(slot0["sellTotal"]) >= comp_sell + 574.0, (
+            f"Expected embedded freight ~575 in sellTotal; "
+            f"sellTotal={slot0['sellTotal']} comp_sell={comp_sell}")

@@ -196,7 +196,10 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
         "tapeType": json.get("tapeType", "Clear"),
         "freightCost": freight_cost,
         "freightTreatment": "None" if fob_origin else json.get("freightTreatment", "Separate Line"),
-        "freightMarkup": json.get("freightMarkup", "0.15"),
+        # Local delivery (our own truck, zip-resolved carrier) is a flat published
+        # rate — NEVER marked up. Markup only applies to common-carrier shipments.
+        "freightMarkup": ("0" if (json.get("freightCarrier") or "").strip() in ("SPC Local Delivery", "Local Delivery")
+                          else json.get("freightMarkup", "0.15")),
         "cuttingDieCost": die_cost_eff,
         "dieTreatment": die_treat_eff,
         "dieMarkup": json.get("dieMarkup", "0.15"),

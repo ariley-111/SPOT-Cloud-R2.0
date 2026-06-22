@@ -521,6 +521,13 @@ async def calculate_multi_part(
     ful_margin        = _safe_float(payload.get("fulfillmentMarginPct"), 0.45)
     top_qtys          = payload.get("qtys") or ["", "", "", "", ""]
 
+    # Local delivery (our own truck, zip-resolved carrier) → flat rate, NO markup.
+    # Authoritative signal is the resolved carrier (legacy parity — local delivery
+    # is determined by destination ZIP, not a user-selectable FOB option).
+    job_carrier  = (payload.get("freightCarrier") or "").strip()
+    job_is_local = job_carrier in ("SPC Local Delivery", "Local Delivery")
+    job_freight_treat_top = payload.get("jobFreightTreatment") or "Separate Line"
+
     # Iterate qty slots — for each one we compute per-component results then aggregate
     out_slots: List[Dict[str, Any]] = []
     for slot in range(len(top_qtys)):
@@ -618,7 +625,7 @@ async def calculate_multi_part(
             if _slot_job0 in (None, "", "null"):
                 _slot_job0 = payload.get("jobFreightCost")
             _mk0_raw = payload.get("freightMarkup")
-            _mk0 = _safe_float(_mk0_raw if _mk0_raw not in (None, "") else 0.15)
+            _mk0 = 0.0 if job_is_local else _safe_float(_mk0_raw if _mk0_raw not in (None, "") else 0.15)
             job_freight = _safe_float(_slot_job0) * (1.0 + _mk0)
             method = payload.get("freightAllocMethod") or "By MSF"
             # Finished shipped basis — NOT board-consumed oMSF/shipWeight.
@@ -650,13 +657,15 @@ async def calculate_multi_part(
         # display Freight / Die / Prepress separately (matches Quote Table)
         line_freight = sum(_safe_float(pc.get("freightLine")) for pc in per_comp
                            if _safe_float(pc.get("freightLine")) > 0)
-        # If freight is allocated at the JOB level (Local Delivery, Per-Job UTS),
-        # add the job-level total (WITH markup) to the aggregate. Per-item
-        # freightLine was zeroed in the payload to avoid double-billing.
-        # Legacy parity: spot_r1_5.jsx L3442 `allocateJobCost(items, slotFreight*(1+freightMarkup), ...)`.
+        # If freight is allocated at the JOB level (Per-Job UTS / local delivery),
+        # add the job-level total to the aggregate. Per-item freightLine was zeroed
+        # in the payload to avoid double-billing. Markup is 0 for local delivery.
+        # When jobFreightTreatment == "Amortize" the freight is baked into the
+        # component sell (job_sell) and must NOT appear as a separate Freight line.
+        job_freight_embed = 0.0
         if freight_scope == "Per Job":
-            _mk_raw = payload.get("freightMarkup")
-            _mk = _safe_float(_mk_raw if _mk_raw not in (None, "") else 0.15)
+            _mk = 0.0 if job_is_local else _safe_float(
+                payload.get("freightMarkup") if payload.get("freightMarkup") not in (None, "") else 0.15)
             # Per-slot job freight: each set-qty tier ships a different combined
             # load, so its UTS-quoted job freight differs. jobFreightBySlot maps
             # {slotIdx: rawCost}; fall back to the flat jobFreightCost only when a
@@ -665,7 +674,11 @@ async def calculate_multi_part(
             _slot_job = _jfbs.get(str(slot), _jfbs.get(slot)) if isinstance(_jfbs, dict) else None
             if _slot_job in (None, "", "null"):
                 _slot_job = payload.get("jobFreightCost")
-            line_freight += _safe_float(_slot_job) * (1.0 + _mk)
+            _job_frt_total = _safe_float(_slot_job) * (1.0 + _mk)
+            if job_freight_treat_top == "Separate Line":
+                line_freight += _job_frt_total
+            else:
+                job_freight_embed = _job_frt_total
         line_die = sum(_safe_float(pc.get("dieLineCost")) for pc in per_comp
                        if _safe_float(pc.get("dieLineCost")) > 0)
         # Aggregate die base (pre-markup) so the cost buildup can render
@@ -714,6 +727,8 @@ async def calculate_multi_part(
         else:
             # Aggregate item-level sells (default)
             job_sell = job_sell_components
+        # Per-Job freight under "Amortize" is baked into the set sell (not a line).
+        job_sell += job_freight_embed
 
         gm_dollar = job_sell - job_cost
         gm_pct = (gm_dollar / job_sell) if job_sell > 0 else 0
@@ -1015,7 +1030,7 @@ async def calculate_multi_part(
                 })
             # Per-Job freight allocation
             if freight_scope == "Per Job":
-                slot_freight = job_freight_flat * (1.0 + freight_markup)
+                slot_freight = job_freight_flat * (1.0 + (0.0 if job_is_local else freight_markup))
                 allocs = _alloc_job(items_for_alloc, slot_freight, alloc_method)
                 for j, it in enumerate(items_for_alloc):
                     share = allocs[j]
@@ -1078,7 +1093,7 @@ async def calculate_multi_part(
                         raw = job_freight_by_slot.get(slot_i) if isinstance(job_freight_by_slot, dict) else None
                     if raw in (None, ""):
                         raw = job_freight_flat
-                    slot_freight = _safe_float(raw) * (1.0 + freight_markup)
+                    slot_freight = _safe_float(raw) * (1.0 + (0.0 if job_is_local else freight_markup))
                     alloc = _alloc_job(items_for_slot, slot_freight, alloc_method)
                     for j, it in enumerate(items_for_slot):
                         if it["row"] is None:

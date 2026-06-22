@@ -119,6 +119,7 @@ export function buildPayload(state) {
     tape: state.tape, tapeType: state.tapeType,
     quoteFOB: state.quoteFOB, freightCost: state.freightCost,
     freightTreatment: state.freightTreatment, freightMarkup: state.freightMarkup,
+    freightCarrier: state.freightCarrier,
     cuttingDieCost: state.cuttingDieCost, dieTreatment: state.dieTreatment, dieMarkup: state.dieMarkup,
     prepressCost: state.prepressCost, prepressTreatment: state.prepressTreatment,
     miscCharges: state.miscCharges, miscChargeMarkup: state.miscChargeMarkup,
@@ -181,6 +182,7 @@ export function buildMpPayload(state) {
         miscCharges: state.miscCharges,
         freightType: state.freightType, freightTreatment: state.freightTreatment,
         freightCost: state.freightCost, freightMarkup: state.freightMarkup,
+        freightCarrier: state.freightCarrier,
         freightByQty: state.freightByQty,
         forcedSellPc: state.forcedSellPc,
         gmByTier: state.gmByTier, pricingBasis: state.pricingBasis,
@@ -224,6 +226,8 @@ export function buildMpPayload(state) {
     // LocalDelivery quotes by 15% and creating a 3-way mismatch between
     // Quote Table rows, footer and One-Time line item.
     freightMarkup: state.freightMarkup,
+    // Resolved carrier — engine zeroes the markup for local delivery (our truck).
+    freightCarrier: state.freightCarrier,
     prepressScope: state.prepressScope, prepressAllocMethod: state.prepressAllocMethod,
     jobPrepressCost: state.jobPrepressCost, jobPrepressTreatment: state.jobPrepressTreatment,
     // Board Pricing Freeze: pinned version for the whole matched set.

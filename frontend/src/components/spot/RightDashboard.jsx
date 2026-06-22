@@ -7,7 +7,7 @@ import Tile from "./Tile";
 import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
 import { calcShipment } from "../../lib/shipment";
-import { allocateJobCost, detectFreightMinimum } from "../../lib/freight";
+import { allocateJobCost, detectFreightMinimum, isLocalCarrier } from "../../lib/freight";
 import FreightDashModal from "./FreightDashModal";
 
 export default function RightDashboard() {
@@ -830,8 +830,8 @@ function FreightPanel({ s }) {
                 const hasPerSlot = perSlot != null && perSlot !== "" && perSlot !== "null";
                 const raw = Number(hasPerSlot ? perSlot : s.jobFreightCost) || 0;
                 const selQty = Number((s.qtys || [])[selSlot]) || 0;
-                const _isLocal = s.quoteFOB === "LocalDelivery";
-                const mk  = Number(s.freightMarkup ?? (_isLocal ? 0 : 0.15)) || 0;
+                const _isLocal = isLocalCarrier(s.freightCarrier) || s.quoteFOB === "LocalDelivery";
+                const mk  = _isLocal ? 0 : (Number(s.freightMarkup ?? 0.15) || 0);
                 const total = raw * (1 + mk);
                 return (
                   <div style={{ marginTop: 8, padding: "8px 10px", background: "#06b6d40c",
@@ -946,8 +946,8 @@ function FreightPanel({ s }) {
               const hasPerSlot = perSlot != null && perSlot !== "" && perSlot !== "null";
               const raw = Number(hasPerSlot ? perSlot : s.freightCost) || 0;
               const selQty = Number((s.qtys || [])[selSlot]) || 0;
-              const _isLocal2 = s.quoteFOB === "LocalDelivery";
-              const mk  = Number(s.freightMarkup ?? (_isLocal2 ? 0 : 0.15)) || 0;
+              const _isLocal2 = isLocalCarrier(s.freightCarrier) || s.quoteFOB === "LocalDelivery";
+              const mk  = _isLocal2 ? 0 : (Number(s.freightMarkup ?? 0.15) || 0);
               const total = raw * (1 + mk);
               return (
                 <div style={{ marginTop: 8, padding: "8px 10px",
@@ -1652,7 +1652,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                   {freight > 0 && (() => {
                 // Distinct label & breakdown for Local Delivery — make it
                 // unmistakable on the customer-facing cost buildup.
-                const isLocal = s?.quoteFOB === "LocalDelivery";
+                const isLocal = isLocalCarrier(s?.freightCarrier) || s?.quoteFOB === "LocalDelivery";
                 const zone = s?.localDeliveryZone || "";
                 const freightLabel = isLocal
                   ? `Freight — Local Delivery${zone ? ` · ${zone}` : ""}`

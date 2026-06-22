@@ -721,3 +721,31 @@ Keeps cloud's compact layout but adds legacy functionality.
 
 
 
+
+### 2026-06-22 — Freight (Local Delivery) markup fix + PDF charge-line parity ✅
+- **P0 ROOT CAUSE — Local Delivery wrongly marked up 15%**: markup-zeroing keyed
+  off the removed `quoteFOB === "LocalDelivery"` FOB option. Local delivery is
+  now zip-resolved → carrier "SPC Local Delivery"; with FOB=Ship the 15% markup
+  wrongly applied ($70 → $80.50; matched-set $150.50). Business rule: markup ONLY
+  applies to common carriers (not our own truck).
+  - **Engine (authoritative, single source of truth)**: `runner.build_prod_inputs`
+    forces `freightMarkup=0` whenever the resolved `freightCarrier` is
+    "SPC Local Delivery"/"Local Delivery" — covers single-part AND every MP
+    component. `engine_routes.calculate_multi_part` does the same for Per-Job
+    allocation + aggregate.
+  - `useEngine.js` now passes `freightCarrier` on single-part, MP per-item, and
+    MP top-level payloads. `freight.js` adds shared `isLocalCarrier()`.
+  - `RightDashboard.jsx` freight cards + Cost Buildup now detect local by carrier
+    (verified live: Per-Job card shows "$70.00 + 0% markup = $70.00").
+- **PDF/Preview "Charges" → "Freight"** in By Type mode when Freight is the SOLE
+  line charge (stays "Charges" if Die/Prepress/Misc also present). pdf.py +
+  PreviewPdfModal.jsx.
+- **Amortized charges never render as a line**: matched-set Per-Job aggregate now
+  respects `jobFreightTreatment` — Amortize bakes freight into set sell (no Freight
+  row). (Per-item / single-part already 0 via engine.)
+- **Individual-mode PDF/Preview shows per-component line-charge columns**
+  (Freight/Die/Prepress/Misc) ONLY when treatment=Line (verified live: FREIGHT
+  column now visible per component). pdf.py + PreviewPdfModal.jsx.
+- **Tests**: new `tests/test_local_delivery_markup.py` (4) + 3 new HTTP cases in
+  `test_per_job_allocation.py` (local-delivery flat, matched-set Amortize hides
+  line + bakes in). 50/50 pass across freight/PDF/engine suites.

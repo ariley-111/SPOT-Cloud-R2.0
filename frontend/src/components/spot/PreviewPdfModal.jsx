@@ -422,6 +422,13 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
   //  • Lump Sum → no charge column; a per-qty descriptive list is shown below
   const byPart = hasLineItems && chargeMode === "By Part";
   const byType = hasLineItems && chargeMode === "By Type";
+  // When Freight is the ONLY line charge present, the combined "By Type" column
+  // is labeled "Freight" (per user); otherwise it stays the generic "Charges".
+  const _anyFrt = rows.some((r) => Number(r.freightLine || 0) > 0);
+  const _anyOther = rows.some((r) => Number(r.dieLineCost || 0) > 0
+    || Number(r.prepressLineCost || 0) > 0 || Number(r.miscLineCost || 0) > 0
+    || (r.miscLineItems || []).some((li) => Number(li.amt || 0) > 0));
+  const byTypeLabel = _anyFrt && !_anyOther ? "Freight" : "Charges";
   // Per-row charge extraction helper.
   const rowCharges = (r) => {
     const die = Number(r.dieLineCost || 0);
@@ -469,7 +476,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
             <th style={thS}>{eachLabel}</th>
             <th style={thS}>{perMLabel}</th>
             <th style={thS}>Total</th>
-            {byType && <th style={thS}>Charges</th>}
+            {byType && <th style={thS}>{byTypeLabel}</th>}
             {colDie && <th style={thS}>Die</th>}
             {colFrt && <th style={thS}>Freight</th>}
             {colPrep && <th style={thS}>Prepress</th>}
@@ -721,6 +728,14 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
           `${c.pcsPerSet || 1} pc/set`,
         ].filter(Boolean).join(" · ");
         const rows = (c.rows || []).filter((r) => !isExcl(c.itemId, r.slotIdx));
+        // Show a charge column ONLY when that charge is a separate Line item for
+        // this component (engine zeroes *LineCost when treatment is Amortize/None).
+        const colFrt  = rows.some((r) => Number(r.freightLine || 0) > 0);
+        const colDie  = rows.some((r) => Number(r.dieLineCost || 0) > 0);
+        const colPrep = rows.some((r) => Number(r.prepressLineCost || 0) > 0);
+        const colMisc = rows.some((r) => Number(r.miscLineCost || 0) > 0);
+        const chargeCols = (colFrt ? 1 : 0) + (colDie ? 1 : 0) + (colPrep ? 1 : 0) + (colMisc ? 1 : 0);
+        const chgTd = { padding: "6px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" };
 
         return (
           <div key={c.itemId || c.itemIndex} style={{ marginBottom: 18 }}
@@ -740,12 +755,16 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
                   <th style={thL}>Qty</th>
                   <th style={thS}>Each</th>
                   <th style={thS}>Per/M</th>
+                  {colFrt && <th style={thS}>Freight</th>}
+                  {colDie && <th style={thS}>Die</th>}
+                  {colPrep && <th style={thS}>Prepress</th>}
+                  {colMisc && <th style={thS}>Misc</th>}
                   <th style={{ ...thS, color: "#1e40af" }}>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={4} style={{ padding: 16, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>
+                  <tr><td colSpan={4 + chargeCols} style={{ padding: 16, textAlign: "center", color: "#9ca3af", fontSize: 12 }}>
                     No qty entered
                   </td></tr>
                 ) : rows.map((r, i) => (
@@ -754,6 +773,10 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
                     <td style={{ padding: "6px 10px", fontWeight: 600 }}>{fmtInt(r.qty)}</td>
                     <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtMoney(r.sellPc, 4)}</td>
                     <td style={{ padding: "6px 10px", textAlign: "right", color: "#6b7280" }}>{fmtMoney(r.perM, 2)}</td>
+                    {colFrt && <td style={chgTd}>{Number(r.freightLine || 0) > 0 ? fmtMoney(r.freightLine) : "—"}</td>}
+                    {colDie && <td style={chgTd}>{Number(r.dieLineCost || 0) > 0 ? fmtMoney(r.dieLineCost) : "—"}</td>}
+                    {colPrep && <td style={chgTd}>{Number(r.prepressLineCost || 0) > 0 ? fmtMoney(r.prepressLineCost) : "—"}</td>}
+                    {colMisc && <td style={chgTd}>{Number(r.miscLineCost || 0) > 0 ? fmtMoney(r.miscLineCost) : "—"}</td>}
                     <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, color: "#1e40af" }}>
                       {fmtMoney(r.sellTotal)}
                     </td>

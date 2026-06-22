@@ -8,6 +8,15 @@
 //   • "By Weight"         → proportional to each component's shipped weight
 // Fallback to Equal when the chosen basis has no data (matches backend).
 
+// Local delivery = our own truck, determined by destination ZIP (legacy parity).
+// When the freight quote resolves the carrier to our local-delivery service we
+// NEVER apply a freight markup — it's a flat published rate. This is the single
+// source of truth for "is this shipment local?" on the frontend.
+export function isLocalCarrier(carrier) {
+  const c = (carrier || "").trim();
+  return c === "SPC Local Delivery" || c === "Local Delivery";
+}
+
 export function allocateJobCost(comps, total, method) {
   const n = (comps || []).length;
   const out = new Array(n).fill(0);
