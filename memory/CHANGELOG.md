@@ -749,3 +749,20 @@ Keeps cloud's compact layout but adds legacy functionality.
 - **Tests**: new `tests/test_local_delivery_markup.py` (4) + 3 new HTTP cases in
   `test_per_job_allocation.py` (local-delivery flat, matched-set Amortize hides
   line + bakes in). 50/50 pass across freight/PDF/engine suites.
+
+### 2026-06-22 (cont.) — Amortize hides all cost data + fixed Individual summary double-count ✅
+- **User rule**: Amortize = bake charge into price, NEVER show the customer the
+  cost; Line = show the cost. Removed all customer-facing cost leaks on Amortize.
+- **Bug found + fixed (P0 double-count)**: Individual-mode Quote Summary added
+  the flat `jobFreightCost` ON TOP of component sellTotals that ALREADY include
+  the allocated per-slot freight — overstating the total (e.g. $3,883.35 vs the
+  correct $3,813.35) AND leaking the freight $ via an "Includes job-level
+  freight $X" note even on Amortize. Fixed in BOTH `pdf.py` and
+  `PreviewPdfModal.jsx`: summary total = Σ component sellTotal (no re-add); note
+  removed. Quote Summary now matches the per-component section sums exactly.
+- Verified live: Amortize → freight baked into "Each", no Freight column/line/
+  note; Line → Freight column shown. Summary no longer double-counts.
+- **Local-delivery 3-zone costing confirmed legacy-faithful** (`freight.py`
+  `_spcoc_local_rate`, verbatim port of `spcLocalRate()`): Zone 1 Canton $45 /
+  Zone 2 Akron-Alliance $70 / Zone 3 Cleveland-Youngstown-Mansfield $95; ZIP
+  44647→446→Zone 2→flat $70 (now un-marked-up). 50/50 freight/PDF tests pass.

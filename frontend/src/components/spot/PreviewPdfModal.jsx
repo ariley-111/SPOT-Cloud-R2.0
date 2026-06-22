@@ -693,12 +693,12 @@ function MatchedSetPricingGrid({ bomItems, componentPricing, slots }) {
 function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }) {
   const isExcl = (itemId, slotIdx) => (excludeMap[itemId] || []).includes(slotIdx);
 
-  const perJobFreight = jobTotals?.freightScope === "Per Job" ? Number(jobTotals.jobFreightCost || 0) : 0;
-  const perJobPrepress = jobTotals?.prepressScope === "Per Job" ? Number(jobTotals.jobPrepressCost || 0) : 0;
-
   // ── Per-qty Quote Summary (legacy parity) ──────────────────────────────
-  // MP-Individual: each qty tier combines EVERY component priced at that qty
-  // (e.g. Shoe Box @100 + Boot Box @100), with the combined price/set and total.
+  // MP-Individual: each qty tier combines EVERY component priced at that qty.
+  // Each component's sellTotal ALREADY includes its allocated per-slot job
+  // freight/prepress (the engine bakes Per-Job allocation into the rows), so we
+  // do NOT add jobFreightCost/jobPrepressCost again — that double-counted the
+  // freight and leaked the dollar figure even on "Amortize" (which hides cost).
   const tierMap = new Map();
   componentPricing.forEach((c) => {
     (c.rows || []).forEach((r) => {
@@ -710,8 +710,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
     });
   });
   const summaryTiers = [...tierMap.entries()].sort((a, b) => a[0] - b[0]).map(([qty, comp]) => {
-    const total = comp + perJobFreight + perJobPrepress;
-    return { qty, comp: total, perSet: qty > 0 ? total / qty : 0, total };
+    return { qty, comp, perSet: qty > 0 ? comp / qty : 0, total: comp };
   });
 
   return (
@@ -822,13 +821,6 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
               ))}
             </tbody>
           </table>
-          {(perJobFreight > 0 || perJobPrepress > 0) && (
-            <div style={{ marginTop: 6, fontSize: 10, color: "#6b7280", fontStyle: "italic" }}>
-              Includes job-level{perJobFreight > 0 ? ` freight ${fmtMoney(perJobFreight)}` : ""}
-              {perJobFreight > 0 && perJobPrepress > 0 ? " +" : ""}
-              {perJobPrepress > 0 ? ` prepress ${fmtMoney(perJobPrepress)}` : ""} per quantity.
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -627,11 +627,12 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             )
 
         # ── Per-qty Quote Summary (legacy parity) ──────────────────────
-        # Each qty tier combines EVERY component priced at that qty, with the
-        # combined Components total, Price/Set, and Quote Total.
-        per_job_frt = float(job_totals.get("jobFreightCost") or 0) if (job_totals.get("freightScope") == "Per Job") else 0.0
-        per_job_prep = float(job_totals.get("jobPrepressCost") or 0) if (job_totals.get("prepressScope") == "Per Job") else 0.0
-
+        # Each qty tier combines EVERY component priced at that qty. The
+        # component sellTotal ALREADY includes its allocated per-slot job
+        # freight/prepress (the backend bakes Per-Job allocation into each row),
+        # so we must NOT add jobFreightCost/jobPrepressCost again here — doing so
+        # double-counted the freight AND leaked the dollar figure even when the
+        # estimator chose "Amortize" (which by design hides the cost).
         tier_totals: Dict[float, float] = {}
         for c in component_pricing:
             item_id_c = c.get("itemId") or ""
@@ -642,31 +643,22 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 q = float(r.get("qty") or 0)
                 if q <= 0:
                     continue
-                # sellTotal already includes per-item charges (freight/die/
-                # prepress/misc), matching the per-component TOTAL column.
                 line_total = float(r.get("sellTotal") or 0)
                 tier_totals[q] = tier_totals.get(q, 0.0) + line_total
 
         summary_rows: List[str] = []
         for i, q in enumerate(sorted(tier_totals.keys())):
-            total = tier_totals[q] + per_job_frt + per_job_prep
+            total = tier_totals[q]
             per_set = (total / q) if q > 0 else 0.0
             bg = "#fff" if i % 2 == 0 else "#f9fafb"
             summary_rows.append(
                 f'<tr style="border-bottom:1px solid #e5e7eb;background:{bg}">'
                 f'<td style="padding:6px 10px;font-weight:600">{_fn(q, 0)}</td>'
-                f'<td style="padding:6px 10px;text-align:right">{_fm(tier_totals[q] + per_job_frt + per_job_prep)}</td>'
+                f'<td style="padding:6px 10px;text-align:right">{_fm(total)}</td>'
                 f'<td style="padding:6px 10px;text-align:right;color:#6b7280">{_fm(per_set)}</td>'
                 f'<td style="padding:6px 10px;text-align:right;font-weight:700;font-size:14px;color:#1e40af">{_fm(total)}</td>'
                 f'</tr>'
             )
-        note = ""
-        if per_job_frt > 0 or per_job_prep > 0:
-            bits = []
-            if per_job_frt > 0: bits.append(f"freight {_fm(per_job_frt)}")
-            if per_job_prep > 0: bits.append(f"prepress {_fm(per_job_prep)}")
-            note = (f'<div style="margin-top:6px;font-size:10px;color:#6b7280;font-style:italic">'
-                    f'Includes job-level {" + ".join(bits)} per quantity.</div>')
         thd = 'padding:6px 10px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280'
         job_totals_html = (
             f'<div style="margin-top:12px;padding:10px 14px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb">'
@@ -678,7 +670,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             f'<th style="{thd}">Price/Set</th>'
             f'<th style="{thd};color:#1e40af">Quote Total</th>'
             f'</tr></thead>'
-            f'<tbody>{"".join(summary_rows)}</tbody></table>{note}'
+            f'<tbody>{"".join(summary_rows)}</tbody></table>'
             f'</div>'
         )
 
