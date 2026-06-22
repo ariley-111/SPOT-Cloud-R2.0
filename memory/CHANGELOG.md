@@ -780,3 +780,15 @@ Keeps cloud's compact layout but adds legacy functionality.
     salesperson / buyer email fields to the customer schema (editable per-send).
   - IT action: grant the existing Entra app registration `Mail.Send`
     (+`Mail.Send.Shared` for shared mailbox). Status: brainstorming — not started.
+
+### 2026-06-22 — TEMPORARY cutting-complexity test (Issue 3 / D-110 anomaly)
+- **Removed "Straight"** from cutting DIFFICULTY UI option (`defaults.js` DIFFICULTY
+  → Simple/Standard/Complex). Stripping complexity (STRIP_COMP) still has Straight.
+- **TEMP test values** in `engine/core.py` (per user, to run on a live quote):
+  - `CAD_SETUP = {Simple:15, Standard:15, Complex:15}` (was 8/Straight20/25/22)
+  - `CAD_FALLBACK = {Simple:2, Standard:4, Complex:6}` (was 2/Straight6/2/4)
+- ⚠️ These TEMP values intentionally shift cutting cost + cost-aware routing.
+  4 golden-$/parity tests fail BY DESIGN while active (test_auto_die::cad_route_no_auto_die
+  flips CAD→Crest, test_below_min storage_bin parity, 2× test_matched_set_parity
+  L'Oreal totals). They will pass again once values are reverted to baseline.
+  REVERT before any production deploy unless the new calibration is approved.
