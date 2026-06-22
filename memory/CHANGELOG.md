@@ -766,3 +766,17 @@ Keeps cloud's compact layout but adds legacy functionality.
   `_spcoc_local_rate`, verbatim port of `spcLocalRate()`): Zone 1 Canton $45 /
   Zone 2 Akron-Alliance $70 / Zone 3 Cleveland-Youngstown-Mansfield $95; ZIP
   44647→446→Zone 2→flat $70 (now un-marked-up). 50/50 freight/PDF tests pass.
+
+### Backlog addition — 2026-06-22
+- **P2: Email Quote from SPOT (Microsoft Graph)** — Send the generated customer
+  PDF directly from SPOT via Microsoft Graph `sendMail` (leverages existing M365 +
+  Entra SSO; no third-party vendor / DNS verification needed).
+  - Send "From" either a shared `estimating@spcoc.com` mailbox (needs
+    `Mail.Send.Shared`) OR the logged-in estimator's own mailbox (`Mail.Send`).
+  - Send dialog: editable To / CC (buyer = To; CS rep + salesperson = CC, all
+    editable), auto-attach quote PDF, editable subject + body template
+    (quote #, customer, project, total, validity).
+  - Pre-fill recipients from the customer record — requires adding CS rep /
+    salesperson / buyer email fields to the customer schema (editable per-send).
+  - IT action: grant the existing Entra app registration `Mail.Send`
+    (+`Mail.Send.Shared` for shared mailbox). Status: brainstorming — not started.
