@@ -28,14 +28,18 @@ export default function ItemSetupSec({ result }) {
   const fullyResolved = !!(r && !r.error && r.sheetW);
   const corrFlipped = !!s.corrFlipped;
 
-  // Collapsed-section summary pill — board specs chosen (grade · flute · liners · medium).
+  // Collapsed-section summary pill — board specs chosen + layout/sheet dims.
   const _fmLnr = (l) => (!l || l === "None") ? "Kraft"
     : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
   const _medLabel = s.medium && s.medium !== "None"
     ? String(s.medium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "";
-  const boardSummary = (s.boardGrade || s.flute)
+  const _boardPart = (s.boardGrade || s.flute)
     ? `${s.boardGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medLabel ? " · " + _medLabel : ""}`.trim()
     : null;
+  const _layoutPart = fullyResolved
+    ? `${r.numUp}×${r.numOut} → ${r.pcsPerSheet} out on ${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}`
+    : null;
+  const boardSummary = [_boardPart, _layoutPart].filter(Boolean).join(" · ") || null;
 
   const onBoxStyle = (style) => {
     const cur = s.boxStyle === style ? "" : style;
