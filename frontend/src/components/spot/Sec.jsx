@@ -27,9 +27,9 @@ export default function Sec({
         </span>
         {badge && (
           <span className="sp-badge" style={{
-            background: warn ? "var(--spot-warn-bg)" : accent ? "var(--spot-green-soft)" : "var(--spot-bg3)",
-            color: warn ? "var(--spot-warn)" : accent ? "var(--spot-green)" : "var(--spot-text3)",
-            borderColor: warn ? "var(--spot-warn)" : accent ? "var(--spot-green)" : "var(--spot-border)",
+            background: warn ? "var(--spot-warn-bg)" : accent ? "var(--spot-green-soft)" : `${hue}1f`,
+            color: warn ? "var(--spot-warn)" : accent ? "var(--spot-green)" : hue,
+            borderColor: warn ? "var(--spot-warn)" : accent ? "var(--spot-green)" : `${hue}66`,
           }} data-testid={dti ? `${dti}-badge` : undefined}>{badge}</span>
         )}
         <span style={{ color: hue, fontSize: 14, opacity: 0.7 }}>{open ? "▾" : "▸"}</span>

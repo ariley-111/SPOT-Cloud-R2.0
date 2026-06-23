@@ -167,7 +167,7 @@ export default function FilesSec() {
         )}
       </span>
     } hue="#06b6d4" open={sec.files} onToggle={() => toggleSec("files")}
-      badge={!sec.files ? filesSummary : null} accent={totalFiles > 0}
+      badge={!sec.files ? filesSummary : null}
       data-testid="sec-files">
       {/* Drop zone */}
       <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
