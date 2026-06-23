@@ -78,6 +78,16 @@ export default function ProductionSpecsSec({ result }) {
                   data-testid="input-saber-blanks"
                   onChange={(e) => setField("saberBlanksOut", e.target.value)}
                   style={{ width: 40, padding: "3px 4px", fontSize: 12, textAlign: "center" }} />
+                {/* Blanks-out hint (legacy parity spot_r1_5.jsx L6091) */}
+                {result?.saberBlankW > 0 && result?.saberBlankL > 0 && (
+                  <span data-testid="saber-blanks-hint"
+                    style={{ fontSize: 11, color: "var(--spot-text2)", marginLeft: 4, whiteSpace: "nowrap" }}>
+                    {"\u2192"} {result.saberBlanksOutN} blanks at {Math.round(result.saberBlankW)}{"\u00D7"}{Number(result.saberBlankL).toFixed(1)}
+                    {result.saberOut > 0 && (
+                      <> {"\u2014"} <b style={{ color: "var(--spot-accent)" }}>{result.saberOut} out/blank</b></>
+                    )}
+                  </span>
+                )}
               </>
             )}
           </div>

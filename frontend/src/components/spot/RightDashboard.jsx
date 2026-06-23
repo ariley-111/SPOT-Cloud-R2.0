@@ -9,9 +9,10 @@ import ProgressModal from "./ProgressModal";
 import { calcShipment } from "../../lib/shipment";
 import { allocateJobCost, detectFreightMinimum, isLocalCarrier } from "../../lib/freight";
 import FreightDashModal from "./FreightDashModal";
+import CrestApprovalModal from "./CrestApprovalModal";
 
 export default function RightDashboard() {
-  const { active } = useQuote();
+  const { active, setField, pushToast } = useQuote();
   const s = active?.state || {};
   const { results, perComponent, componentPricing, isMultiPart } = useEngine(s);
   const selSlot = s.selSlot || 0;
@@ -47,6 +48,30 @@ export default function RightDashboard() {
   })();
   const primary = isMultiPart ? (itemResultWithLines || aggregate) : aggregate;
 
+  // ── Crest Approval popup (legacy parity) — once per component per quote-open ──
+  // Fires when the active component routes to Crest AND its die exceeds 1,000
+  // rule-inches/sheet (engine routeWarning). Tracked per component so it only
+  // shows for the applicable component(s), one time each.
+  const quoteKey = active?.id || active?.estNum || "q";
+  const compKey = `${quoteKey}:${isMultiPart ? activeItemIdx : 0}`;
+  const crestWarning = (primary?.route === "Crest"
+    && typeof primary?.routeWarning === "string"
+    && primary.routeWarning.includes("needs approval"))
+    ? primary.routeWarning : null;
+  const [crestAcked, setCrestAcked] = useState(() => new Set());
+  // Reset acknowledgements when the open quote changes (re-opening re-pops).
+  useEffect(() => { setCrestAcked(new Set()); }, [quoteKey]);
+  const showCrestApproval = !!crestWarning && !crestAcked.has(compKey);
+  const ackCrest = () => setCrestAcked((cur) => new Set(cur).add(compKey));
+  const activeCompName = isMultiPart
+    ? (active?.state?.bomItems?.[activeItemIdx]?.desc || `Component ${activeItemIdx + 1}`)
+    : (active?.state?.itemDesc || null);
+  const forceCadFromApproval = () => {
+    setField("routeOverride", "CAD");
+    ackCrest();
+    pushToast && pushToast("Route forced to CAD — Crest die avoided", "ok");
+  };
+
   return (
     <div data-testid="right-dashboard" style={{
       width: 360, flexShrink: 0, overflow: "auto",
@@ -54,6 +79,13 @@ export default function RightDashboard() {
       display: "flex", flexDirection: "column",
       paddingBottom: 80,  // keep last row clear of the "Made with Emergent" badge
     }}>
+      <CrestApprovalModal
+        open={showCrestApproval}
+        message={crestWarning}
+        componentName={activeCompName}
+        onAcknowledge={ackCrest}
+        onForceCad={forceCadFromApproval}
+      />
       <Collapsible id="freight" title="🚚 Freight">
         <FreightPanel s={s} />
       </Collapsible>

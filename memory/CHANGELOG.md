@@ -809,3 +809,25 @@ Keeps cloud's compact layout but adds legacy functionality.
   tab) = $/hr equipment rates (cadRate, crestRate…). CAD Setup/Per-Sheet = the
   TIME (minutes) a cut takes by complexity. Cutting cost = (Setup + Per-Sheet×
   sheets) ÷ 60 × cadRate. Both now admin-editable.
+
+### 2026-06-23 — Crest approval warnings + Saber blanks messaging (legacy parity)
+- **Crest Approval popup ported** (`CrestApprovalModal.jsx`, wired in RightDashboard):
+  fires when the active component routes to Crest AND die > 1,000 rule-inches/sheet.
+  Buttons: **Acknowledge** (keep Crest, flag for mgmt approval) / **Force CAD Instead**
+  (sets routeOverride=CAD). Shows **once per component per quote-open** (per user;
+  legacy re-popped every selection). Verified live + Acknowledge no-re-pop.
+- **Per-component quote-table banner fixed**: `runner.py` was overwriting the Crest
+  approval warning with "Forced to Crest" when the route was forced — now the
+  approval warning persists (route forced to Crest + rule>1000 → real warning;
+  else "Forced to Crest"). Quote-table renders it per-row, so only the applicable
+  component(s) show the banner. Verified live (Litho Counter Tray warned, RSC not).
+- **Saber blanks messaging ported** (`ProductionSpecsSec.jsx` + runner result fields
+  saberOut/saberBlankW/saberBlankL/saberBlanksOutN): "→ N blanks at W×L — M out/blank"
+  (legacy spot_r1_5.jsx L6091). Verified live: "→ 4 blanks at 60×30.0 — 2 out/blank".
+- **Answered (no code change):** (a) Bobst only appears when flute is E/F (manual
+  §3.5) — both compared quotes were E flute so both correctly showed Bobst.
+  (b) Route Comparison winner differed because DIE COST differed ($1,200 vs $500);
+  Crest 2h vs 1.3h = Advanced vs Standard complexity — Crest rates are identical
+  to legacy (Adv 90/Std 45 min, 150 sh/hr, 0.8 factor, $45/hr).
+- **Could NOT reproduce** "Economics hidden when Saber on" — Economics panel renders
+  fully with Saber=Yes in preview. Need exact repro (route/mode) from user.

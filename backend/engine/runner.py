@@ -290,6 +290,17 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     if route_override and route_override != "Auto":
         if route_override != auto_r["route"]:
             routing = {"route": route_override, "sheet": best, "warning": f"Forced to {route_override}", "forced": True}
+            # Legacy parity (spot_r1_5.jsx): the Crest die-approval warning must
+            # persist even when the route is FORCED to Crest — it drives the
+            # "Crest Approval Required" popup + the per-component quote-table
+            # banner. Previously this was overwritten by "Forced to Crest".
+            if route_override == "Crest":
+                _rin = pn(json.get("totalRuleInches"))
+                _pps = (best.get("layout") or {}).get("pcsPerSheet") or 0
+                _sheet_rule = _rin * _pps * 1.15 if _rin > 0 else 0
+                if _sheet_rule > 1000:
+                    routing["warning"] = (f"Crest die has {round(_sheet_rule)} rule inches per sheet "
+                                          f"(over 1,000) — needs approval before ordering die")
         else:
             routing = {**auto_r, "forced": False}
     else:
@@ -495,6 +506,11 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "sheetId": (use_sheet.get("sheet") or best.get("sheet") or {}).get("id"),
         "pcsPerSheet": layout["pcsPerSheet"],
         "numUp": layout["numUp"], "numOut": layout["numOut"], "wastePct": layout["wastePct"],
+        # Saber blank-out hint (legacy spot_r1_5.jsx L6091): "→ N blanks at WxL — M out/blank"
+        "saberOut": ((saber_blank_layout or {}).get("pcsPerSheet") if saber_on else None),
+        "saberBlankW": (sh_w if saber_on and sh_w > 0 else None),
+        "saberBlankL": ((round(sh_l / saber_bo * 100) / 100) if (saber_on and saber_bo and sh_l > 0) else None),
+        "saberBlanksOutN": (saber_bo if saber_on else None),
         "sheetsReq": sheets_req,
         "oMSF": wf["oMSF"], "shippedMSF": wf["shippedMSF"], "msfTier": wf["matTier"],
         # D-070 status-bar surface flags
