@@ -731,10 +731,15 @@ export function BomSec() {
   const activeIdx = s.activeItemIdx ?? 0;
   const tints = ["#e8927c","#b08cf5","#7dd3c0","#e88dc4","#8cc8e8","#d4a76a","#9ca3af","#fbbf24"];
 
+  // Collapsed-section pill — selected component name/description.
+  const activeDesc = items[activeIdx]?.desc || (items.length ? `Item ${activeIdx + 1}` : null);
+
   return (
     <Sec
       label={<>Bill of Materials <span style={{ opacity: 0.7 }}>· {items.length} Component{items.length !== 1 ? "s" : ""}</span></>}
-      hue="#f59e0b" open={sec.bom} onToggle={() => toggleSec("bom")} data-testid="sec-bom">
+      hue="#f59e0b" open={sec.bom} onToggle={() => toggleSec("bom")}
+      badge={!sec.bom ? activeDesc : null}
+      data-testid="sec-bom">
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }} data-testid="bom-strip">
           {items.map((it, i) => {
