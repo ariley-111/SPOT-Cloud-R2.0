@@ -553,6 +553,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         # Press detail rows for Cost Buildup DETAIL view
         "pressHrs": wf.get("pressHrs") or 0,
         "incaRate": asmp.get("incaRate", 485),
+        "saberRate": asmp.get("saberRate", 2),
         "inkSqFt": wf.get("grossSqFt") or 0,
         "inkRate": asmp.get("inkPerSqFt") or 0.05,
         # Cutting / Finishing detail

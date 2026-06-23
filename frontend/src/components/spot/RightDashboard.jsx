@@ -1612,7 +1612,10 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         {detail && r.inkCost > 0 && (
           <SubRow label={`Ink ${fmtInt(r.inkSqFt)} sqft @ ${fmtMoney(r.inkRate, 2)}/sqft`} value={fmtMoney(r.inkCost)} />
         )}
-        <Row label="Cutting" value={fmtMoney(r.cutterDirect)} />
+        <Row label="Cutting" value={fmtMoney((r.cutterDirect || 0) + (r.saberCost || 0))} />
+        {detail && (r.saberCost || 0) > 0 && (
+          <SubRow label={`Saber @ ${fmtMoney(r.saberRate || 2)}/hr`} value={fmtMoney(r.saberCost)} />
+        )}
         {detail && r.cutterDirect > 0 && (
           <SubRow label={r.cutterBasis ? `${r.route} ${r.cutterBasis}` : `${r.route} ${labelize(r.cadDifficulty || "Standard")}`}
             value={fmtMoney(r.cutterDirect)} />
