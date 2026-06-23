@@ -831,3 +831,14 @@ Keeps cloud's compact layout but adds legacy functionality.
   to legacy (Adv 90/Std 45 min, 150 sh/hr, 0.8 factor, $45/hr).
 - **Could NOT reproduce** "Economics hidden when Saber on" — Economics panel renders
   fully with Saber=Yes in preview. Need exact repro (route/mode) from user.
+
+### 2026-06-23 (cont.) — Crest die auto-estimate parity ($1,200, not $500)
+- **Root cause**: cloud's route comparison fed `totalRuleInches` into a Crest die
+  estimate `min(3000,max(500, ruleIn*pps*1.15*0.02))` → floored to **$500**. Legacy's
+  `compareRoutes` caller (spot_r1_5.jsx L3689) NEVER passes rule-inches, so `ruleIn=0`
+  → the die always defaults to `crestDieCost` (**$1,200**). Rule-inches in legacy drive
+  ONLY the approval warning, not the die-cost estimate.
+- **Fix** (`routing.py` L505-509): Crest die (when user hasn't entered one) =
+  `crestDieCost` default ($1,200), matching legacy. Approval warning unchanged.
+  Verified: /compare-routes returns crest.die=1200, dieEstimated=true, warning intact.
+  Switching to Crest now auto-populates the die field to $1,200 like legacy.

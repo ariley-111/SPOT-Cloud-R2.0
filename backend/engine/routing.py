@@ -503,8 +503,13 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
             cr_cut_hrs = c_setup + (cr_pick["sheetsReq"] / eff_speed if eff_speed > 0 else 0)
             cr_cut = max(cr_cut_hrs * crest_rate, crest_min)
             rule_in = pn(assumptions.get("totalRuleInches"))
-            est_die = min(3000, max(500, rule_in * cr_pick["layout"]["pcsPerSheet"] * 1.15 * 0.02))
-            die_cost = die_cost_in if die_has_input else (est_die if rule_in > 0 else (pn(assumptions.get("crestDieCost")) or 1200))
+            # Legacy parity (spot_r1_5.jsx L1058-1059 + call site L3689): the Crest
+            # die estimate is the crestDieCost default ($1,200) when the user hasn't
+            # entered a die. Rule-inches drive ONLY the approval warning below — NOT
+            # the die-cost estimate. (Cloud previously fed rule-inches into a floor-$500
+            # formula that legacy's compareRoutes never actually reached, since its
+            # caller omits totalRuleInches.)
+            die_cost = die_cost_in if die_has_input else (pn(assumptions.get("crestDieCost")) or 1200)
             die_estimated = not die_has_input
             sheet_rule_inches = rule_in * cr_pick["layout"]["pcsPerSheet"] * 1.15 if rule_in > 0 else 0
             warning = (f"Crest die has {round(sheet_rule_inches)} rule inches per sheet "
