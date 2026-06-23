@@ -716,9 +716,10 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                   const k = ekey(a.norm);
                   const compName = a.norm.scope === "item"
                     ? (bomItems[a.norm.itemIdx]?.desc || `Item ${a.norm.itemIdx + 1}`) : null;
+                  const scopeId = a.norm.scope === "item" ? `item-${a.norm.itemIdx}` : "job";
                   const edited = k in edits;
                   return (
-                    <div key={i} data-testid={`parse-ask-${a.norm.scope}-${a.norm.key}`} style={{
+                    <div key={i} data-testid={`parse-ask-${scopeId}-${a.norm.key}`} style={{
                       padding: "8px 10px", background: "var(--spot-bg2)",
                       border: `1px solid ${edited ? "var(--spot-green)" : "var(--spot-border)"}`,
                       borderRadius: 4,
@@ -732,7 +733,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                       </div>
                       {a.reason && <div style={{ fontSize: 11, color: "var(--spot-text2)", margin: "3px 0 6px" }}>{a.reason}</div>}
                       <AskEditor
-                        meta={a.meta} field={a.norm.key} testid={`parse-ask-input-${a.norm.scope}-${a.norm.key}`}
+                        meta={a.meta} field={a.norm.key} testid={`parse-ask-input-${scopeId}-${a.norm.key}`}
                         value={askCurrentValue(a.norm)}
                         onChange={(v) => setEdit(k, v)}
                         onPickCustomer={(rec) => {

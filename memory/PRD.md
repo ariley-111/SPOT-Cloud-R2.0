@@ -672,6 +672,20 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   17-column cost-buildup cards + Kit Rollup for Multi-Part. Backend componentPricing rows
   enriched with Material/Print/Cutter/Finish/OH/Sheets breakdown. Tests + iter50 PASS.
 
+
+### 2026-06-23 — Inline parser-correction workflow ✅
+- Review Parsed Fields modal: flagged "Needs Estimator Input" fields are now EDITABLE inline
+  with plain UI labels + correct controls (select/number/text/customer picker), grouped by
+  component for Multi-Part. Estimators fix parser ambiguities in the modal without going to the
+  main screens. Simple + Matched Set + Individual all covered. New `lib/parserFieldRegistry.js`;
+  edits merge into the apply() patch/state. Tested iter52 (10/11 PASS; custCode picker code-in-
+  place but not live-exercised — no custCode ask raised by sample RFQs).
+- NEXT (user's remaining big items, this fork): (2) Email Quote feature — build the full UX as a
+  MOCK first (compose dialog, editable To/CC + subject/body, auto-attached PDF, mocked send),
+  swap in M365 Graph later with IT. (3) Auto-update parser model — add "Auto (latest)" option in
+  Admin → Integrations (default latest Opus, with manual pin override), resolving via Anthropic
+  `GET /v1/models`.
+
 ### Next P0/P1 backlog (post this session)
 - **P0: DB backup strategy** (see MONDAY_LAUNCH_QUESTIONS.md §G — needs frequency/
   retention/destination decision before go-live; sane default = nightly on-disk gz JSON

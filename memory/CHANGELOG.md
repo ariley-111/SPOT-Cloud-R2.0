@@ -2,6 +2,29 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Inline parser-correction workflow (editable "Needs Estimator Input") ✅
+The Review Parsed Fields modal's "NEEDS ESTIMATOR INPUT" block used to list internal code
+variables (`bomItems[0].state.printMode`, `qtys (top-level)`, `fscEnabled`) as read-only text.
+Estimators can now FIX each flagged field inline — no jumping to the main screens. Works for
+Simple AND both Multi-Part types (Matched Set + Individual).
+- **New `/app/frontend/src/lib/parserFieldRegistry.js`** — `FIELD_META` maps every parser field
+  to a plain UI label + section breadcrumb + the right control (select / number / text / textarea /
+  customer / qtys); `ALIAS` handles parser name variants; `parseAskField()` normalizes
+  `bomItems[N].state.key` / `bomItems[N].key` / `key (top-level)` → `{scope,itemIdx,key}`.
+- **`FilesSec.jsx` ReviewParseModal** — each ask renders as a labeled card with the reason, a
+  component badge for item-scoped asks (e.g. "Print Mode — *D/C Tray 1X*"), and an inline editor
+  (`AskEditor`) prefilled with the parsed value. A "✓ set" indicator + green border mark edited
+  rows. custCode uses `AskCustomerPicker` (debounced `/api/customers` typeahead) to pick the
+  correct branch. `apply()` merges the `edits` map into the Simple patch and the Multi-Part
+  job/bomItems state (job edits win last; item edits overlay per-component before normalization).
+  Item-scoped testids carry the component index (`parse-ask-item-{idx}-{key}`).
+- **Tested (iter52, live Multi-Part RFQ)**: 10/11 PASS — friendly labels with zero raw code vars,
+  correct control types, edit indicator, item-component badges, Apply lands the value (Print Mode →
+  Gloss confirmed in the quote). custCode picker NOT live-exercised (sample RFQs auto-detected the
+  customer so no custCode ask was raised) — code path reuses the proven EstimateInfoSec customer
+  typeahead. Frontend-only; needs redeploy for prod.
+
+
 ### 2026-06-23 — Smart dimension formatting (trailing-zero trim) ✅
 Added `fmtDim()` in `lib/format.js` — shows up to 4 decimals but strips trailing zeros
 (60.0000→"60", 28.625→"28.625", 12.125×11.4375 kept full). Replaced all forced-decimal sheet/
