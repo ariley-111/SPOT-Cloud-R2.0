@@ -854,3 +854,8 @@ Keeps cloud's compact layout but adds legacy functionality.
   verdict lines (cheaper-than/breaks-even/die-hurdle/Saber-needed/stock/Bobst-not-viable/
   mill-min) are identical. The apparent "different messaging" was caused by the Crest
   die ($500 vs $1,200) — fixed earlier — which flips the winner & dollar deltas.
+
+### 2026-06-23 (cont.) — "Saber On" Economics pill
+- Added the missing **"Saber On"** routing pill in the Economics panel (next to
+  Cut/Strip pills), shown when saber==="Yes" — legacy parity (spot_r1_5.jsx L7078,
+  teal #14b8a6). Verified live: PRINT SATIN · CUT CREST COMPLEX · SABER ON · STRIP COMPLEX.

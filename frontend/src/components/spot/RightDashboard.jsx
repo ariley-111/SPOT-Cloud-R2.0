@@ -1539,6 +1539,7 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
             <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
               {(s.printReq === "Yes" || s.printReq === "On") && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Print {labelize(s.printMode)}</span>}
               {r.route && <span className="sp-pill" style={{ color: "#22c55e", background: "#22c55e22", borderColor: "#22c55e55" }}>Cut {(r.route === "Saber + D/C" && s.saber !== "Yes") ? "CAD" : r.route} {labelize(s.cadDifficulty)}</span>}
+              {s.saber === "Yes" && <span className="sp-pill" data-testid="pill-saber-on" style={{ color: "#14b8a6", background: "#14b8a622", borderColor: "#14b8a655" }}>Saber On</span>}
               {s.handGluing === "Yes" && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Gluing {labelize(s.gluingComplexity)}</span>}
               {s.tape === "Yes" && <span className="sp-pill" style={{ color: "#3b82f6", background: "#3b82f622", borderColor: "#3b82f655" }}>Tape {labelize(s.tapeType || "Clear")}</span>}
               {s.handStripping === "Yes" && <span className="sp-pill" style={{ color: "#f59e0b", background: "#f59e0b22", borderColor: "#f59e0b55" }}>Strip {labelize(s.strippingComplexity)}</span>}
