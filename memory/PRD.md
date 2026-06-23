@@ -686,6 +686,17 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   Admin → Integrations (default latest Opus, with manual pin override), resolving via Anthropic
   `GET /v1/models`.
 
+### 2026-06-23 (cont.) — Saber Cost Buildup + parser scope + qty verify ✅
+- Saber cost now appears in the right-rail Cost Buildup "Cutting" line (+ Saber detail sub-line);
+  backend exposes `saberRate`. Verified iter53.
+- Parser: CADs authoritative for component count; litho/offset excluded+flagged; product mats /
+  lightboards (styrene) flagged as in-family-but-not-yet-priced. Verified (3 components, litho in asks).
+- Review modal: ALWAYS-ON "Verify Quantities" panel (Simple = 1 input; MP = per-component),
+  because the parser frequently mis-assigns qtys. Verified edits land per-component.
+- STILL OPEN (out-of-scope decision UX): currently litho/styrene items are flagged in asks for an
+  include/exclude decision but there is no one-click "add this excluded component back" control —
+  estimator adds it manually via the BOM. Consider a future "include flagged component" button.
+
 ### Next P0/P1 backlog (post this session)
 - **P0: DB backup strategy** (see MONDAY_LAUNCH_QUESTIONS.md §G — needs frequency/
   retention/destination decision before go-live; sane default = nightly on-disk gz JSON

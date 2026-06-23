@@ -2,6 +2,28 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Saber in Cost Buildup, parser scope rules, always-on qty verify ✅
+Three changes, all verified live (test iter53, 11/11 PASS):
+- **Saber charge now shows in Cost Buildup** — the right-rail "Cutting" line silently dropped
+  `saberCost` (total was right, breakdown wasn't). Now `Cutting = cutterDirect + saberCost`
+  (matches legacy L7129-7132), and Detail view adds a "Saber @ $X/hr" sub-line above the
+  cutter sub-line. Backend `runner.py` now exposes `saberRate`. (RightDashboard.jsx ~L1615)
+- **Parser scope rules (parser_knowledge.py)**:
+  - *CADs are authoritative for the component list* — one component per CAD part; the email
+    body only fills in detail, it does NOT spawn extra components. (Fixed: an RFQ with 3 CADs
+    was producing 4 components.)
+  - *Out-of-scope litho/offset/paper-on-board* → NOT created as a component; flagged with an
+    include/exclude ask. *Product mats & lightboards (styrene / OnQ)* are in-family but flagged
+    as "pricing not yet in SPOT" (not treated as litho). Verified: the litho counter tray now
+    drops out of the BOM (3 components) and is surfaced in asks.
+- **Always-on "Verify Quantities" panel** in the Review modal — parser qtys are often wrong, so
+  this panel is ALWAYS shown (independent of asks): one input for Simple (`parse-qty-input-job`),
+  one per component for Multi-Part (`parse-qty-input-item-{i}`), prefilled + editable, flowing
+  through the same edits/apply path. Verified: editing item-0 qtys landed only on that component.
+- Item-scoped ask testids now include the component index (`parse-ask-item-{idx}-{key}`).
+  Frontend + one backend field; needs redeploy for prod.
+
+
 ### 2026-06-23 — Inline parser-correction workflow (editable "Needs Estimator Input") ✅
 The Review Parsed Fields modal's "NEEDS ESTIMATOR INPUT" block used to list internal code
 variables (`bomItems[0].state.printMode`, `qtys (top-level)`, `fscEnabled`) as read-only text.
