@@ -615,7 +615,7 @@ function BoardStatusBar({ s, r, setField }) {
 
       {tilesOpen && (
         <div style={{ padding: "6px 0 2px", display: "flex", flexDirection: "column", gap: 6 }} data-testid="board-tiles">
-          <F l="Flute" inline fw={60}>
+          <F l="Flute" inline fw={108}>
             <div style={{ display: "flex", gap: 2 }}>
               {FLUTES.map((f) => {
                 // Green dot = stock-eligible singlewall flutes per legacy SPC sheet library
@@ -634,7 +634,7 @@ function BoardStatusBar({ s, r, setField }) {
               })}
             </div>
           </F>
-          <F l="Grade" inline fw={60}>
+          <F l="Grade" inline fw={108}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
                 {getGradesForFlute(s.flute).map((g) => {
@@ -679,7 +679,7 @@ function BoardStatusBar({ s, r, setField }) {
               )}
             </div>
           </F>
-          <F l="Outside" inline fw={60}>
+          <F l="Outside" inline fw={108}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
               {allowed.map((l) => {
                 const hasStock = avail.outside.has(l);
@@ -698,7 +698,7 @@ function BoardStatusBar({ s, r, setField }) {
               })}
             </div>
           </F>
-          <F l="Inside" inline fw={60}>
+          <F l="Inside" inline fw={108}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
               {allowed.map((l) => {
                 const hasStock = avail.inside.has(l);
@@ -717,14 +717,25 @@ function BoardStatusBar({ s, r, setField }) {
               })}
             </div>
           </F>
-          <F l="Medium" inline fw={60}>
+          <F l="Medium Upgrade" inline fw={108}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-              {MEDIUMS.map((m) => (
-                <Tile key={m} label={m === "None" ? "None" : m.replace("# Medium", "#").replace("# Bleached Medium", "# Bl")}
-                  active={s.medium === m}
-                  data-testid={`tile-medium-${m.replace(/[^a-zA-Z0-9]/g, '')}`}
-                  onClick={() => setField("medium", m)} small />
-              ))}
+              {MEDIUMS.map((m) => {
+                // Green dot = mediums SPC carries in stock. Only "None" (standard
+                // weight) is stocked; every other entry is a medium UPGRADE (custom
+                // order), matching the flute/grade/liner stock-dot convention.
+                const carried = m === "None";
+                return (
+                  <Tile key={m} label={
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      {m === "None" ? "None" : m.replace("# Medium", "#").replace("# Bleached Medium", "# Bl")}
+                      {carried && <span style={{ width: 5, height: 5, borderRadius: 3, background: "var(--spot-green)" }} />}
+                    </span>}
+                    active={s.medium === m}
+                    data-testid={`tile-medium-${m.replace(/[^a-zA-Z0-9]/g, '')}`}
+                    title={carried ? "None — standard weight (carried in stock)" : `${m} — medium upgrade (custom order)`}
+                    onClick={() => setField("medium", m)} small />
+                );
+              })}
               <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
               <Tile label="Off" active={!s.fscEnabled}  onClick={() => setField("fscEnabled", false)} small data-testid="tile-fsc-off" />
               <Tile label="FSC" active={s.fscEnabled}    onClick={() => setField("fscEnabled", true)}  small data-testid="tile-fsc-on" />

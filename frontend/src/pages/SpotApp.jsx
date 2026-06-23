@@ -1,5 +1,5 @@
 /* eslint-disable */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Toolbar from "../components/spot/Toolbar";
 import TabBar from "../components/spot/TabBar";
 import EstimateInfoSec from "../components/spot/EstimateInfoSec";
@@ -24,6 +24,34 @@ import { useEngine } from "../hooks/useEngine";
 export default function SpotApp({ onOpenAdmin }) {
   const { active, toasts } = useQuote();
   const [modal, setModal] = useState(null);
+
+  // ── Resizable right rail (#4) + responsive default (#3) ──
+  const RW_MIN = 280, RW_MAX = 760, RW_DEF = 360;
+  const [rightW, setRightW] = useState(() => {
+    const saved = parseInt(localStorage.getItem("spot:rightW") || "", 10);
+    if (!Number.isNaN(saved)) return Math.min(RW_MAX, Math.max(RW_MIN, saved));
+    return window.innerWidth < 1440 ? 300 : RW_DEF;  // tighter default on laptops
+  });
+  const rightWRef = useRef(rightW); rightWRef.current = rightW;
+  const startResize = (e) => {
+    e.preventDefault();
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev) => {
+      const w = Math.min(RW_MAX, Math.max(RW_MIN, window.innerWidth - ev.clientX));
+      setRightW(w);
+    };
+    const onUp = () => {
+      document.body.style.cursor = ""; document.body.style.userSelect = "";
+      localStorage.setItem("spot:rightW", String(rightWRef.current));
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+  const resetRightW = () => { setRightW(RW_DEF); localStorage.setItem("spot:rightW", String(RW_DEF)); };
+
   const { results, perComponent, componentPricing, jobTotals, meta, isMultiPart } = useEngine(active?.state);
   const selSlot = (active?.state?.selSlot) || 0;
   const activeItemIdx = active?.state?.activeItemIdx ?? 0;
@@ -82,7 +110,14 @@ export default function SpotApp({ onOpenAdmin }) {
           <FilesSec />
         </div>
 
-        <RightDashboard />
+        <div
+          data-testid="panel-resizer"
+          onMouseDown={startResize}
+          onDoubleClick={resetRightW}
+          title="Drag to resize · double-click to reset"
+          className="sp-resizer"
+        />
+        <RightDashboard width={rightW} />
       </div>
 
       {/* Modals */}

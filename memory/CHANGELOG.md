@@ -2,6 +2,20 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Minor UI batch (pre-fork) ✅
+1. **Medium label → "Medium Upgrade"** (`ItemSetupSec.jsx`). Board-spec row labels widened
+   to `fw=108` so Flute/Grade/Outside/Inside/Medium Upgrade stay aligned.
+2. **Green stock dot on Medium** — only on **"None"** (the sole carried/stocked medium; all
+   others are custom-order upgrades), matching the flute/grade/liner dot convention.
+3. **Smaller-screen layout** — right rail default narrows to 300px when viewport <1440px.
+4. **Resizable left/right panels** (`SpotApp.jsx` + `RightDashboard` width prop) — draggable
+   `.sp-resizer` splitter, clamp 280–760px, persisted to `localStorage` (`spot:rightW`),
+   double-click resets to 360. Verified: drag 360→516.
+5. **Resizable file-view windows** — `Modal` gained a `resizable` prop; `FilePreviewModal`
+   uses it; `.sp-modal-resizable { resize: both }` CSS (min 480×340, max 96vw×92vh).
+Frontend-only; needs redeploy for prod. (User will fork for the larger changes next.)
+
+
 ### 2026-06-23 — Legacy parity audit: sheet library / sheet selection / routing ✅
 **User directive:** match legacy sheet-selection logic, sheet library, AND routing EXACTLY.
 **Verification (vs `legacy_spot/spot_r1_5.jsx`):**

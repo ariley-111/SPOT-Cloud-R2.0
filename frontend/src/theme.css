@@ -260,6 +260,21 @@ body.spot-app-body {
   display: flex; justify-content: flex-end; gap: 8px;
 }
 
+/* ─── Resizable file-preview modal (#5): drag the bottom-right corner ─── */
+.sp-modal-resizable {
+  resize: both;
+  min-width: 480px; min-height: 340px;
+  max-width: 96vw; max-height: 92vh;
+}
+
+/* ─── Draggable splitter between main + right rail (#4) ─── */
+.sp-resizer {
+  width: 6px; flex-shrink: 0; cursor: col-resize;
+  background: var(--spot-border);
+  transition: background 0.12s ease;
+}
+.sp-resizer:hover, .sp-resizer:active { background: var(--spot-accent); }
+
 /* ─── Toast ─── */
 .sp-toast-wrap {
   position: fixed; bottom: 24px; right: 24px; z-index: 1000;

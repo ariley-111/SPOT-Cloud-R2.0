@@ -11,7 +11,7 @@ import { allocateJobCost, detectFreightMinimum, isLocalCarrier } from "../../lib
 import FreightDashModal from "./FreightDashModal";
 import CrestApprovalModal from "./CrestApprovalModal";
 
-export default function RightDashboard() {
+export default function RightDashboard({ width }) {
   const { active, setField, pushToast } = useQuote();
   const s = active?.state || {};
   const { results, perComponent, componentPricing, isMultiPart } = useEngine(s);
@@ -74,7 +74,7 @@ export default function RightDashboard() {
 
   return (
     <div data-testid="right-dashboard" style={{
-      width: 360, flexShrink: 0, overflow: "auto",
+      width: width || 360, flexShrink: 0, overflow: "auto",
       background: "var(--spot-bg2)", borderLeft: "1px solid var(--spot-line)",
       display: "flex", flexDirection: "column",
       paddingBottom: 80,  // keep last row clear of the "Made with Emergent" badge

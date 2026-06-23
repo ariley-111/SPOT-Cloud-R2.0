@@ -109,7 +109,7 @@ export default function FilePreviewModal({ fileId, filename, onClose }) {
   );
 
   return (
-    <Modal title={current.title || "File preview"} onClose={onClose} footer={footer} width={1080}
+    <Modal title={current.title || "File preview"} onClose={onClose} footer={footer} width={1080} resizable
       data-testid="file-preview-modal">
       <div style={{ minHeight: 320 }}>
         {state.status === "loading" && (
