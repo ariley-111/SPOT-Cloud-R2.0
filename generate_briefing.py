@@ -368,7 +368,7 @@ kv("Confirmed sign-ins", "Ashley Riley, George Kistler (2 of 5 admins)")
 kv("SSO mode", "Optional (JWT fallback enabled). Flip SSO_REQUIRED=true once all 5 admins have signed in once.")
 
 h3("Preview / Development")
-kv("URL", "https://spot-multi-user.preview.emergentagent.com")
+kv("URL", "https://spot-estimator.preview.emergentagent.com")
 kv("Purpose", "Active development environment — all new changes land here first")
 kv("Promotion path", "Verify in preview → redeploy to push to prod")
 

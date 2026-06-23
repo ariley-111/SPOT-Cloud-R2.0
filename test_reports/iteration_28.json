@@ -1,7 +1,7 @@
 {
   "summary": "RETEST of iteration_27 bug — FIX VERIFIED. The persistent manual-override flag `corrManual` works correctly. (1) Typing spec orientation (W=72.625, L=49.25) now PERSISTS — values held steady at +1s, +2.5s, +5s and the 'Corr direction auto-flipped' toast did NOT appear. (2) Clicking 'Flip Corr' once toggles W/L and the new state PERSISTS for 5+ seconds. A second click toggles back and also persists. The earlier ~1s auto-revert from the async engine recompute is GONE.",
   "test_environment": {
-    "url": "https://spot-multi-user.preview.emergentagent.com/",
+    "url": "https://spot-estimator.preview.emergentagent.com/",
     "user": "admin@standardprinting.com",
     "mode": "Simple quote",
     "board": "ECT 44 · B · Kemi-Lite/Kraft (engine substituted from 33# Kla-White/Kraft — same flipWouldHelp=true scenario as iteration_27)"

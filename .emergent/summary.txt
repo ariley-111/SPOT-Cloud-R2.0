@@ -1,6 +1,7 @@
-<analysis>**original_problem_statement**: The user wants to port a local, Claude-built desktop web app called SPOT (Standard Printing Optimization Tool) to the Emergent cloud platform. The goal is to retain 100% of its current pricing math, functionality, and integrations, while transitioning to a multi-user cloud architecture with a proper database.
-PRODUCT REQUIREMENTS:
-- Preserve mathematical parity with the legacy pricing engine exactly.
+<analysis>**original_problem_statement**: The user wants to port a local, Claude-built desktop web app called SPOT (Standard Printing Optimization Tool) to the Emergent cloud platform. 
+PRODUCT REQUIREMENTS: 
+- Retain 100% of current pricing math, functionality, and integrations (Legacy Parity is Absolute - matches D-124 version logic).
+- Transition to a multi-user cloud architecture with a proper database.
 - Implement multi-tab draft support for estimators.
 - UI must closely match the legacy aesthetic (1:1 UI rebuild).
 - Implement Legacy Multi-Part features (display, kits, multiple CADs).
@@ -8,131 +9,127 @@ PRODUCT REQUIREMENTS:
 
 **User's preferred language**: English (INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only)
 
-**what currently exists?**: A fully functional React + FastAPI + MongoDB app. The backend pricing engine perfectly matches legacy output. The parser handles RFQ processing and persistent file saving. The frontend features multi-part support and accurate quoting tables. In this session, the agent successfully implemented the In-App File Preview Modal (including inline email attachment previews), fixed a dimension-wiping bug in the BOM Builder, and resolved an issue where saved RFQ files disappeared upon quote saving.
+**what currently exists?**: A fully functional React + FastAPI + MongoDB app. The backend pricing engine precisely matches the legacy D-124 cost-aware routing logic. The UI features multi-tab quoting, smart decimal dimensions, resizable UI panels, a clean 5-zone modern toolbar, unified typography (Inter), and dynamic PDF generation. Collapsed UI sections now display highly detailed, color-coded summary pills to allow estimators to navigate quotes rapidly. 
 
 **Last working item**: 
-    - Last item agent was working: Investigating a reported discrepancy in pricing logic where 200 E Kemi/Kraft for dimensions 20.3125 x 13.5938 triggers a Buy Min warning in prod and results in 21 ups (3x7) on a 63x126 sheet in legacy, whereas the cloud engine calculates 27 ups (3x9) and no Buy Min warning at standard quantities. The agent analyzed routing, sheet selection, and legacy imposition logic, verifying that the layout formulas are identical.
-    - Status: BLOCKED
-    - Agent Testing Done: Y (Ran backend python repro scripts)
-    - Which testing method agent to use? backend testing agent / manual python -c scripts
-    - User Testing Done: N
+    - Last item agent was working: The user indicated satisfaction with the UI updates (Section Header Summary Pills) and stated they will deploy and then fork for bigger changes. The agent performed a deployment readiness check which passed. Awaiting new instructions from the user in this new fork.
+    - Status: NONE
+    - Agent Testing Done: Y
+    - Which testing method agent to use? NA
+    - User Testing Done: Y
 
 **All Pending/In progress Issue list**:  
-  - Issue 1: Buy Min / Imposition Parity discrepancy for 200 E Kemi/Kraft (P0)
-     - Attempted fixes: Investigated , ,  and compared against  legacy code. Found formulas match exactly (). The agent suspects either a user sheet override, a different total quantity causing an auto-route change to Crest (which forces a smaller 60x120 sheet), or an input difference.
-     - Next debug checklist: Await user's screenshot and quantity details. Check if the Buy Min badge () or Below Min row is triggered. Verify if the CAD -> Crest routing fallback rule is shifting the sheet size.
-     - Why fix this issue and what will be achieved with the fix?: Finalizes math parity with legacy for layout edge cases.
-     - Status: BLOCKED (Waiting on user feedback from their meeting)
+  Issue 1: Discuss By Part, By Type, and Lump Sum legacy vs cloud logic (P1)
+     - Attempted fixes: None. User parked this discussion until after recent parity fixes.
+     - Next debug checklist: Ask user for their questions regarding these charge modes.
+     - Why fix this issue and what will be achieved with the fix?: Resolve any potential logic disparity between how charge modes rollup in legacy vs cloud.
+     - Status: NOT STARTED
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? backend
+     - Should Test frontend/backend/both after fix? Both
+     - Blocked on other issue: None
 
-**In progress Task List**: 
-  None currently.
+  Issue 2: Verify Saber Economics panel visibility (P2)
+     - Attempted fixes: User reported the Economics panel vanishes when Saber is enabled. Previous agent added the missing SABER ON pill but could not reproduce the panel completely disappearing.
+     - Next debug checklist: Check with the user if the Saber Economics panel is still hiding for them. If so, request exact quote parameters (Auto vs forced route, Simple vs Multi-Part, or an EST #) to reproduce.
+     - Why fix this issue and what will be achieved with the fix?: Ensures all estimating data is visible to users.
+     - Status: USER VERIFICATION PENDING
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend
+     - Blocked on other issue: None
+
+**In progress Task List**:
+  *(None - Previous tasks were completed before the fork)*
 
 **Upcoming and Future Tasks**
-    - P0: Implement new features and fixes derived from the user's show and tell demo meeting (expect a list from the user).
-    - P0: Port Cost Report modal from legacy (Internal Cost-Buildup View).
     - P0: DB backup strategy.
-    - P1: Substrate substitution parity.
     - P1: Per-component validation badges.
+    - P2: Email Quote from SPOT (Microsoft Graph) - Send the generated PDF directly via M365/Entra, with an editable To/CC dialog (buyer + CS rep + salesperson), auto-attached PDF, and an editable subject/body template.
     - P2: Categorize saved quotes (Multi-part, Individual, Customer, Project Name) for easier lookup.
-    - P2: Auto-persist email attachments as individual saved-files rows in the parser files list.
     - P2: Phase 5 Integrations - Ignition API Customer Sync.
     - P3: SharePoint PDF archive.
     - P3: Cover Letter note field.
     - P3: Admin Console Governance / Approval Workflow.
+    - Future: Save the newly added resizable right-panel width per-user profile (currently it is in localStorage).
+    - Future: Add Quotes (recent activity) shortcut to the new Account dropdown menu in the toolbar.
+    - Future: Implement remaining safe UI design suggestions (In-stock dot pattern, KPI grid refinements) from the .
 
 **Completed work in this session**
-- Built In-App Parser File Preview Modal including support for clicking and viewing attachments inside .eml/.msg files inline (, ). (DONE)
-- Fixed BOM Builder Dimension-Wipe Bug where saving the BOM erased  by preserving  upon round-trip (). (DONE)
-- Fixed edge-case where in-flight top-level dim edits were lost if opening BOM Builder without switching tabs first (, ). (DONE)
-- Fixed Saved RFQ Files disappearing on Quote Save. Added  logic to migrate  draft IDs to permanent Quote IDs upon saving (, , , , ). (DONE)
+- Section Header Summary Pills: Implemented summary pills for collapsed sections (Pricing Strategy, Board Engine, Files). Kept Item Setup and Production Specs badges always visible. (DONE)
+- Pill Data Refinement: Wired exact data requirements to pills: Item Setup shows board specs + layout + sheet dims; Prod Specs shows print mode, sides, route, and conditional elements (saber, strip, glue, tape); Pricing Strategy shows scope; Board Engine shows version, MSF, Tier. (DONE)
+- Pill Styling: Colored collapsed pills with soft tints and matching borders corresponding to their specific section's hue. Widened max-width in CSS for longer layout strings. (DONE)
+- Bill of Materials (BOM) Pill: Added functionality to display the currently selected component name/description in the BOM collapsed header. (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   Issue 1: Pricing Mode Tile Click Event Swallowed
-   - Debug checklist: Testing agent reported that the inability to switch TO Matched Set looks like a click event swallowed somewhere in the  component or  (not the context callback). 
-   - Why to solve this issue and what will be achieved with this?: Ensures users can easily switch between Individual and Matched Set modes without UI friction.
-   - Should Test frontend/backend/both after fix: frontend
-   - Is recurring issue? N
+   - None
 
 **Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: None
-  - Recurrence count: 0
+  - Recurrence count: 0 
   - Status: RESOLVED
 
 **Code Architecture**
-core.pypricing.pyrunner.pyrouting.pyengine_routes.pypdf.pyparser.pyquotes.pyparser_files.pysheet_library.pyrate_overrides.pyemail_extract.pyQuoteTableSec.jsxFilesSec.jsxFilePreviewModal.jsxBomBuilderModal.jsxToolbar.jsxQuoteContext.jsxAuthContext.jsxdefaults.jsmpSchema.jsspot.jsclient.js
+core.pypricing.pyrunner.pyrouting.pyengine_routes.pyadmin_rates.pypdf.pyrate_overrides.pypdf_tiles.pyToolbar.jsxSec.jsxSpotApp.jsxAdminPage.jsxuseEngine.jsformat.jsfmtDim
 
 **Key Technical Concepts**
-React, FastAPI, MongoDB, Anthropic Opus (Parser), Weasyprint (PDF), OIDC SSO.
+React, FastAPI, MongoDB, Anthropic Opus (Parser), Weasyprint (PDF), OIDC SSO. Backend pricing dynamically scopes calculations to historical pricing versions using a . Rates can be overridden in the DB.  used for stable price rendering.
 
 **key DB schema**
-  - : {owner_id, est_num, state, exportExclude, status}
-  - : Stores saved RFQ attachments permanently for quote lifecycle tied to .
+  - : {id, active, base_matrix, created_at, label, ...}
+  - : {owner_id, est_num, pricingVersionId, state, status, ...}
+  - : {category, key, value, created_at}
 
 **changes in tech stack**
-  - None this session.
+  - None.
 
 **All files of reference** 
-  -  (Updated to add attachment preview & file ID reassign endpoints)
-  -  (Updated to fix BOM state wipe and trigger file reassignment logic)
-  -  (Updated to call file reassignment on quote save)
-  -  (Core file persistence/reassign logic)
-  - , ,  (Investigated for Buy Min / imposition discrepancy edge case)
+  -  (Updated layout and sheet dims pill logic)
+  -  (Updated dynamic logic for saber, strip, glue, tape)
+  -  (Pricing strategy scope pills)
+  -  (BOM pill component name display)
+  -  (Files count pill logic)
+  -  (Passed engine results down to sections)
+  -  (Added section-specific color classes for pills and widened max-width)
+  -  (Generated by design agent with P0/P1/P2 UI recommendations)
 
 **Areas that need refactoring**: 
-  - NA
+  - None critical.
 
 **key api endpoints**
-  - 
-  -  (New)
-  -  (New)
-  - 
+  -  (Routing logic heavily scrutinized and aligned with legacy D-124 version)
 
 **Critical Info for New Agent**
-- **Environment Note:** The user has deployed the app to PRODUCTION. You (the agent) only have access to the PREVIEW environment. When debugging production issues, reproduce and fix them in the preview environment, then inform the user that a redeployment is necessary for changes to reach production.
-- **Buy Min Discrepancy:** The user reported a Buy Min discrepancy on 200 E Kemi/Kraft (21 ups vs 27 ups). The math in the cloud app for imposition exactly matches the legacy code. Wait for the user to provide a screenshot, exact total quantity, and routing choice. The discrepancy is likely due to an auto-routing shift (e.g., CAD to Crest forcing a smaller sheet size) or a manual UI override.
-- **User Demo:** The user is returning from a show and tell demo meeting with their team. Expect the next message to contain a fresh list of features and bug fixes. Address any blockers first before moving through their list.
+- **Legacy Parity is Absolute**: The underlying formulas match the legacy D-124 version exactly (cost-aware, cheapest route wins). Board Cost Changes discovered by the user in comparisons are tied to their own DB price overrides (June 15th board hike). Ensure you respect this routing model.
+- **Preview vs Production separation**: User deployed to prod but will continue testing parity in Preview. Keep all testing to the Preview environment. If the user mentions an issue, clarify if it's in preview or prod. NEVER link actual preview or production URLs in your messages or summaries.
 
 **documents and test reports created in this job**
-  - 
-  - 
-  - 
-  - 
-  - 
+  -  updated with UI tasks.
 
 **Last 10 User Messages and any pending HUMAN messages** 
- - *User*: Requested the ability to extract and preview each file attached to parsed emails. (Resolved)
- - *User*: Suggested saving email attachments as their own row in the Saved RFQ files list. (Added to backlog)
- - *User*: Reported a production bug: changing quantity in the BOM builder makes dimensions disappear. (Resolved)
- - *User*: Reported a bug where saved quotes, upon reopening, do not show previously saved parser files. (Resolved)
- - *User*: Approved backlogging an enhancement, mentioned an upcoming demo meeting, and asked about forking. (Agent advised forking/waiting)
- - *User*: Added Cost Report and categorizing saved quotes to the backlog. (Added to backlog)
- - *User* (PENDING): Asked why 200 E Kemi/Kraft is showing a Buy Min for 20.3125 x 13.5938 in prod, whereas legacy has no warning and gives 3x7=21 out on a 63x126 sheet. Agent investigated, found the cloud engine accurately yields 27 ups (3x9) using identical layout logic, and requested the user's exact quantity/screenshot to reproduce the likely routing override. Waiting for user response.
+ - *User*: Confirm plan via ask_human. (Completed)
+ - *User*: Keep Item Setup and Prod Specs badges always visible; re-summarize P1 items when done. (Completed)
+ - *User*: Refine data shown in pills (Prod specs: print mode, route, stripping, saber; Board engine: version, MSF, tier; etc.). (Completed)
+ - *User*: Color the pills so they look pretty and make sense with the sections. (Completed)
+ - *User*: Show selected component name/description in the Bill of Materials section. (Completed)
+ - *User*: Add layout and sheet dims to the Item setup pill (e.g., 5x10 --> 50 out on 63 x126). (Completed)
+ - *User*: ok this looks much cleaner. I am going to deploy then fork for bigger changes. (Completed - Ready for new input in this fork)
 
 **Project Health Check:**
-  - Broken: None
+  - Broken: None.
   - Mocked: Ignition API Customer Sync.
 
-**3rd Party Integrations**
+**3rd Party Integrations** 
   - Microsoft Entra ID (SSO) — requires User API Key
   - UTS API (Freight quotes) — requires User API Key
   - Anthropic Opus (RFQ Parser) — requires User API Key
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Tested BOM Builder fixes and Parser file reassignments extensively).
+  - Testing agent used after significant changes: NO (Screenshot testing handled validation for these UI elements).
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: , 
-  - Known regressions: Tile click issue on switching to Matched Set (reported by testing agent earlier).
+  - Test files created: None this round.
+  - Known regressions: None
 
 **Credentials to test flow:**
   - Standard admin:  / 
 
 **What agent forgot to execute**
-  Nothing forgotten. The agent safely paused execution to await the user's return from their demo meeting along with screenshots required to reproduce the imposition/Buy Min issue.
-
-**Debugging checklist for current issue**
-    Issue: Buy Min / Imposition Parity discrepancy for 200 E Kemi/Kraft (P0)
-    Frontend files to check:  (check  propagation)
-    Backend files to check:  (check layout math),  (check Buy Min override state),  (check if auto route forced Crest over CAD due to threshold).
-    Action: Wait for the user's screenshot and quantity array. Compare the user's sheet size (likely 60x120 instead of 63x126 due to Crest auto-routing).</analysis>
+  - Nothing was forgotten. The previous agent completed all assigned UI tasks and successfully executed a deployment readiness check before the user forked the environment.</analysis>

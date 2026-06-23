@@ -13,7 +13,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://spot-multi-user.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://spot-estimator.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@standardprinting.com"
 ADMIN_PASS = "spot-admin-2026"
 EST_EMAIL = "rwalter@standardprinting.com"

@@ -487,7 +487,7 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Multi-part aggregator now reads `dieBase` from engine result (not payload state) so auto-applied dies contribute to `dieBaseTotal`.
 
 ## 9. Deployment
-- Preview URL: `https://spot-multi-user.preview.emergentagent.com` (this dev sandbox)
+- Preview URL: `https://spot-estimator.preview.emergentagent.com` (this dev sandbox)
 - Production URL: TBD (deploy ahead of 2026-06-02 11:30 AM demo recommended)
 
 ## 10. Demo (2026-06-02 11:30 AM)
