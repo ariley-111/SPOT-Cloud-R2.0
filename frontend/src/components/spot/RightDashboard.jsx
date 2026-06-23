@@ -4,7 +4,7 @@ import { useQuote } from "../../context/QuoteContext";
 import { useEngine } from "../../hooks/useEngine";
 import { freightQuote, freightQuoteBatch, compareRoutes } from "../../api/spot";
 import Tile from "./Tile";
-import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
+import { fmtMoney, fmtInt, fmtPct, fmtNum, fmtDim } from "../../lib/format";
 import ProgressModal from "./ProgressModal";
 import { calcShipment } from "../../lib/shipment";
 import { allocateJobCost, detectFreightMinimum, isLocalCarrier } from "../../lib/freight";
@@ -1198,7 +1198,7 @@ function RouteComparison({ s, primary }) {
                   </tr>
                 </thead>
                 <tbody style={{ color: "var(--spot-text2)" }}>
-                  <CmpRow label="Sheet" cols={cols} get={(d) => (d.sheetW && d.sheetL) ? `${fmtNum(d.sheetW, 1)}×${fmtNum(d.sheetL, 1)}` : "—"} />
+                  <CmpRow label="Sheet" cols={cols} get={(d) => (d.sheetW && d.sheetL) ? `${fmtDim(d.sheetW)}×${fmtDim(d.sheetL)}` : "—"} />
                   <CmpRow label="Layout" cols={cols} get={(d) => d.pcsPerSheet ? `${d.pcsPerSheet} out` : "—"} />
                   <CmpRow label="Sheets" cols={cols} get={(d) => d.sheetsReq ? fmtInt(d.sheetsReq) : "—"} />
                   <CmpRow label="" cols={cols} get={() => ""} sep />
@@ -1802,7 +1802,7 @@ function BoardPanel({ result, s }) {
   const [open, setOpen] = useState(false);  // default COLLAPSED (legacy default)
   if (!result || result.error) return null;
   const r = result;
-  const sheetLbl = (r.sheetW && r.sheetL) ? `${fmtNum(r.sheetW, 0)}×${fmtNum(r.sheetL, 0)}` : "—";
+  const sheetLbl = (r.sheetW && r.sheetL) ? `${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}` : "—";
   const isStock = !!r?._pipeline?.stockMode;
   const isOverride = !!r?._pipeline?.overrideActive || !!r?.overrideActive || !!s?.overrideSheetId;
   const mode = isOverride ? "OVERRIDE" : (isStock ? "STOCK" : "ORDER");

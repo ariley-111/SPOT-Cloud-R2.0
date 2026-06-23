@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { previewPdfBlob, calculateAll, calculateMultiPart } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
 import { buildPayload, buildMpPayload } from "../../hooks/useEngine";
-import { fmtInt, fmtMoney, fmtNum } from "../../lib/format";
+import { fmtInt, fmtMoney, fmtNum, fmtDim } from "../../lib/format";
 
 /**
  * Preview Quote modal — ported 1:1 from legacy spot_r1_5.jsx (line 7632+).
@@ -100,7 +100,7 @@ export default function PreviewPdfModal({ onClose }) {
   if (s.boardGrade && s.flute) specBits.push(`${s.boardGrade}# ${s.flute}`);
   if (s.outsideLiner || s.insideLiner) specBits.push(`${fmLnr(s.outsideLiner)}/${fmLnr(s.insideLiner)}`);
   const w = Number(s.oneUpW || 0), l = Number(s.oneUpL || 0);
-  if (w > 0 && l > 0) specBits.push(`${fmtNum(w, 4)}×${fmtNum(l, 4)}`);
+  if (w > 0 && l > 0) specBits.push(`${fmtDim(w)}×${fmtDim(l)}`);
   if (s.fscEnabled) specBits.push("FSC");
 
   // Export to backend PDF
@@ -289,7 +289,7 @@ export default function PreviewPdfModal({ onClose }) {
                           const ol = fmLnr(ist.outsideLiner), il = fmLnr(ist.insideLiner);
                           brd = `${gr}# ${fl} ${ol}/${il}`;
                           const iw = Number(ist.oneUpW || 0), il2 = Number(ist.oneUpL || 0);
-                          if (iw > 0 && il2 > 0) dims = `${fmtNum(iw, 4)}×${fmtNum(il2, 4)}`;
+                          if (iw > 0 && il2 > 0) dims = `${fmtDim(iw)}×${fmtDim(il2)}`;
                         } else {
                           brd = it.type === "Purchased" ? "Purchased" : "Fulfillment";
                         }
@@ -723,7 +723,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
           (bs.outsideLiner || bs.insideLiner) ? `${fmLnr(bs.outsideLiner)}/${fmLnr(bs.insideLiner)}` : "",
           (bs.medium && bs.medium !== "None") ? String(bs.medium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "",
           (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0)
-            ? `${fmtNum(bs.oneUpW, 4)}×${fmtNum(bs.oneUpL, 4)}` : "",
+            ? `${fmtDim(bs.oneUpW)}×${fmtDim(bs.oneUpL)}` : "",
           `${c.pcsPerSet || 1} pc/set`,
         ].filter(Boolean).join(" · ");
         const rows = (c.rows || []).filter((r) => !isExcl(c.itemId, r.slotIdx));

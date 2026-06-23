@@ -23,6 +23,14 @@ export const fmtNum = (n, dec = 2) => {
   return v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 };
 
+// Smart dimension formatter: shows up to 4 decimals but strips trailing zeros.
+// 60 → "60", 60.0000 → "60", 28.625 → "28.625", 10.1875 → "10.1875".
+export const fmtDim = (n) => {
+  const v = Number(n);
+  if (!isFinite(v)) return "—";
+  return v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+};
+
 export const fmtBytes = (b) => {
   const v = Number(b);
   if (!isFinite(v) || v < 0) return "—";

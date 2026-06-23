@@ -2,6 +2,16 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Smart dimension formatting (trailing-zero trim) ✅
+Added `fmtDim()` in `lib/format.js` — shows up to 4 decimals but strips trailing zeros
+(60.0000→"60", 28.625→"28.625", 12.125×11.4375 kept full). Replaced all forced-decimal sheet/
+piece dim displays (`fmtNum(...,4)`, `Math.round`, `fmtInt`) with `fmtDim` across: ItemSetupSec
+(board summary + layout preview), RightDashboard (Route Comparison sheet row + Cost Buildup board
+line), QuoteTableSec (3 sheet columns, CSV, one-up dims), CostReportModal, PreviewPdfModal
+(customer PDF one-up dims). Money/MSF/cost untouched. Verified live: no `.0000` labels remain;
+60×120, 28.625×25.5, 12.125×11.4375 all render correctly. Frontend-only; redeploy for prod.
+
+
 ### 2026-06-23 — Design polish: typography + calmer section headers (option B core) ✅
 Per `/app/design_guidelines.json` (P0 + safe P1), fully reversible (CSS + 2 small component tweaks):
 - **Typography:** loaded Inter (400–900) + JetBrains Mono (400–700) in `index.html`; switched

@@ -3,7 +3,7 @@ import React from "react";
 import Modal from "./Modal";
 import { useQuote } from "../../context/QuoteContext";
 import { useEngine } from "../../hooks/useEngine";
-import { fmtMoney, fmtPct, fmtInt, fmtNum } from "../../lib/format";
+import { fmtMoney, fmtPct, fmtInt, fmtNum, fmtDim } from "../../lib/format";
 
 /* ─── Internal Cost Report — 1:1 port of legacy spot_r1_5.jsx L8021-8252 ───
  *  NOT customer facing. Shows the full per-component cost build-up the
@@ -212,7 +212,7 @@ export default function CostReportModal({ onClose }) {
                       <C bold>{fmtInt(r.qty)}</C>
                       <C>{fmtInt(r.sheetsReq)}</C>
                       <C>{fmtNum(r.oMSF, 1)}</C>
-                      <C>{r.sheetW > 0 ? `${fmtInt(r.sheetW)}×${fmtInt(r.sheetL)}` : "—"}</C>
+                      <C>{r.sheetW > 0 ? `${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}` : "—"}</C>
                       <C>{r.route}</C>
                       <C>{fmt0(r.material)}</C>
                       <C>{fmt0(r.print)}</C>

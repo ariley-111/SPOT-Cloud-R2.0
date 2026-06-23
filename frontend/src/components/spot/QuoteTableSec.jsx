@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { fmtMoney, fmtInt, fmtPct, fmtNum } from "../../lib/format";
+import { fmtMoney, fmtInt, fmtPct, fmtNum, fmtDim } from "../../lib/format";
 
 // Column definitions — used for both Single-Part and the per-component sub-tables.
 // `sellEa` column header is click-cyclable:
@@ -396,7 +396,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                   <td style={redCell}>—</td>
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11 }}>—</td>
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: "var(--spot-text2)" }}>
-                    {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
+                    {r.sheetW ? `${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}` : "—"}
                   </td>
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
                   <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: "var(--spot-text3)" }}>—</td>
@@ -461,7 +461,7 @@ function FlatLayout({ rows, isExcluded, toggleExclude, selSlot, selectRow, copyR
                   {Number(r.freightLine || r.freightEmbed) > 0 ? fmtMoney(r.freightLine || r.freightEmbed) : "—"}
                 </td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: "var(--spot-text2)" }}>
-                  {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
+                  {r.sheetW ? `${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}` : "—"}
                 </td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
                 <td style={{ padding: "4px 6px", textAlign: "right", fontSize: 11, color: routeColor(effRoute(r, s)), fontWeight: 600 }}>
@@ -648,7 +648,7 @@ function ComponentLayout({ componentPricing, jobTotals, bomItems, activeItemIdx,
           bs.custIdent,
           bs.boardGrade && bs.flute ? `${bs.boardGrade}# ${bs.flute}` : "",
           `${linerShort(bs.outsideLiner)}/${linerShort(bs.insideLiner)}`,
-          (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0) ? `${fmtNum(bs.oneUpW, 4)}×${fmtNum(bs.oneUpL, 4)}` : "",
+          (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0) ? `${fmtDim(bs.oneUpW)}×${fmtDim(bs.oneUpL)}` : "",
           mediumShort(bs.medium),
         ].filter(Boolean).join(" · ");
 
@@ -1082,7 +1082,7 @@ function ComponentSubTable({ comp, selRowIdx, onSelectRow, isRowExcluded, toggle
                     : (Number(r.freightLine) > 0 ? fmtMoney(r.freightLine) : "—")
                 }</td>
                 <td style={{ ...cellBase, textAlign: "right", color: "var(--spot-text2)" }}>
-                  {r.sheetW ? `${Math.round(Number(r.sheetW))}×${Math.round(Number(r.sheetL))}` : "—"}
+                  {r.sheetW ? `${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}` : "—"}
                 </td>
                 <td style={{ ...cellBase, textAlign: "right", fontWeight: 600 }}>{r.pcsPerSheet || "—"}</td>
                 <td style={{ ...cellBase, textAlign: "right", color: routeColor(effRoute(r, s)), fontWeight: 600 }}>{cadLabel}</td>

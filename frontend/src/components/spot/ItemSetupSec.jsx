@@ -7,7 +7,7 @@ import {
   BOX_STYLES, FLUTES, GRADES, getGradesForFlute, wallTypeForFlute, LINERS, MEDIUMS, allowed_liners,
 } from "../../lib/defaults";
 import { sheetAvailability, gradeAvailability } from "../../api/spot";
-import { fmtMoney, fmtInt, fmtNum, fmtPct } from "../../lib/format";
+import { fmtMoney, fmtInt, fmtNum, fmtPct, fmtDim } from "../../lib/format";
 
 // ECT → Mullen equivalence (ported from legacy spot_r1_5.jsx line 270)
 // "200 meets 32ECT specs, but 32ECT does not meet 200 specs"
@@ -262,7 +262,7 @@ export default function ItemSetupSec({ result }) {
                 <span style={{ color: "var(--spot-text2)" }}>→</span>
                 <span style={{ fontWeight: 700, color: "var(--spot-accent)" }}>{r.pcsPerSheet} out</span>
                 <span style={{ color: "var(--spot-text3)" }}>on</span>
-                <span style={{ fontWeight: 600 }}>{fmtNum(r.sheetW, 4)}×{fmtNum(r.sheetL, 4)}</span>
+                <span style={{ fontWeight: 600 }}>{fmtDim(r.sheetW)}×{fmtDim(r.sheetL)}</span>
                 <span style={{
                   fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 3,
                   background: `${routeColor(route)}22`, color: routeColor(route),
@@ -398,7 +398,7 @@ function BoardStatusBar({ s, r, setField }) {
 
   const isStock = !!r?.stockMode;
   const isCustom = !!r?.customOrder && !isStock;
-  const sheetInfo = r?.sheetW ? `${fmtNum(r.sheetW, 4)}×${fmtNum(r.sheetL, 4)}` : null;
+  const sheetInfo = r?.sheetW ? `${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}` : null;
 
   // Banner background/border per state
   const bannerBg = needsDecision ? "#f59e0b08"
