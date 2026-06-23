@@ -565,27 +565,16 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
 
 def auto_route(cad_hrs: float, selected_sheet: Dict[str, Any], one_up_w: float, one_up_l: float,
                board_spec: Dict[str, Any], total_qty: int, assumptions: Dict[str, Any]) -> Dict[str, Any]:
-    """Auto-routing — legacy parity (spot_engine.js autoRoute L559-633).
+    """Auto-routing — verbatim legacy parity (spot_r1_5.jsx L793-832 autoRoute).
 
-    NOT cost-aware: CAD is the DEFAULT whenever it fits in one shift (cadHrs ≤ 8);
-    Crest only auto-selects when CAD exceeds 8 hours. This reverts the D-124
-    "cheapest-wins" behaviour per the parity requirement — the Route Comparison
-    panel still SHOWS the cheaper option so estimators can manually Switch to Crest.
-    Force-route in the caller still pins manually.
+    D-124 COST-AWARE: the cheapest VIABLE route wins (computed by evaluate_routes,
+    which ranks CAD vs Crest vs Bobst on all-in cost). There is NO Bobst-first
+    early-return and NO "CAD if cadHrs <= 8" hard rule — those were a prior
+    mis-revert that diverged from the legacy source. CAD viability is still gated
+    at cadHrs <= 8 inside evaluate_routes (so a long CAD job drops out of the
+    cheapest set), but a viable cheaper CAD beats a viable Bobst. Force-route in
+    the caller still pins manually; the Route Comparison panel shows all options.
     """
-    # ── RULE-021 / D-123: Bobst first-preference ──
-    # When eligible (E/F flute + envelope) and the flag is on, a viable Bobst
-    # sheet wins outright — matches legacy's early return BEFORE the CAD/Crest check.
-    if assumptions.get("bobstFirstSizing") != "false":
-        b_sel = select_bobst_sheet(one_up_w, one_up_l, board_spec, total_qty, assumptions)
-        if b_sel and b_sel.get("viable"):
-            return {"route": "Bobst", "sheet": b_sel, "warning": None, "cadHrs": cad_hrs}
-
-    # ── RULE-017: CAD default — if cutting fits in one shift, keep CAD ──
-    if cad_hrs <= 8:
-        return {"route": "CAD", "sheet": selected_sheet, "warning": None}
-
-    # ── RULE-018: CAD over 8h → prefer Crest when a Crest die/sheet is viable ──
     opts = {
         "printReq": assumptions.get("printReq", "Yes"),
         "printMode": assumptions.get("printMode", "Satin"),
@@ -596,15 +585,22 @@ def auto_route(cad_hrs: float, selected_sheet: Dict[str, Any], one_up_w: float, 
         "cadHrs": cad_hrs,
     }
     ev = evaluate_routes(one_up_w, one_up_l, board_spec, total_qty, assumptions, opts)
-    crest = (ev or {}).get("crest")
-    if crest and crest.get("viable"):
-        return {"route": "Crest", "sheet": crest["sheet"], "warning": crest.get("warning"),
-                "cadHrs": cad_hrs, "sheetRuleInches": crest.get("sheetRuleInches")}
-
-    # ── RULE-020: Saber + D/C fallback (CAD too long, no Crest die fits) ──
+    if not ev or not ev.get("cheapest"):
+        # RULE-020: Saber + D/C fallback when no viable route (legacy L809-814)
+        return {"route": "Saber + D/C", "sheet": selected_sheet,
+                "warning": "Too many CAD hours and no Crest/Bobst route viable — falling back to Saber + die cut",
+                "cadHrs": cad_hrs}
+    w = ev["cheapest"]
+    if w["route"] == "CAD":
+        return {"route": "CAD", "sheet": selected_sheet, "warning": None}
+    if w["route"] == "Crest":
+        return {"route": "Crest", "sheet": w["sheet"], "warning": w.get("warning"),
+                "cadHrs": cad_hrs, "sheetRuleInches": w.get("sheetRuleInches")}
+    if w["route"] == "Bobst":
+        return {"route": "Bobst", "sheet": w["sheet"], "warning": None, "cadHrs": cad_hrs}
+    # Defensive (shouldn't reach) — legacy L826-831
     return {"route": "Saber + D/C", "sheet": selected_sheet,
-            "warning": "Too many CAD hours and no Crest die fits — falling back to Saber + die cut",
-            "cadHrs": cad_hrs}
+            "warning": "Routing fallback — no expected route winner", "cadHrs": cad_hrs}
 
 
 # ─── D-090: Route comparison — side-by-side CAD vs Crest vs Bobst economics. ───
