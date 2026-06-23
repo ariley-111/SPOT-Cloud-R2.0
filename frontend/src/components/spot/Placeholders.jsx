@@ -32,8 +32,16 @@ export function PricingStrategySec() {
   const resetTiers = () =>
     setManyFields({ gmByTier: { ...defaultGmByTier }, sellByTier: { ...defaultSellByTier } });
 
+  // Collapsed-section summary pill (legacy parity request 2026-06-16) — only shown when closed.
+  const basisLabel = s.pricingBasis === "Sell $/MSF" ? "$/MSF" : "GM%";
+  const fScopeS = (s.freightScope === "Per Job") ? "Frt Job" : "Frt Item";
+  const pScope = s.prepressScope || "Per Item";
+  const pScopeS = pScope === "Per Job" ? "Prep Lot" : pScope === "None" ? "Prep Off" : "Prep Item";
+  const pricingSummary = [isMP ? s.pricingMode : null, basisLabel, fScopeS, pScopeS].filter(Boolean).join(" · ");
+
   return (
     <Sec label="Pricing Strategy" hue="#8b5cf6" open={sec.pricing} onToggle={() => toggleSec("pricing")}
+      badge={!sec.pricing ? pricingSummary : null}
       data-testid="sec-pricing-strategy">
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
 
@@ -481,8 +489,14 @@ export function BoardEngineSec() {
     </div>
   );
 
+  // Collapsed-section summary pill — pricing version label (+ frozen marker).
+  const _pv = manifest?.pricing_version;
+  const _frozen = _pv?.is_active === false;
+  const engineSummary = _pv ? `${_frozen ? "❄ " : ""}${_pv.label}` : null;
+
   return (
     <Sec label="Board Engine" hue="#4b5563" open={sec.engine} onToggle={() => toggleSec("engine")}
+      badge={!sec.engine ? engineSummary : null} warn={_frozen}
       data-testid="sec-board-engine">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {err && (

@@ -955,3 +955,13 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Added the missing **"Saber On"** routing pill in the Economics panel (next to
   Cut/Strip pills), shown when saber==="Yes" — legacy parity (spot_r1_5.jsx L7078,
   teal #14b8a6). Verified live: PRINT SATIN · CUT CREST COMPLEX · SABER ON · STRIP COMPLEX.
+
+### 2026-06-23 (cont.) — Collapsed-section summary pills
+- Added summary pills to collapsed section headers (shown ONLY when collapsed via
+  `badge={!sec.X ? summary : null}`):
+  - Pricing Strategy → pricingMode (MP) · basis (GM%/$/MSF) · freight scope · prepress scope
+  - Board Engine → pricing version label (❄ prefix + warn style when frozen)
+  - Files → total staged + saved file count ("N file(s)", green accent)
+- Item Setup (READY/ATTENTION) and Production Specs (route) badges left always-visible per user.
+- `.sp-badge` given max-width:320px + nowrap ellipsis so long summaries truncate cleanly.
+- Files: components/spot/Placeholders.jsx, FilesSec.jsx, theme.css. Verified via screenshot (dark mode).

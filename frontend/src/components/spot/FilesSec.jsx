@@ -139,6 +139,10 @@ export default function FilesSec() {
     await runParseDirect(onlyRfq);
   };
 
+  // Collapsed-section summary pill — total staged + saved file count.
+  const totalFiles = files.length + savedFiles.length;
+  const filesSummary = totalFiles > 0 ? `${totalFiles} file${totalFiles === 1 ? "" : "s"}` : null;
+
   return (
     <Sec label={
       <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -163,6 +167,7 @@ export default function FilesSec() {
         )}
       </span>
     } hue="#06b6d4" open={sec.files} onToggle={() => toggleSec("files")}
+      badge={!sec.files ? filesSummary : null} accent={totalFiles > 0}
       data-testid="sec-files">
       {/* Drop zone */}
       <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
