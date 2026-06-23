@@ -2,9 +2,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles } from "../../api/spot";
+import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles, searchCustomers } from "../../api/spot";
 import { fmtMoney } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
+import { parseAskField, metaFor, canonField, NUMERIC_KEYS } from "../../lib/parserFieldRegistry";
 import FilePreviewModal from "./FilePreviewModal";
 
 export default function FilesSec() {
@@ -376,6 +377,52 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
   const bomItems = isMP ? (p.bomItems || []) : [];
   const [mpTab, setMpTab] = React.useState("job");  // "job" | "0" | "1" | ...
 
+  // ─── Inline ask-correction edits ─────────────────────────────────
+  // Keyed: job-scope "job:<key>" · item-scope "item:<idx>:<key>".
+  const [edits, setEdits] = React.useState({});
+  const ekey = (norm) => norm.scope === "item" ? `item:${norm.itemIdx}:${norm.key}` : `job:${norm.key}`;
+  const setEdit = (k, v) => setEdits((cur) => ({ ...cur, [k]: v }));
+
+  // Coerce an edited value into the shape our state expects.
+  const coerceEdit = (key, val) => {
+    const k = canonField(key);
+    const meta = metaFor(k);
+    if (meta && meta.bool) return val === "Yes" || val === true;
+    if (k === "qtys") {
+      const arr = String(val || "").split(/[\s,]+/).filter(Boolean);
+      while (arr.length < 5) arr.push("");
+      return arr.slice(0, 5);
+    }
+    if (NUMERIC_KEYS.has(k)) return val === "" || val == null ? "" : String(val);
+    return val;
+  };
+
+  // Current value backing an ask editor (parser value, overlaid by any edit).
+  const askCurrentValue = (norm) => {
+    const k = ekey(norm);
+    if (k in edits) return edits[k];
+    if (norm.scope === "job") {
+      const v = p[norm.key];
+      if (norm.key === "qtys" && Array.isArray(v)) return v.filter(Boolean).join(", ");
+      if (norm.key === "fscEnabled") return v === true ? "Yes" : v === false ? "No" : "";
+      return v == null ? "" : (typeof v === "object" ? "" : String(v));
+    }
+    const it = bomItems[norm.itemIdx] || {};
+    const src = (norm.key === "type" || norm.key === "pcsPerSet") ? it : (it.state || {});
+    const v = src[norm.key];
+    if (norm.key === "qtys" && Array.isArray(v)) return v.filter(Boolean).join(", ");
+    return v == null ? "" : (typeof v === "object" ? "" : String(v));
+  };
+
+  // Normalize the asks list into editable descriptors (drops bare-string asks
+  // into a non-editable note row).
+  const normAsks = asksList.map((a) => {
+    if (typeof a === "string") return { raw: null, reason: a, norm: null, meta: null };
+    const norm = parseAskField(a.field);
+    return { raw: a.field, reason: a.reason || "", norm, meta: norm ? metaFor(norm.key) : null };
+  });
+
+
   // Only DEFAULT to checked when value is truthy (non-null, non-empty).
   const [picks, setPicks] = React.useState(() => {
     const init = {};
@@ -430,6 +477,23 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     const patch = {};
     const has = (k) => picks[k] && p[k] !== null && p[k] !== undefined && p[k] !== "";
 
+    // Collect inline ask-correction edits into job / per-item maps.
+    const jobEdits = {};
+    const itemEdits = {};  // idx -> { key: val }
+    Object.entries(edits).forEach(([ek, val]) => {
+      const parts = ek.split(":");
+      if (parts[0] === "job") jobEdits[parts[1]] = val;
+      else if (parts[0] === "item") {
+        const idx = Number(parts[1]); const key = parts.slice(2).join(":");
+        (itemEdits[idx] = itemEdits[idx] || {})[key] = val;
+      }
+    });
+    const applyJobEditTo = (obj, key, rawVal) => {
+      const k = canonField(key);
+      const target = FIELD_MAP[k] || k;
+      obj[target] = coerceEdit(k, rawVal);
+    };
+
     Object.keys(p).forEach((k) => {
       const target = FIELD_MAP[k];
       if (!target) return;
@@ -456,8 +520,15 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
       // Build full bomItems[] from parser output, normalizing each entry.
       const items = bomItems.map((raw, i) => {
         const rawState = raw.state || {};
+        const ie = itemEdits[i] || {};
+        // Overlay this component's inline edits onto its parsed state.
+        const es = { ...rawState };
+        Object.keys(ie).forEach((k) => {
+          if (["type", "pcsPerSet", "desc", "confidence"].includes(k)) return;
+          es[canonField(k)] = coerceEdit(k, ie[k]);
+        });
         // Per-item state: coerce numeric strings, default qtys array, etc.
-        const itemQtys = Array.isArray(rawState.qtys) ? rawState.qtys.map(String) : [];
+        const itemQtys = Array.isArray(es.qtys) ? es.qtys.map(String) : [];
         while (itemQtys.length < 5) itemQtys.push("");
         // Canonical board fields: a parser can emit "" / null (e.g. no medium
         // on the CAD) which would overwrite the form default and break stock
@@ -474,25 +545,25 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
           return (s === "" || ["none", "null", "kraft", "n/a", "na"].includes(s)) ? "None" : v;
         };
         const itemState = freshItemState({
-          ...rawState,
+          ...es,
           qtys: itemQtys.slice(0, 5),
-          flute: _canon(rawState.flute, "B"),
-          boardGrade: _canon(rawState.boardGrade, "200"),
-          outsideLiner: _canonLiner(rawState.outsideLiner, "42# Kemi-Lite"),
-          insideLiner: _canonLiner(rawState.insideLiner, "None"),
-          medium: _canonMedium(rawState.medium),
-          itemDesc: raw.desc || rawState.itemDesc || `Item ${i + 1}`,
-          boxStyle: rawState.boxStyle || "",
-          custIdent: raw.custIdent || rawState.custIdent || "",
+          flute: _canon(es.flute, "B"),
+          boardGrade: _canon(es.boardGrade, "200"),
+          outsideLiner: _canonLiner(es.outsideLiner, "42# Kemi-Lite"),
+          insideLiner: _canonLiner(es.insideLiner, "None"),
+          medium: _canonMedium(es.medium),
+          itemDesc: (ie.desc != null ? ie.desc : raw.desc) || es.itemDesc || `Item ${i + 1}`,
+          boxStyle: es.boxStyle || "",
+          custIdent: raw.custIdent || es.custIdent || "",
           // Coerce numerics to strings (our schema stores numeric inputs as strings)
-          oneUpW: rawState.oneUpW != null ? String(rawState.oneUpW) : "",
-          oneUpL: rawState.oneUpL != null ? String(rawState.oneUpL) : "",
-          totalRuleInches: rawState.totalRuleInches != null ? String(rawState.totalRuleInches) : "0",
+          oneUpW: es.oneUpW != null ? String(es.oneUpW) : "",
+          oneUpL: es.oneUpL != null ? String(es.oneUpL) : "",
+          totalRuleInches: es.totalRuleInches != null ? String(es.totalRuleInches) : "0",
         });
         return makeBomItem({
-          desc: raw.desc || itemState.itemDesc || `Item ${i + 1}`,
-          type: raw.type || "Manufactured",
-          pcsPerSet: raw.pcsPerSet || 1,
+          desc: (ie.desc != null ? ie.desc : raw.desc) || itemState.itemDesc || `Item ${i + 1}`,
+          type: ie.type || raw.type || "Manufactured",
+          pcsPerSet: ie.pcsPerSet != null ? Number(ie.pcsPerSet) || 1 : (raw.pcsPerSet || 1),
           custIdent: raw.custIdent || "",
           state: itemState,
         });
@@ -520,9 +591,15 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
       next.itemDesc = items[0]?.desc || next.itemDesc || "";
       next.custIdent = items[0]?.custIdent || next.custIdent || "";
 
+      // Job-scope inline ask corrections override everything above (last word).
+      Object.entries(jobEdits).forEach(([k, v]) => applyJobEditTo(next, k, v));
+
       onApplyMultiPart(next);
       return;
     }
+
+    // Job-scope inline ask corrections override the picked top-level fields.
+    Object.entries(jobEdits).forEach(([k, v]) => applyJobEditTo(patch, k, v));
 
     onApplySimple(patch);
   };
@@ -611,29 +688,63 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
             </div>
           )}
 
-          {asksList.length > 0 && (
+          {normAsks.length > 0 && (
             <div style={{
-              marginBottom: 12, padding: "8px 12px",
+              marginBottom: 12, padding: "10px 12px",
               background: "var(--spot-warn-bg)", border: "1px solid var(--spot-warn)", borderRadius: 4,
             }} data-testid="parse-asks">
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)", marginBottom: 6,
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)", marginBottom: 8,
                 textTransform: "uppercase", letterSpacing: ".06em" }}>
-                Needs estimator input · {asksList.length} item{asksList.length === 1 ? "" : "s"}
+                Needs estimator input · {normAsks.length} item{normAsks.length === 1 ? "" : "s"}
+                <span style={{ marginLeft: 8, fontWeight: 500, textTransform: "none",
+                  letterSpacing: 0, color: "var(--spot-text3)", fontSize: 10 }}>
+                  fix below — applies on {isMP ? "Apply Multi-Part" : "Apply Selected"}
+                </span>
               </div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--spot-text2)" }}>
-                {asksList.map((a, i) => (
-                  <li key={i}>
-                    {typeof a === "string" ? a : (
-                      <>
-                        {a.field && <span style={{ fontFamily: "'JetBrains Mono', monospace",
-                          color: "var(--spot-warn)", fontWeight: 700 }}>{a.field}</span>}
-                        {a.field && a.reason && " — "}
-                        {a.reason || ""}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {normAsks.map((a, i) => {
+                  // Non-editable note (bare string ask or unrecognized field path).
+                  if (!a.norm || !a.meta) {
+                    return (
+                      <div key={i} data-testid={`parse-ask-note-${i}`} style={{ fontSize: 12, color: "var(--spot-text2)" }}>
+                        {a.raw && <span style={{ fontFamily: "'JetBrains Mono', monospace",
+                          color: "var(--spot-warn)", fontWeight: 700 }}>{a.raw}</span>}
+                        {a.raw && a.reason && " — "}{a.reason}
+                      </div>
+                    );
+                  }
+                  const k = ekey(a.norm);
+                  const compName = a.norm.scope === "item"
+                    ? (bomItems[a.norm.itemIdx]?.desc || `Item ${a.norm.itemIdx + 1}`) : null;
+                  const edited = k in edits;
+                  return (
+                    <div key={i} data-testid={`parse-ask-${a.norm.scope}-${a.norm.key}`} style={{
+                      padding: "8px 10px", background: "var(--spot-bg2)",
+                      border: `1px solid ${edited ? "var(--spot-green)" : "var(--spot-border)"}`,
+                      borderRadius: 4,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 12 }}>{a.meta.label}</span>
+                        <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>{a.meta.section}</span>
+                        {compName && <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
+                          padding: "0 5px", border: "1px solid #f59e0b55", borderRadius: 2 }}>{compName}</span>}
+                        {edited && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-green)" }}>✓ set</span>}
+                      </div>
+                      {a.reason && <div style={{ fontSize: 11, color: "var(--spot-text2)", margin: "3px 0 6px" }}>{a.reason}</div>}
+                      <AskEditor
+                        meta={a.meta} field={a.norm.key} testid={`parse-ask-input-${a.norm.scope}-${a.norm.key}`}
+                        value={askCurrentValue(a.norm)}
+                        onChange={(v) => setEdit(k, v)}
+                        onPickCustomer={(rec) => {
+                          setEdit("job:custCode", rec.code);
+                          setEdit("job:custName", rec.name);
+                          setEdit("job:customerRecord", rec);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -762,6 +873,103 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// Inline editor for a single flagged parser field. Picks the control type
+// from the field registry so the estimator fixes it without leaving the modal.
+function AskEditor({ meta, field, value, onChange, onPickCustomer, testid }) {
+  if (meta.control === "customer") {
+    return <AskCustomerPicker value={value} onChange={onChange} onPick={onPickCustomer} testid={testid} />;
+  }
+  if (meta.control === "select") {
+    return (
+      <select className="sp-input" data-testid={testid} value={value || ""}
+        onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 320 }}>
+        <option value="">— choose —</option>
+        {(meta.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+  if (meta.control === "textarea") {
+    return (
+      <textarea className="sp-input" data-testid={testid} value={value || ""} rows={2}
+        onChange={(e) => onChange(e.target.value)} style={{ width: "100%", resize: "vertical" }} />
+    );
+  }
+  const isNum = meta.control === "number";
+  return (
+    <input className="sp-input" data-testid={testid} type={isNum ? "number" : "text"}
+      value={value || ""} onChange={(e) => onChange(e.target.value)}
+      placeholder={meta.control === "qtys" ? "e.g. 515, 1150, 2300" : ""}
+      style={{ maxWidth: meta.control === "qtys" ? 320 : isNum ? 160 : 360 }} />
+  );
+}
+
+// Customer registry typeahead — used for the custCode ask so the estimator
+// picks the correct branch from the live customer file.
+function AskCustomerPicker({ value, onChange, onPick, testid }) {
+  const [q, setQ] = useState(value || "");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const [picked, setPicked] = useState(null);
+  const t = useRef(null);
+  useEffect(() => {
+    if (!q || q.length < 2) { setResults([]); setOpen(false); return; }
+    if (t.current) clearTimeout(t.current);
+    t.current = setTimeout(async () => {
+      try { const r = await searchCustomers(q, 10); setResults(r || []); setOpen((r || []).length > 0); setHi(0); }
+      catch (_) { setResults([]); setOpen(false); }
+    }, 200);
+    return () => clearTimeout(t.current);
+  }, [q]);
+  const choose = (r) => {
+    setPicked(r); setQ(`${r.name} · ${r.code}`); setOpen(false);
+    onChange(r.code); if (onPick) onPick(r);
+  };
+  return (
+    <div style={{ position: "relative", maxWidth: 460 }}>
+      <input className="sp-input" data-testid={testid} value={q}
+        placeholder="Search customer name / code…"
+        onChange={(e) => { setPicked(null); setQ(e.target.value); }}
+        onKeyDown={(e) => {
+          if (!open || results.length === 0) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, results.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+          else if (e.key === "Enter") { e.preventDefault(); choose(results[hi]); }
+          else if (e.key === "Escape") { setOpen(false); }
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        style={{ width: "100%", borderColor: picked ? "var(--spot-green)" : undefined }} />
+      {open && results.length > 0 && (
+        <div data-testid={`${testid}-results`} style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60,
+          background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
+          borderRadius: 4, marginTop: 2, maxHeight: 240, overflowY: "auto",
+          boxShadow: "0 4px 12px rgba(0,0,0,.4)",
+        }}>
+          {results.map((r, i) => (
+            <div key={r.code} data-testid={`${testid}-result-${r.code}`}
+              onMouseDown={(e) => { e.preventDefault(); choose(r); }}
+              onMouseEnter={() => setHi(i)}
+              style={{
+                padding: "6px 10px", cursor: "pointer", fontSize: 12,
+                background: i === hi ? "var(--spot-accent-soft)" : "transparent",
+                borderBottom: i < results.length - 1 ? "1px solid var(--spot-line)" : "none",
+                display: "flex", justifyContent: "space-between", gap: 8,
+              }}>
+              <span style={{ display: "flex", gap: 6, minWidth: 0, flex: 1 }}>
+                <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+                <span style={{ color: "var(--spot-text3)", fontSize: 11 }}>{[r.city, r.state].filter(Boolean).join(", ")}</span>
+              </span>
+              <span style={{ color: "var(--spot-text3)", fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}>{r.code}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
