@@ -70,6 +70,16 @@ CATEGORY_META = {
                     "description": "Target sell price per MSF by tier (dollars)"},
     svc.GRADE:     {"label": "Grade Adders",
                     "description": "Per-MSF cost adder by board grade ($/MSF)"},
+    svc.CAD_SETUP_CAT: {
+        "label": "CAD Setup (minutes)",
+        "description": "One-time CAD/router cutting setup minutes by cutting complexity. "
+                       "Setup ÷ 60 × CAD $/hr = the fixed cutting setup cost per job.",
+    },
+    svc.CAD_FALLBACK_CAT: {
+        "label": "CAD Per-Sheet (min/sheet)",
+        "description": "Per-sheet CAD cutting minutes by cutting complexity (run-time fallback). "
+                       "min/sheet × sheets ÷ 60 × CAD $/hr = the variable cutting run cost.",
+    },
 }
 
 

@@ -792,3 +792,20 @@ Keeps cloud's compact layout but adds legacy functionality.
   flips CAD→Crest, test_below_min storage_bin parity, 2× test_matched_set_parity
   L'Oreal totals). They will pass again once values are reverted to baseline.
   REVERT before any production deploy unless the new calibration is approved.
+
+### 2026-06-22 (cont.) — Rolled back CAD test values + added editable CAD rates in Admin
+- **Reverted** CAD_SETUP/CAD_FALLBACK to baseline (Simple 8/Standard 25/Complex 22
+  setup; Simple 2/Standard 2/Complex 4 per-sheet). "Straight" stays removed.
+- **NEW: Admin → "Cutting (CAD)" tab** to edit cutting-time rates without code:
+  - `CAD Setup (minutes)` and `CAD Per-Sheet (min/sheet)` by complexity
+    (Simple/Standard/Complex), via the existing DB-backed, audited, resettable
+    rate-override service (2 new categories `cad_setup` / `cad_fallback`).
+  - Files: `services/rate_overrides.py` (+2 categories, live-dict refs to
+    engine.core CAD_SETUP/CAD_FALLBACK), `routes/admin_rates.py` (CATEGORY_META),
+    `pages/AdminPage.jsx` (combined "Cutting (CAD)" tab w/ formula explainer).
+  - Verified end-to-end: set cad_setup/Standard=85 → CAD-routed quote cadHrs
+    0.58→1.58, cutterDirect $80.50→$218.50; reset → baseline restored. Audited.
+- **Press Rates vs CAD rates (user Q)**: different things. "Press Rates" (Rates
+  tab) = $/hr equipment rates (cadRate, crestRate…). CAD Setup/Per-Sheet = the
+  TIME (minutes) a cut takes by complexity. Cutting cost = (Setup + Per-Sheet×
+  sheets) ÷ 60 × cadRate. Both now admin-editable.

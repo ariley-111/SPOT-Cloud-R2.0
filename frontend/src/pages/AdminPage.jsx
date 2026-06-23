@@ -22,6 +22,9 @@ const TAB_LABELS = {
   gm_tier:      "GM Curve",
   sell_tier:    "Sell Curve",
   grade_adder:  "Grade Adders",
+  cad:          "Cutting (CAD)",
+  cad_setup:    "CAD Setup",
+  cad_fallback: "CAD Per-Sheet",
   board_pricing:"Board Pricing",
   sheets:       "Sheet Library",
   integrations: "Integrations",
@@ -29,7 +32,7 @@ const TAB_LABELS = {
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
-const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "board_pricing",
+const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "cad", "board_pricing",
                    "sheets", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
@@ -156,6 +159,32 @@ export default function AdminPage({ onClose }) {
                 onReset={onReset}
                 onResetAll={() => onResetAll(tab)}
               />
+            )}
+            {tab === "cad" && (
+              <div data-testid="admin-cad-tab">
+                <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8,
+                  background: "var(--spot-bg2)", border: "1px solid var(--spot-border)" }}>
+                  <div style={{ fontSize: 12, color: "var(--spot-text2)" }}>
+                    Cutting cost = (<b>Setup min</b> + <b>Per-sheet min</b> × sheets) ÷ 60 × <b>CAD $/hr</b>.
+                    The CAD $/hr lives under the <b>Rates</b> tab (<code>cadRate</code>); the minutes below
+                    drive how many cutting hours a job needs, by complexity.
+                  </div>
+                </div>
+                <CategoryPanel
+                  category="cad_setup"
+                  rows={data.categories["cad_setup"] || []}
+                  meta={cats?.["cad_setup"]}
+                  onSave={onSave} onReset={onReset}
+                  onResetAll={() => onResetAll("cad_setup")}
+                />
+                <CategoryPanel
+                  category="cad_fallback"
+                  rows={data.categories["cad_fallback"] || []}
+                  meta={cats?.["cad_fallback"]}
+                  onSave={onSave} onReset={onReset}
+                  onResetAll={() => onResetAll("cad_fallback")}
+                />
+              </div>
             )}
             {tab === "sheets" && <SheetLibraryPanel />}
             {tab === "board_pricing" && <BoardPricingPanel flash={flash} />}
@@ -385,7 +414,7 @@ function AuditPanel() {
               style={{ fontSize: 11, padding: "3px 6px", background: "var(--spot-bg2)", color: "var(--spot-text2)",
                 border: "1px solid var(--spot-border)", borderRadius: 3 }}>
               <option value="">All categories</option>
-              {["rate", "gm_tier", "sell_tier", "grade_adder"].map((c) => <option key={c} value={c}>{TAB_LABELS[c]}</option>)}
+              {["rate", "gm_tier", "sell_tier", "grade_adder", "cad_setup", "cad_fallback"].map((c) => <option key={c} value={c}>{TAB_LABELS[c]}</option>)}
             </select>
             <input value={filter.key} onChange={(e) => { setSkip(0); setFilter({ ...filter, key: e.target.value }); }}
               placeholder="key (e.g. incaRate)" data-testid="admin-audit-key-filter"

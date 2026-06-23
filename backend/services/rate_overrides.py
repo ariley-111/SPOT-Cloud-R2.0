@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from db import db, COL_RATE_OVERRIDES, COL_AUDIT_LOG
 from engine.core import (
     RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, GRADE_ADDER_DEFAULTS,
+    CAD_SETUP, CAD_FALLBACK,
 )
 from engine.runner import ASMP_DEFAULTS
 
@@ -106,7 +107,9 @@ RATE      = "rate"
 GM_TIER   = "gm_tier"
 SELL_TIER = "sell_tier"
 GRADE     = "grade_adder"
-CATEGORIES = (RATE, GM_TIER, SELL_TIER, GRADE)
+CAD_SETUP_CAT    = "cad_setup"     # cutting setup minutes by complexity
+CAD_FALLBACK_CAT = "cad_fallback"  # per-sheet cutting minutes by complexity
+CATEGORIES = (RATE, GM_TIER, SELL_TIER, GRADE, CAD_SETUP_CAT, CAD_FALLBACK_CAT)
 
 # Live dict lookup — engine reads from these by reference, so mutations
 # propagate immediately. NEVER replace these dicts (would break imports);
@@ -116,6 +119,8 @@ _LIVE = {
     GM_TIER:   GM_DEFAULTS,
     SELL_TIER: SELL_DEFAULTS,
     GRADE:     GRADE_ADDER_DEFAULTS,
+    CAD_SETUP_CAT:    CAD_SETUP,
+    CAD_FALLBACK_CAT: CAD_FALLBACK,
 }
 
 # Snapshot at module-import time — this IS the source-of-truth baseline,
@@ -133,6 +138,8 @@ _VALUE_COERCERS = {
     GM_TIER:   lambda v: float(v),
     SELL_TIER: lambda v: float(v),
     GRADE:     lambda v: float(v),
+    CAD_SETUP_CAT:    lambda v: float(v),
+    CAD_FALLBACK_CAT: lambda v: float(v),
 }
 
 

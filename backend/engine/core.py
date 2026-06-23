@@ -285,8 +285,8 @@ for g in SHEET_GROUPS:
 # ═══════════════════════════════════════════════════════════════
 FLUTE_CALIPERS = {"E": 0.0625, "B": 0.125, "C": 0.1875, "B/C": 0.236}
 PRINT_SPEEDS = {"Gloss": 75, "Satin": 75, "OnQ Styrene": 50, "OnQ Lightbox": 40}
-CAD_SETUP = {"Simple": 15, "Standard": 15, "Complex": 15}    # TEMP TEST 2026-06-22: flat 15 across the board (was Simple 8/Straight 20/Standard 25/Complex 22)
-CAD_FALLBACK = {"Simple": 2, "Standard": 4, "Complex": 6}    # TEMP TEST 2026-06-22: Simple 2/Standard 4/Complex 6 (was Simple 2/Straight 6/Standard 2/Complex 4)
+CAD_SETUP = {"Simple": 8, "Standard": 25, "Complex": 22}
+CAD_FALLBACK = {"Simple": 2, "Standard": 2, "Complex": 4}
 STRIP_DEFAULTS = {"Simple": 0.5, "Straight": 1.0, "Standard": 3.0, "Complex": 5.0}
 GLUE_DEFAULTS = {"Simple": 1.0, "Standard": 1.5, "Complex": 2.0}
 CAD_DIFF_MIGRATION = {"Simple": "Simple", "Standard": "Straight", "Complex": "Standard", "Extreme": "Complex"}
