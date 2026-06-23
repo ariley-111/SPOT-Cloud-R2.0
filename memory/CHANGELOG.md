@@ -965,3 +965,10 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Item Setup (READY/ATTENTION) and Production Specs (route) badges left always-visible per user.
 - `.sp-badge` given max-width:320px + nowrap ellipsis so long summaries truncate cleanly.
 - Files: components/spot/Placeholders.jsx, FilesSec.jsx, theme.css. Verified via screenshot (dark mode).
+
+### 2026-06-23 (cont.) — Collapsed pills refined per spec
+- Production Specs collapsed → print mode+sides · saber(if Yes) · route · strip(if Yes) · glue(if Yes) · tape(if Yes). Route-only badge kept when expanded.
+- Pricing Strategy collapsed → pricingMode(MP) · basis; freight shown ONLY when scope=Per Job, prepress shown ONLY when print on & scope≠None.
+- Board Engine collapsed → pricing version · order MSF (r.oMSF) · MSF tier (r.msfTier). BoardEngineSec now takes result prop (SpotApp passes primary).
+- Item Setup collapsed → board specs (grade · flute · outLiner/inLiner · medium); READY/ATTENTION kept when expanded.
+- Verified live: 200 E · KRAFT/KRAFT | SATIN 1S · AUTO→CAD · STRIP | INDIVIDUAL · GM% · PREP ITEM | 2026-06-15 · 3.25 MSF · 0-9 TIER | 1 FILE.

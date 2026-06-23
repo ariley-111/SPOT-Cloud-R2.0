@@ -106,7 +106,7 @@ export default function SpotApp({ onOpenAdmin }) {
           <ProductionSpecsSec result={primary} />
           <QuoteTableSec results={results} componentPricing={componentPricing} jobTotals={jobTotals} meta={meta} />
           <PricingStrategySec />
-          <BoardEngineSec />
+          <BoardEngineSec result={primary} />
           <FilesSec />
         </div>
 

@@ -28,6 +28,15 @@ export default function ItemSetupSec({ result }) {
   const fullyResolved = !!(r && !r.error && r.sheetW);
   const corrFlipped = !!s.corrFlipped;
 
+  // Collapsed-section summary pill — board specs chosen (grade · flute · liners · medium).
+  const _fmLnr = (l) => (!l || l === "None") ? "Kraft"
+    : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
+  const _medLabel = s.medium && s.medium !== "None"
+    ? String(s.medium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "";
+  const boardSummary = (s.boardGrade || s.flute)
+    ? `${s.boardGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medLabel ? " · " + _medLabel : ""}`.trim()
+    : null;
+
   const onBoxStyle = (style) => {
     const cur = s.boxStyle === style ? "" : style;
     const descs = { RSC: "Regular Slotted Container", FOL: "Full Overlap Slotted Container",
@@ -182,8 +191,10 @@ export default function ItemSetupSec({ result }) {
 
   return (
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
-      badge={fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION"}
-      accent={fullyResolved} warn={!fullyResolved && s.oneUpW && s.oneUpL}
+      badge={sec.qty
+        ? (fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION")
+        : (boardSummary || (fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION"))}
+      accent={sec.qty && fullyResolved} warn={sec.qty && !fullyResolved && s.oneUpW && s.oneUpL}
       data-testid="sec-item-setup">
 
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>

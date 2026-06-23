@@ -3,6 +3,7 @@ import React from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec, { F } from "./Sec";
 import Tile, { Num } from "./Tile";
+import { fmtNum } from "../../lib/format";
 
 /** ─── Pricing Strategy ──────────────────────────────────────────────
  *  Ported from legacy spot_r1_5.jsx lines 6291-6415.
@@ -32,12 +33,14 @@ export function PricingStrategySec() {
   const resetTiers = () =>
     setManyFields({ gmByTier: { ...defaultGmByTier }, sellByTier: { ...defaultSellByTier } });
 
-  // Collapsed-section summary pill (legacy parity request 2026-06-16) — only shown when closed.
+  // Collapsed-section summary pill — only shown when closed. Freight/prepress
+  // appear ONLY when actually in play (Per-Job freight, or prepress with print on).
   const basisLabel = s.pricingBasis === "Sell $/MSF" ? "$/MSF" : "GM%";
-  const fScopeS = (s.freightScope === "Per Job") ? "Frt Job" : "Frt Item";
-  const pScope = s.prepressScope || "Per Item";
-  const pScopeS = pScope === "Per Job" ? "Prep Lot" : pScope === "None" ? "Prep Off" : "Prep Item";
-  const pricingSummary = [isMP ? s.pricingMode : null, basisLabel, fScopeS, pScopeS].filter(Boolean).join(" · ");
+  const freightPart = s.freightScope === "Per Job" ? "Frt Job" : null;
+  const pScopeRaw = s.prepressScope || "Per Item";
+  const prepPart = (s.printReq === "Yes" && pScopeRaw !== "None")
+    ? `Prep ${pScopeRaw === "Per Job" ? "Lot" : "Item"}` : null;
+  const pricingSummary = [isMP ? s.pricingMode : null, basisLabel, freightPart, prepPart].filter(Boolean).join(" · ");
 
   return (
     <Sec label="Pricing Strategy" hue="#8b5cf6" open={sec.pricing} onToggle={() => toggleSec("pricing")}
@@ -421,8 +424,9 @@ function RatePanel({ title, color, rows, dataTestId }) {
  *    • Liner Upgrades + Medium Upgrades two-column
  *    • Flute Rules + Dim Adders + Fixed Charges three-column
  *    • Approved Sheets summary chips (spec → count) */
-export function BoardEngineSec() {
+export function BoardEngineSec({ result }) {
   const { sec, toggleSec, active } = useQuote();
+  const r = result || {};
   const pinnedVersionId = active?.state?.pricingVersionId || null;
   const [manifest, setManifest] = React.useState(null);
   const [err, setErr] = React.useState(null);
@@ -489,10 +493,15 @@ export function BoardEngineSec() {
     </div>
   );
 
-  // Collapsed-section summary pill — pricing version label (+ frozen marker).
+  // Collapsed-section summary pill — pricing version label (+ frozen marker),
+  // order MSF and MSF tier from the live engine result.
   const _pv = manifest?.pricing_version;
   const _frozen = _pv?.is_active === false;
-  const engineSummary = _pv ? `${_frozen ? "❄ " : ""}${_pv.label}` : null;
+  const _engineParts = [];
+  if (_pv) _engineParts.push(`${_frozen ? "❄ " : ""}${_pv.label}`);
+  if (r.oMSF != null && isFinite(r.oMSF)) _engineParts.push(`${fmtNum(r.oMSF, 2)} MSF`);
+  if (r.msfTier) _engineParts.push(`${r.msfTier} tier`);
+  const engineSummary = _engineParts.length ? _engineParts.join(" · ") : null;
 
   return (
     <Sec label="Board Engine" hue="#4b5563" open={sec.engine} onToggle={() => toggleSec("engine")}

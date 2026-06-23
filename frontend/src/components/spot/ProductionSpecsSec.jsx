@@ -15,11 +15,26 @@ export default function ProductionSpecsSec({ result }) {
   const ovr = s.routeOverride;
   const hasPrint = s.printReq === "Yes";
 
-  const badge = !route ? null : `${ovr ? "" : "auto → "}${route}`;
+  const routeBadge = !route ? null : `${ovr ? "" : "auto → "}${route}`;
+
+  // Collapsed summary (legacy parity request 2026-06-23): print mode/sides · saber ·
+  // route · strip · glue · tape — each shown only when active. Route badge stays when open.
+  const sidesShort = s.printSides === "2-Sided" ? "2S" : s.printSides === "1-Sided" ? "1S" : "";
+  const printPart = hasPrint
+    ? `${s.printMode || "Print"}${sidesShort ? " " + sidesShort : ""}${s.whiteInk === "Yes" ? " +W" : ""}`
+    : "No Print";
+  const collapsedSummary = [
+    printPart,
+    s.saber === "Yes" ? "Saber" : null,
+    routeBadge,
+    s.handStripping === "Yes" ? "Strip" : null,
+    s.handGluing === "Yes" ? "Glue" : null,
+    s.tape === "Yes" ? "Tape" : null,
+  ].filter(Boolean).join(" · ");
 
   return (
     <Sec label="Production Specs" hue="#22c55e" open={sec.prod} onToggle={() => toggleSec("prod")}
-      badge={badge} accent={!!route}
+      badge={sec.prod ? routeBadge : collapsedSummary} accent={!!route}
       data-testid="sec-production">
 
       {/* Row 1: Print */}
