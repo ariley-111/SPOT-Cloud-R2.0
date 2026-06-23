@@ -1,101 +1,113 @@
 {
-  "theme": "Light & Dark (Adaptive via CSS variables)",
-  "archetype": "Archetype 4: Swiss & High-Contrast (Data-Heavy SaaS)",
-  "rationale": "Redesigning a cramped B2B estimating toolbar requires functional clarity over decorative flair. We eliminate the 'rainbow button' noise by standardizing most actions to monochrome/ghost styles and reserving high-contrast color exclusively for status indicators and primary actions (Save). The layout shifts from a jammed 40px row to a structured 56px row with logical vertical zones and an overflow account menu, achieving breathing room without sacrificing density.",
-  "color_system": {
-    "backgrounds": {
-      "header": "var(--spot-bg)",
-      "hover": "var(--spot-bg2)",
-      "pill": "var(--spot-bg3)"
-    },
-    "text": {
-      "primary": "var(--spot-text)",
-      "secondary": "var(--spot-text2)",
-      "tertiary": "var(--spot-text3)"
-    },
-    "borders": {
-      "main": "var(--spot-border)",
-      "divider": "var(--spot-line)"
-    },
-    "accents": {
-      "primary_action": "var(--spot-green)",
-      "primary_action_hover": "var(--spot-green-soft)",
-      "secondary_accent": "var(--spot-accent)",
-      "cost_report": "var(--spot-purple)",
-      "preview": "var(--spot-accent)"
-    },
-    "status_colors": {
-      "Draft": "#9CA3AF",
-      "Saved": "#3B82F6",
-      "Sent": "#F59E0B",
-      "Won": "#10B981",
-      "Lost": "#EF4444",
-      "Hold": "#8B5CF6"
-    }
+  "archetype": "Swiss & High-Contrast (Archetype 4)",
+  "theme": "Light & Dark Mode (CSS Variables)",
+  "domain": "Enterprise B2B SaaS / Pricing Dashboard",
+  "rationale": "For an all-day, data-heavy estimating tool, the UI must prioritize extreme legibility, reduce cognitive fatigue, and establish a clear data hierarchy. The recently approved header sets a 'Swiss/high-contrast' tone: function over decoration, restrained color, and crisp geometry.",
+  "prioritized_blueprint": {
+    "P0": [
+      "Implement cohesive typography scale (Inter + JetBrains Mono) to fix varied system fonts.",
+      "Refactor section header colors (remove rainbow backgrounds, use semantic left-borders).",
+      "Standardize base light/dark mode CSS tokens for background, text, and border layers."
+    ],
+    "P1": [
+      "Align Tile/Toggle component states to the new monochrome ghost button aesthetic.",
+      "Implement right-alignment and tabular-nums for all KPI grids and Quote tables.",
+      "Standardize spacing scales (p-1, p-2, p-4) to maintain density while adding optical breathing room."
+    ],
+    "P2": [
+      "Add sticky headers to the left-panel scrolling sections.",
+      "Implement subtle global focus rings for keyboard navigation.",
+      "Add unobtrusive 'auto-saving' micro-interactions to prevent layout shift."
+    ]
   },
   "typography": {
-    "fonts": {
-      "sans": "Inter, system-ui, sans-serif",
-      "mono": "'JetBrains Mono', monospace"
+    "priority": "P0",
+    "primary_sans": {
+      "font_family": "'Inter', system-ui, -apple-system, sans-serif",
+      "rationale": "Inter is engineered for UI clarity at small sizes. It reduces fatigue during all-day use compared to generic system fonts."
     },
-    "sizing": {
-      "brand": "text-lg font-bold tracking-tight",
-      "estimate_number": "text-sm font-mono tracking-tight",
-      "labels": "text-sm font-medium",
-      "sub_labels": "text-xs font-normal text-[var(--spot-text3)]"
+    "mono": {
+      "font_family": "'JetBrains Mono', monospace",
+      "rationale": "Already established. Crucial for tabular data. MUST apply 'font-variant-numeric: tabular-nums' to prevent jittering when prices recalculate."
+    },
+    "scale": {
+      "--spot-text-xs": "11px / 1.2 lh / tracking-wider / uppercase (For Overlines, Micro-labels)",
+      "--spot-text-sm": "13px / 1.4 lh (For Input Labels, Table Data, Sub-text)",
+      "--spot-text-base": "14px / 1.5 lh (For Primary Form Inputs, Standard Text)",
+      "--spot-text-lg": "16px / 1.4 lh / tracking-tight / font-semibold (For Section Headers)",
+      "--spot-text-xl": "20px to 24px / 1.2 lh / tracking-tighter (For KPI Numbers in right dashboard)"
     }
   },
-  "layout_zones": {
-    "height": "h-14 (56px)",
-    "structure": "Flex container with 5 distinct zones separated by subtle vertical dividers (`border-r border-[var(--spot-line)]`).",
-    "Zone_1_Brand": {
-      "elements": ["Cube Logo", "SPOT wordmark", "R2.0 Cloud pill", "API Status Pill"],
-      "styling": "flex items-center gap-3 pr-4 border-r border-[var(--spot-line)]"
+  "color": {
+    "priority": "P0",
+    "strategy": "Eliminate 'rainbow' noise. Color is for function (status, warning, success), not decoration. The app must rely on structural grayscale with pinpoint color accents.",
+    "section_headers_fix": {
+      "problem": "Current section headers (Estimate Info, Bill of Materials, etc.) are too saturated, causing visual competition.",
+      "solution": "Use a monochrome background (--spot-bg2) with a semantic 3px left-border accent instead of filling the entire header background. E.g., 'border-l-4 border-spot-blue'. Add subtle 1px bottom border (--spot-border)."
     },
-    "Zone_2_Context": {
-      "elements": ["Estimator Initials", "Estimate #", "Customer Name", "Project Name"],
-      "styling": "flex-1 min-w-0 flex flex-col justify-center px-4 border-r border-[var(--spot-line)]",
-      "behavior": "Stacked 2-line layout. Line 1: `[Initials Pill]` + `[Est # in Mono]` + `[Customer Name truncate max-w-[200px]]`. Line 2: `↳ [Project Name truncate max-w-[300px]]`. Wrap truncated strings in tooltips."
+    "light_mode_tokens": {
+      "--spot-bg": "#F9FAFB",
+      "--spot-bg2": "#FFFFFF",
+      "--spot-bg3": "#F3F4F6",
+      "--spot-text": "#111827",
+      "--spot-text2": "#4B5563",
+      "--spot-text3": "#9CA3AF",
+      "--spot-border": "#E5E7EB",
+      "--spot-line": "#D1D5DB",
+      "--spot-accent": "#000000",
+      "--spot-accent-soft": "#F3F4F6"
     },
-    "Zone_3_Actions": {
-      "elements": ["Load", "Quote Header", "Preview Quote", "Cost Report"],
-      "styling": "flex items-center gap-1 px-4 border-r border-[var(--spot-line)]",
-      "hierarchy": "Neutralized. All buttons are 'ghost' variants with lucide-react icons. Stripped of their original pink/purple/blue backgrounds to reduce noise. Hover states apply `bg-[var(--spot-bg2)]`."
+    "dark_mode_tokens": {
+      "--spot-bg": "#0A0A0A",
+      "--spot-bg2": "#171717",
+      "--spot-bg3": "#262626",
+      "--spot-text": "#F9FAFB",
+      "--spot-text2": "#A1A1AA",
+      "--spot-text3": "#52525B",
+      "--spot-border": "#27272A",
+      "--spot-line": "#3F3F46",
+      "--spot-accent": "#FFFFFF",
+      "--spot-accent-soft": "#27272A"
     },
-    "Zone_4_Status_Save": {
-      "elements": ["Multi-Part Toggle", "Quote Status Dropdown", "Save Button"],
-      "styling": "flex items-center gap-3 px-4 border-r border-[var(--spot-line)]",
-      "hierarchy": "Multi-Part is ghost (amber icon if active). Status Dropdown is an outline button with a colored DOT indicator (not full bg). Save is the only solid colored button (Green) to guide primary intent."
-    },
-    "Zone_5_User": {
-      "elements": ["Account/Overflow Menu"],
-      "styling": "flex items-center pl-4",
-      "behavior": "A simple 'User' avatar or '⋯' trigger button. Clicking opens a Shadcn DropdownMenu containing: User Email (disabled label), Theme Toggle, Admin Console (if applicable), and Logout."
+    "semantic_accents": {
+      "--spot-green": "Light: #16A34A / Dark: #22C55E",
+      "--spot-green-soft": "Light: #DCFCE7 / Dark: rgba(34, 197, 94, 0.15)",
+      "--spot-red": "Light: #DC2626 / Dark: #EF4444",
+      "--spot-red-soft": "Light: #FEE2E2 / Dark: rgba(239, 68, 68, 0.15)"
     }
+  },
+  "layout_and_spacing": {
+    "priority": "P1",
+    "strategy": "Respect the density. Estimators hate scrolling. Use micro-spacing.",
+    "spacing_scale": {
+      "pills_tiles": "py-1 px-2.5 (High density, matches 24px-28px height)",
+      "inputs": "py-1.5 px-3 (Matches 32px height)",
+      "section_gaps": "gap-4 or gap-6 (Maintain grouping)"
+    },
+    "panel_separation": "Replace heavy drop-shadows between the Left (Input) and Right (Cost Dashboard) panels with a crisp 1px solid border (--spot-border) and a subtle background shift (Left: --spot-bg2, Right: --spot-bg).",
+    "kpi_grid": "In the Economics/Cost Buildup section, use a 'Control Room' grid. 1px borders between cells (border-collapse look). Labels top-left (--spot-text-xs), values bottom-right (JetBrains Mono, text-lg)."
   },
   "components": {
-    "buttons": {
-      "primary": "bg-[var(--spot-green)] text-white hover:bg-[var(--spot-green-soft)] transition-colors rounded-md px-4 py-2 text-sm font-medium shadow-sm",
-      "ghost": "bg-transparent text-[var(--spot-text)] hover:bg-[var(--spot-bg2)] transition-colors rounded-md px-3 py-1.5 text-sm font-medium inline-flex items-center gap-2",
-      "outline": "border border-[var(--spot-border)] text-[var(--spot-text)] hover:bg-[var(--spot-bg2)] transition-colors rounded-md px-3 py-1.5 text-sm font-medium shadow-sm inline-flex items-center gap-2"
+    "priority": "P1",
+    "tiles_pills_toggles": {
+      "default": "bg-spot-bg text-spot-text2 border border-spot-border",
+      "hover": "hover:border-spot-line hover:text-spot-text",
+      "active": "bg-spot-accent text-white border-transparent",
+      "disabled": "opacity-50 cursor-not-allowed",
+      "rationale": "Moves away from saturated colors to a high-contrast binary state (neutral vs solid black/white)."
     },
-    "status_dropdown": {
-      "design": "Instead of full colored backgrounds (which screamed for attention unnecessarily), use a neutral outline button with a 8px colored circle (`w-2 h-2 rounded-full`) next to the text. This maps perfectly to the `status_colors` schema."
+    "badges_colored_dots": {
+      "style": "Adopt the 'Status Dot' pattern from the new header. Instead of a full green pill for 'In-Stock', use a neutral pill with a 6px '--spot-green' dot inside it. Reduces visual noise massively."
     },
-    "tooltips": {
-      "design": "Standard inverted tooltips wrapping the Customer Name and Project Name elements to reveal full text upon hover since they are truncated to prevent layout collapsing."
+    "tables": {
+      "style": "Quote tables should use a 1px bottom border per row. Zebra striping only if rows > 5 (use --spot-bg3 for even rows). NO vertical borders."
     }
   },
-  "instructions_to_main_agent": [
-    "1. Do NOT modify any part of the application other than the top toolbar (Toolbar.jsx / Header.jsx).",
-    "2. COMPLETELY REMOVE the 'File checkbox' and 'Undo button' from the UI per the user's explicit request.",
-    "3. Apply the 56px (`h-14`) Mega-Row layout structured into the 5 explicit flex zones defined above. Ensure the header uses `bg-[var(--spot-bg)]` and a bottom border of `border-b border-[var(--spot-border)]`.",
-    "4. Implement string truncation using Tailwind's `truncate` class on Customer Name and Project Name strings. Constrain their max-widths (e.g., `max-w-[200px]` and `max-w-[300px]`) on standard screens and wrap them in Radix/Shadcn Tooltips to expose full text.",
-    "5. Fold the rarely used items ('Theme toggle', 'User email display', 'Admin button', and 'Sign out') into a clean Dropdown Menu positioned on the far right (Zone 5).",
-    "6. Convert the loud actions ('Load', 'Quote Header', 'Preview Quote', and 'Cost Report') into neutral 'ghost' buttons with icons. Ensure text color maps to `--spot-text` to kill the rainbow noise.",
-    "7. Update the Quote Status dropdown to utilize the 'colored dot' indicator pattern instead of full-button background colors.",
-    "8. Ensure the 'Save' button remains the most prominent primary action mapped to `--spot-green`.",
-    "9. Use `data-testid` attributes on all interactive elements in the toolbar (e.g., `data-testid=\"toolbar-save-btn\"`, `data-testid=\"toolbar-status-dropdown\"`, `data-testid=\"toolbar-user-menu\"`).",
-    "10. Verify that your styling relies heavily on the `--spot-*` variables so the new header works flawlessly in both existing Light and Dark themes."
-  ]
+  "general_usability": {
+    "priority": "P2",
+    "alignment": "Strict right-alignment for ALL monetary and dimensional numbers. Left-alignment for text.",
+    "focus_states": "Every interactive element must have: `focus:outline-none focus:ring-2 focus:ring-spot-accent/30 focus:ring-offset-1`. Critical for keyboard power users.",
+    "scrolling": "Make Section Headers sticky (`sticky top-0 z-10 bg-spot-bg2`) so users never lose context deep within the Bill of Materials.",
+    "feedback": "Auto-save/calc feedback should NOT be a toast that covers UI. Use a subtle inline indicator in the draft bar (e.g., 'Saving...' -> 'Saved' in --spot-text3)."
+  }
 }
