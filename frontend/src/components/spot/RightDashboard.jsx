@@ -1600,21 +1600,24 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         {detail && (r.matMakeready > 0) && (
           <SubRow label={`MR/Spoil Board ${spoilSheets} extra sheets`} value={fmtMoney(r.matMakeready)} />
         )}
+        {/* Print row — hide entirely when print is off (Bug H). Press + Ink are
+            the components of Print, so they belong UNDER the Print header. */}
+        {r.printDirect > 0 && (
+          <Row label="Print"    value={fmtMoney(r.printDirect)} />
+        )}
         {detail && r.pressHrs > 0 && (
           <SubRow label={`Press ${fmtNum(r.pressHrs, 1)}h @ ${fmtMoney(r.incaRate)}/hr`} value={fmtMoney(r.pressCost)} />
         )}
         {detail && r.inkCost > 0 && (
           <SubRow label={`Ink ${fmtInt(r.inkSqFt)} sqft @ ${fmtMoney(r.inkRate, 2)}/sqft`} value={fmtMoney(r.inkCost)} />
         )}
-        {/* Print row — hide entirely when print is off (Bug H) */}
-        {r.printDirect > 0 && (
-          <Row label="Print"    value={fmtMoney(r.printDirect)} />
-        )}
+        <Row label="Cutting" value={fmtMoney(r.cutterDirect)} />
         {detail && r.cutterDirect > 0 && (
           <SubRow label={r.cutterBasis ? `${r.route} ${r.cutterBasis}` : `${r.route} ${labelize(r.cadDifficulty || "Standard")}`}
             value={fmtMoney(r.cutterDirect)} />
         )}
-        <Row label="Cutting" value={fmtMoney(r.cutterDirect)} />
+        {/* Finishing = Stripping + Assembly (legacy spot_r1_5.jsx L7106, Bug B) */}
+        <Row label="Finishing" value={fmtMoney((r.stripCost || 0) + (r.assemblyCost || 0))} />
         {detail && (r.stripCost || 0) > 0 && (
           <SubRow label={`Stripping ${labelize(s.strippingComplexity || "Standard")}${s.perimeterStripping === "Yes" ? " + edge" : ""} @ $17.00/hr`} value={fmtMoney(r.stripCost)} />
         )}
@@ -1624,8 +1627,6 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
             : `Glue ${labelize(s.gluingComplexity || "Standard")}, ${s.jointsPerPiece || 1} jt @ $23.00/hr`}
             value={fmtMoney(r.assemblyCost)} />
         )}
-        {/* Finishing = Stripping + Assembly (legacy spot_r1_5.jsx L7106, Bug B) */}
-        <Row label="Finishing" value={fmtMoney((r.stripCost || 0) + (r.assemblyCost || 0))} />
         <RowTotal label="Total Direct" value={fmtMoney(r.totalDirect)} />
 
         <SubHead label="Indirect" color="#f59e0b" />

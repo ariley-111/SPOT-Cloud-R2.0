@@ -842,3 +842,15 @@ Keeps cloud's compact layout but adds legacy functionality.
   `crestDieCost` default ($1,200), matching legacy. Approval warning unchanged.
   Verified: /compare-routes returns crest.die=1200, dieEstimated=true, warning intact.
   Switching to Crest now auto-populates the die field to $1,200 like legacy.
+
+### 2026-06-23 (cont.) — Cost Buildup detail grouping fix + Route msg parity confirmed
+- **Cost Buildup DETAIL — sub-lines were under the wrong headers** (bug present in
+  legacy too; user wanted it fixed, not mirrored). Sub-rows rendered BEFORE their
+  section header (off-by-one). Reordered (RightDashboard CostBuildup) so each header
+  precedes its own lines: Material→MR/Spoil; Print→Press+Ink; Cutting→Crest blanks;
+  Finishing→Stripping+Glue/Tape. Totals were always correct. Verified live.
+- **Route Comparison messaging confirmed 1:1**: diffed cloud vs legacy spot_r1_5.jsx
+  L6930-6964 — rows (Sheet/Layout/Sheets/Board/Press/Cutting/Die/Total/Per piece) and
+  verdict lines (cheaper-than/breaks-even/die-hurdle/Saber-needed/stock/Bobst-not-viable/
+  mill-min) are identical. The apparent "different messaging" was caused by the Crest
+  die ($500 vs $1,200) — fixed earlier — which flips the winner & dollar deltas.
