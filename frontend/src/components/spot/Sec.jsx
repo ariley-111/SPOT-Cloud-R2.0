@@ -7,9 +7,7 @@ export default function Sec({
   label, hue = "#94a3b8", open, onToggle, badge, accent, warn,
   children, "data-testid": dti,
 }) {
-  const headBg = open
-    ? `linear-gradient(90deg, ${hue}22 0%, transparent 60%)`
-    : `linear-gradient(90deg, ${hue}11 0%, transparent 60%)`;
+  const headBg = open ? "var(--spot-bg2)" : "transparent";
   return (
     <div className="sp-sec" data-testid={dti} style={{
       borderTop: `1px solid var(--spot-line)`, borderBottom: open ? `1px solid var(--spot-line)` : "none",
@@ -18,7 +16,8 @@ export default function Sec({
       <div onClick={onToggle} className="sp-sec-head"
         style={{
           background: headBg, borderLeft: `3px solid ${hue}`,
-          color: hue, padding: "6px 12px", cursor: "pointer",
+          borderBottom: open ? "1px solid var(--spot-border)" : "none",
+          color: hue, padding: "7px 12px", cursor: "pointer",
           fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase",
           display: "flex", alignItems: "center", gap: 8, userSelect: "none",
           borderRadius: 0,

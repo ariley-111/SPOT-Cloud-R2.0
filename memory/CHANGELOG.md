@@ -2,6 +2,19 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Design polish: typography + calmer section headers (option B core) ✅
+Per `/app/design_guidelines.json` (P0 + safe P1), fully reversible (CSS + 2 small component tweaks):
+- **Typography:** loaded Inter (400–900) + JetBrains Mono (400–700) in `index.html`; switched
+  `body.spot-app-body` font from unloaded 'DM Sans' → **Inter**; added global
+  `font-variant-numeric: tabular-nums` so prices align and don't jitter on recalc.
+- **Section headers (`Sec.jsx`):** removed the saturated gradient fills ("rainbow"); now a neutral
+  bar (`--spot-bg2` open / transparent closed) with the **colored 3px left-border + label** kept for
+  identity, plus a 1px bottom rule when open. Calmer, intentional, density preserved.
+- Held back (offered to user for opt-in): KPI-grid "control-room" cell borders, in-stock→dot pattern,
+  base token palette swap, sticky headers, focus rings. Skipped the black/white active-tile swap (user kept semantic tile colors).
+Verified Inter applied + headers render in both themes. Frontend-only; needs redeploy for prod.
+
+
 ### 2026-06-23 — Header/toolbar redesign (design_agent blueprint) ✅
 Rebuilt `Toolbar.jsx` per `/app/design_guidelines.json` (Swiss/high-contrast, 56px 5-zone row):
 - **Zone 1 Brand:** cube · SPOT · R2.0 Cloud pill · API status.

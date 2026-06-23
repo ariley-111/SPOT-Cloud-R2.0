@@ -85,7 +85,8 @@ html, body, #root { height: 100%; }
 
 body.spot-app-body {
   margin: 0;
-  font-family: 'DM Sans', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-variant-numeric: tabular-nums;
   background: var(--spot-bg);
   color: var(--spot-text);
   -webkit-font-smoothing: antialiased;
