@@ -1,0 +1,39 @@
+{
+  "summary": "PASS — All three changes verified live against the preview app. (1) SABER COST BUILDUP FIX: with One-Up 12x18 + Saber=Yes the right-rail Cost Buildup 'Cutting' row reads $215.23 (NON-ZERO, was previously dropped). Detail view shows two sub-lines under Cutting in the correct order: 'Saber @ $2.00/hr — $1.33' followed by 'CAD Standard — $213.90'. (2) PARSER SCOPE FIX (litho exclusion + CAD-authority): Uploading the FW_2ND GROUPING COUNTER PDQ 6 CVS SMALL.msg and clicking Build Estimate produced a Multi-Part parse with EXACTLY THREE components (parse-mp-tab-0 'Counter Tray (Litho/Digital)', parse-mp-tab-1 'Shipper RSC (Direct Print 1C)', parse-mp-tab-2 'Filler (Plain, Scored)') — the litho counter tray is NOT a 4th component, it is referenced in the Print Mode ask explaining 'litho/offset is OUT OF SCOPE for SPOT (corrugated/digital/wide-format only)'. (3) ALWAYS-ON VERIFY QUANTITIES PANEL: 'parse-qty-verify' renders at the TOP of the modal, above the Needs Estimator Input block, for this MP RFQ with three item inputs prefilled with comma-separated parser qtys: parse-qty-input-item-0='515, 1150, 2300, 3400, 3925', -item-1='515', -item-2='515', each labeled with the component description. Editing parse-qty-input-item-0 to '515, 1150, 2300' immediately turned the input border GREEN (computed borderColor=rgb(22,163,74)). Apply button correctly labeled 'Apply Multi-Part (3 items)' — clicking it closed the modal and the main UI Quote Table now shows three rows at qty 515 / 1,150 / 2,300 (matching the edit) with the active component = Counter PDQ Tray (digital direct print), confirming the edited qtys landed on item-0 only. Header changed to 'Multi-Part · 3', Order Total $5,012.77, 3 BOM components populated correctly. SIMPLE-quote parse-qty-input-job path was NOT exercised live to conserve parser budget; code path verified at FilesSec.jsx L704-715 — non-MP branch renders a single 'parse-qty-input-job' input wired to scope='job', key='qtys' using the same edits map / apply() coercion as MP.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "saber_cutting_nonzero": "PASS — Cutting=$215.23 with Saber=Yes (was $0 before fix). cutterDirect=$213.90 + saberCost=$1.33.",
+    "saber_detail_subline": "PASS — Detail view shows 'Saber @ $2.00/hr — $1.33' sub-row positioned ABOVE 'CAD Standard — $213.90' inside the Cutting bucket.",
+    "parse_modal_opens": "PASS — parse-review-modal visible after ~44-50s (within 2.5min budget). Cache hit on 2nd run.",
+    "parser_scope_three_components": "PASS — exactly 3 MP tabs: parse-mp-tab-0/1/2 (Counter Tray, Shipper RSC, Filler). No 4th litho component.",
+    "litho_referenced_in_asks": "PASS — Print Mode ask under 'Counter Tray (Litho/Digital)' contains explicit text 'litho/offset is OUT OF SCOPE for SPOT (corrugated/digital/wide-format only). Estimator: include digital pricing for 515 only? Litho qtys may need to be excluded or manually quoted.'",
+    "parse_qty_verify_always_on": "PASS — parse-qty-verify rendered at top of modal independently of asks. Header 'VERIFY QUANTITIES · comma-separated · always double-check — parser qtys are often wrong'.",
+    "qty_inputs_per_component_mp": "PASS — 3 inputs found: parse-qty-input-item-0='515, 1150, 2300, 3400, 3925' (Counter Tray), -item-1='515' (Shipper RSC), -item-2='515' (Filler). Each labeled with desc on the left.",
+    "edit_border_green": "PASS — editing parse-qty-input-item-0 to '515, 1150, 2300' turned borderColor to rgb(22,163,74) (--spot-green).",
+    "apply_label_multipart_3": "PASS — Apply button text exactly 'Apply Multi-Part (3 items)'.",
+    "apply_closes_modal_and_lands_qtys": "PASS — modal removed from DOM after Apply. Main UI Quote Table shows 3 rows: qty 515 / 1,150 / 2,300 matching the edit; Header now 'Multi-Part · 3'; Active Component 'Counter PDQ Tray (digital direct print)' shows input-qty-0..4 = ['515','1150','2300','','']; per-component breakdown @ 515 SETS lists 3 components.",
+    "inline_ask_editing_regression": "PASS — 10 asks rendered with friendly labels (Customer Code/Branch, Pricing Mode, Print Mode, One-Up Width (in), etc.); item-scoped asks correctly carry component-name badge ('Counter Tray (Litho/Digital)'); Pricing Mode rendered as <select> with options '— choose —' / 'Matched Set' / 'Individual'; data-testid pattern parse-ask-{scope}-{key} present.",
+    "simple_quote_qty_panel_code_path": "PASS (code review only) — FilesSec.jsx L704-715: when !isMP, renders single input data-testid='parse-qty-input-job' wired to {scope:'job', itemIdx:null, key:'qtys'}, same edits map + apply() coercion. Not exercised live to conserve parser budget per agent-to-agent note."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FilesSec.jsx parse-qty-verify block (L691-736) correctly distinguishes MP vs Simple by checking isMP and renders the appropriate input(s) wired to the same edits map — no divergent state between the panel and the Needs Estimator Input asks.",
+    "RightDashboard.jsx Cutting Row value = fmtMoney((r.cutterDirect||0)+(r.saberCost||0)) — defensive ||0 in both branches; Detail SubRow gated on r.saberCost>0 so non-saber jobs don't get an empty sub-line. Order is Saber-then-CAD which matches user expectation (saber happens before the cutter in real production flow).",
+    "parser_knowledge.py 'COMPONENT SOURCING PRIORITY (CADs authoritative)' rules verified to fire: the email mentioned 4 PDQ artifacts (Counter Tray Litho, Counter Tray Digital, Shipper, Filler) but the parser correctly emitted only the 3 CAD-backed components and routed the litho counter tray into the asks block as a Print Mode question.",
+    "Apply path coerces 'parse-qty-input-item-0' value '515, 1150, 2300' → ['515','1150','2300'] correctly — three quote-table rows materialized at exactly those qtys."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run; parser API called live and returned 200 with 3 components + 10 asks)", "frontend": "11/11 verifiable test points PASS · 1 code-path-only (Simple parse-qty-input-job)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md). Email-login button text 'Sign in' (exact); do NOT click 'Sign in with Microsoft'.",
+  "seed_data_creation": "Two draft estimates auto-created during the run: SA-260623-171632 (Packaging Corp of America — Strat Pro Buttermelt PDQ Multi-Part 3 components, qtys 515/1150/2300 after edit) and SA-260623-171751 (the Saber-test Simple quote at 12x18 with qtys 1000/200/500/1000/2000). Both saved automatically.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Saber Cost Buildup fix, parser CAD-priority/litho-exclusion, and the always-on Verify Quantities panel are all working end-to-end. Reliable testids confirmed live: cost-buildup, cb-tab-detail, tile-saber-yes, input-one-up-w, input-one-up-l, input-qty-{0..4}, files-browse-input, btn-build-estimate, parse-review-modal, parse-qty-verify, parse-qty-input-job (Simple) / parse-qty-input-item-{i} (MP), parse-mp-banner, parse-mp-tab-{job|0..N}, parse-asks, parse-ask-{scope}-{key}, parse-ask-input-{scope}-{key}, parse-review-apply. Parser cache hits on 2nd upload of the same file (44s vs 50s first-run on this RFQ). Modal qty input border color: rgb(22,163,74) when edited (--spot-green). For Simple-quote qty panel live verification, build a Simple parse (uncheck Multi-Part or upload an RFQ that parses Simple); the same edits map applies.",
+  "rca of the issue": "N/A — all three changes work as designed."
+}

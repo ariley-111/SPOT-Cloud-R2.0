@@ -688,6 +688,54 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
             </div>
           )}
 
+          {/* Always-on quantity verification — the parser often mis-assigns qtys */}
+          <div style={{
+            marginBottom: 12, padding: "10px 12px",
+            background: "var(--spot-accent-soft)", border: "1px solid var(--spot-accent)", borderRadius: 4,
+          }} data-testid="parse-qty-verify">
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-accent)", marginBottom: 8,
+              textTransform: "uppercase", letterSpacing: ".06em" }}>
+              Verify quantities
+              <span style={{ marginLeft: 8, fontWeight: 500, textTransform: "none", letterSpacing: 0,
+                color: "var(--spot-text3)", fontSize: 10 }}>
+                comma-separated · always double-check — parser qtys are often wrong
+              </span>
+            </div>
+            {!isMP ? (
+              (() => {
+                const norm = { scope: "job", itemIdx: null, key: "qtys" };
+                const k = ekey(norm);
+                return (
+                  <input className="sp-input" data-testid="parse-qty-input-job"
+                    value={k in edits ? edits[k] : askCurrentValue(norm)}
+                    placeholder="e.g. 515, 1150, 2300"
+                    onChange={(e) => setEdit(k, e.target.value)}
+                    style={{ maxWidth: 360, borderColor: k in edits ? "var(--spot-green)" : undefined }} />
+                );
+              })()
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {bomItems.map((b, i) => {
+                  const norm = { scope: "item", itemIdx: i, key: "qtys" };
+                  const k = ekey(norm);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-text2)",
+                        minWidth: 150, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis",
+                        whiteSpace: "nowrap" }}>{b.desc || `Item ${i + 1}`}</span>
+                      <input className="sp-input" data-testid={`parse-qty-input-item-${i}`}
+                        value={k in edits ? edits[k] : askCurrentValue(norm)}
+                        placeholder="e.g. 515, 1150, 2300"
+                        onChange={(e) => setEdit(k, e.target.value)}
+                        style={{ flex: 1, maxWidth: 320, borderColor: k in edits ? "var(--spot-green)" : undefined }} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+
           {normAsks.length > 0 && (
             <div style={{
               marginBottom: 12, padding: "10px 12px",
