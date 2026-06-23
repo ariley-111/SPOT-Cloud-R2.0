@@ -459,6 +459,11 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
         // matching (blank medium ≠ stocked "None" → spurious Buy-Min). Coerce
         // blanks back to the canonical defaults so dropdowns + pricing are right.
         const _canon = (v, d) => (v == null || String(v).trim() === "" ? d : v);
+        const _canonLiner = (v, d) => {
+          if (v == null || String(v).trim() === "") return d;
+          const s = String(v).trim().toLowerCase();
+          return ["kraft", "none", "null", "n/a", "na"].includes(s) ? "None" : v;
+        };
         const _canonMedium = (v) => {
           const s = v == null ? "" : String(v).trim().toLowerCase();
           return (s === "" || ["none", "null", "kraft", "n/a", "na"].includes(s)) ? "None" : v;
@@ -468,8 +473,8 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
           qtys: itemQtys.slice(0, 5),
           flute: _canon(rawState.flute, "B"),
           boardGrade: _canon(rawState.boardGrade, "200"),
-          outsideLiner: _canon(rawState.outsideLiner, "42# Kemi-Lite"),
-          insideLiner: _canon(rawState.insideLiner, "None"),
+          outsideLiner: _canonLiner(rawState.outsideLiner, "42# Kemi-Lite"),
+          insideLiner: _canonLiner(rawState.insideLiner, "None"),
           medium: _canonMedium(rawState.medium),
           itemDesc: raw.desc || rawState.itemDesc || `Item ${i + 1}`,
           boxStyle: rawState.boxStyle || "",

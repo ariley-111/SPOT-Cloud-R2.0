@@ -336,9 +336,11 @@ async def compare_routes_ep(
            printReq, printMode, dieTreatment, dieCost, crestComplexity, totalRuleInches, ...}
     """
     try:
-        from engine.runner import _build_assumptions  # type: ignore[attr-defined]
+        from engine.runner import _build_assumptions, _canon_liner, _canon_medium  # type: ignore[attr-defined]
     except Exception:
         _build_assumptions = None
+        _canon_liner = lambda v, d: (d if (v is None or str(v).strip() == "") else ("None" if str(v).strip().lower() in ("kraft", "none", "null", "n/a", "na") else v))
+        _canon_medium = lambda v: ("None" if (v is None or str(v).strip().lower() in ("", "none", "null", "kraft", "n/a", "na")) else v)
 
     one_w = float(payload.get("oneUpW") or 0)
     one_l = float(payload.get("oneUpL") or 0)
@@ -347,8 +349,9 @@ async def compare_routes_ep(
         return {"error": "Need oneUpW, oneUpL, and qty"}
     board_spec = {
         "boardGrade": payload.get("boardGrade"), "flute": payload.get("flute"),
-        "outsideLiner": payload.get("outsideLiner"), "insideLiner": payload.get("insideLiner"),
-        "medium": payload.get("medium") or "None",
+        "outsideLiner": _canon_liner(payload.get("outsideLiner"), "42# Kemi-Lite"),
+        "insideLiner": _canon_liner(payload.get("insideLiner"), "None"),
+        "medium": _canon_medium(payload.get("medium")),
         # ── Parity with runner build_board_spec — adders missing from compare-routes
         # caused CAD/Crest Board cost to drop by gradeAdder×MSF (Lynk: -$15/MSF → -$10.93).
         "fscEnabled": bool(payload.get("fscEnabled")),

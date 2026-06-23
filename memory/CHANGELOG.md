@@ -2,6 +2,27 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Legacy parity audit: sheet library / sheet selection / routing ✅
+**User directive:** match legacy sheet-selection logic, sheet library, AND routing EXACTLY.
+**Verification (vs `legacy_spot/spot_r1_5.jsx`):**
+- **Sheet library:** byte-for-byte identical — 216 sheets, 0 diffs (set-compared on g/f/ol/il/md/w/l).
+- **`compute_layout` + `auto_select_sheet`:** verbatim match — Priority-1 pricable custom (sorted by `_allIn = total + sheets×(incaRate/100 + cadRate/240)`) → below-min approved stock (w/ medium fallback) → Mullen upgrade chain → oversize 1-up fallback. Confirmed line-by-line.
+- **Routing (`auto_route`):** RESTORED to legacy D-124 cost-aware "cheapest viable route wins" (delegates to `evaluate_routes`→`cheapest`). Removed the prior-session Bobst-first early-return + CAD≤8h gate, which had diverged from the legacy source and was forcing Bobst over a cheaper CAD.
+**Liner parity fix (root cause of the "1-out at exact dims" report):** legacy NEVER stores the
+literal liner string `"Kraft"` — it stores `"None"` and only DISPLAYS "Kraft"
+(`outsideLiner==='None'?'Kraft':...`). A literal `"Kraft"` (from parser/imported data) matched
+NO stock sheet (library has only None/Kemi-Lite/Kla-White) → forced custom/Bobst 1-up.
+- `engine/runner.py`: new `_canon_liner()` maps `kraft/none/n-a/blank → None` for
+  outsideLiner+insideLiner in `build_board_spec` (single chokepoint; mirrors `_canon_medium`).
+- `routes/engine_routes.py` compare-routes board_spec now uses `_canon_liner`/`_canon_medium`.
+- `FilesSec.jsx` parse-import: `_canonLiner` mirrors backend so the UI tile + display agree.
+**Verified:** piece 28.625×25.5, E/200, qty 515 — with `Kraft/Kraft` OR `None/None` input,
+engine now returns **CAD · 60×120 · 2×4 · 8-out** (matches legacy). Tests: 82 pass
+(route_parity, auto_die, below_min, route_comparison_parity, route_warning, medium_normalization,
+pre_buy_min_snapshot, pricing_versions, matched_set_parity, multi_part, per_job_allocation,
+local_delivery_markup). Frontend + backend; needs redeploy for prod.
+
+
 ### 2026-06-23 — CAD pricing: Rule-Inches vs Difficulty parity (Option A) ✅
 **User issue:** Cloud auto-overwrote CAD Difficulty from parsed rule-inches, which then
 shifted the auto-route (route gate reads difficulty). Legacy never does this — it has an

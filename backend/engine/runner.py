@@ -60,12 +60,27 @@ def _canon_medium(v: Any) -> str:
     return v
 
 
+def _canon_liner(v: Any, default: str) -> str:
+    """Liner parity (legacy spot_r1_5.jsx): a liner VALUE is never the literal
+    string 'Kraft' — legacy stores 'None' and only DISPLAYS it as 'Kraft'
+    (`outsideLiner==='None'?'Kraft':...`, L1218/L4625/L5983). A blank coerces to
+    the field default. Any incoming 'Kraft'/'none'/'n/a' variant (from the parser
+    or imported data) maps to 'None' so stock-sheet matching behaves exactly like
+    legacy (there is no Kraft/Kraft sheet in the library — only None/Kemi/Kla)."""
+    s = "" if v is None else str(v).strip()
+    if s == "":
+        return default
+    if s.lower() in ("kraft", "none", "null", "n/a", "na"):
+        return "None"
+    return v
+
+
 def build_board_spec(json: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "flute": _canon_field(json.get("flute"), "B"),
         "boardGrade": _canon_field(json.get("boardGrade"), "200"),
-        "outsideLiner": _canon_field(json.get("outsideLiner"), "42# Kemi-Lite"),
-        "insideLiner": _canon_field(json.get("insideLiner"), "None"),
+        "outsideLiner": _canon_liner(json.get("outsideLiner"), "42# Kemi-Lite"),
+        "insideLiner": _canon_liner(json.get("insideLiner"), "None"),
         "medium": _canon_medium(json.get("medium")),
         "fscEnabled": bool(json.get("fscEnabled")),
         "fscFee": pn(json.get("fscFee", "25")),
