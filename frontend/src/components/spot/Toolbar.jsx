@@ -5,9 +5,14 @@ import { useQuote } from "../../context/QuoteContext";
 import { createQuote, updateQuote, updateQuoteStatus, reassignParserFiles } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
 import SpotCube from "./SpotCube";
+import {
+  FolderOpen, FileText, Eye, Calculator, Layers, Save as SaveIcon,
+  Moon, Sun, Settings, LogOut, User, ChevronDown,
+} from "lucide-react";
 
-/** Matches legacy SPOT top bar: cube logo + SPOT + version + Est#/Initials/Customer
- *  Right: Undo / Save / [File] / Load / Quote Header / Preview Quote / Cost Report */
+/** SPOT top bar — 5-zone Swiss/high-contrast layout (design_guidelines.json).
+ *  Zone 1 Brand · Zone 2 Quote context · Zone 3 Output actions (ghost) ·
+ *  Zone 4 Multi-Part / Status dot / Save (primary) · Zone 5 Account menu. */
 export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const { user, logout } = useAuth();
   const { active, pushToast, convertToMultiPart, convertToSimple, setField } = useQuote();
@@ -15,17 +20,13 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const isMP = s.quoteType === "Multi-Part";
   const itemCount = (s.bomItems || []).length;
   const [saving, setSaving] = React.useState(false);
-  const fileCbRef = React.useRef(null);
 
-  // Status of the saved quote — drives the colored dropdown pill in the toolbar.
-  // `s.quoteId` is set on first save; before then the dropdown stays a hint.
   const quoteId = s.quoteId || null;
   const currentStatus = s.quoteStatus || "draft";
   const [statusSaving, setStatusSaving] = React.useState(false);
   const onStatusChange = async (newStatus) => {
     if (newStatus === currentStatus) return;
     if (!quoteId) {
-      // No saved quote yet — just stash locally; will be persisted on first Save
       setField("quoteStatus", newStatus);
       pushToast(`Status set to ${newStatus} — save the quote to persist`, "info");
       return;
@@ -39,32 +40,18 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
       pushToast(`Status change failed — ${e?.response?.data?.detail || e.message}`, "err");
     } finally { setStatusSaving(false); }
   };
-  const statusTint = {
-    draft: { bg: "var(--spot-bg3)",       fg: "var(--spot-text3)" },
-    saved: { bg: "rgba(59,130,246,0.15)", fg: "#3b82f6" },
-    sent:  { bg: "rgba(245,158,11,0.15)", fg: "#f59e0b" },
-    won:   { bg: "rgba(34,197,94,0.15)",  fg: "#22c55e" },
-    lost:  { bg: "rgba(239,68,68,0.15)",  fg: "#ef4444" },
-    hold:  { bg: "rgba(168,85,247,0.15)", fg: "#a855f7" },
-  }[currentStatus] || { bg: "var(--spot-bg3)", fg: "var(--spot-text3)" };
+  const statusDot = {
+    draft: "#9CA3AF", saved: "#3B82F6", sent: "#F59E0B",
+    won: "#10B981", lost: "#EF4444", hold: "#8B5CF6",
+  }[currentStatus] || "#9CA3AF";
 
   const onToggleMP = () => {
     if (isMP && itemCount >= 1) {
-      // Already MP with items — convert back to Simple (only allowed if 1 item)
-      if (itemCount > 1) {
-        pushToast("Cannot convert — remove extra components first", "warn");
-        return;
-      }
+      if (itemCount > 1) { pushToast("Cannot convert — remove extra components first", "warn"); return; }
       convertToSimple();
-    } else {
-      // Simple OR Multi-Part with 0 items: open BOM Builder (templates / manual)
-      if (onOpenBomBuilder) onOpenBomBuilder();
-    }
+    } else if (onOpenBomBuilder) { onOpenBomBuilder(); }
   };
 
-  // Theme: default LIGHT (Rich Walter preference 2026-06-02). Persist to
-  // localStorage so it survives reload. <html data-theme="..."> is read by
-  // /app/frontend/src/theme.css to swap CSS variable palettes.
   const [theme, setTheme] = React.useState(() => {
     if (typeof window === "undefined") return "light";
     return localStorage.getItem("spot_theme") || "light";
@@ -76,54 +63,29 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
   const onSave = async () => {
-    if (!active) return;
-    if (saving) return;
+    if (!active || saving) return;
     if (!s.estNum && !s.custName && !s.itemDesc) {
-      pushToast("Add an estimate # or customer first", "warn");
-      return;
+      pushToast("Add an estimate # or customer first", "warn"); return;
     }
     setSaving(true);
     try {
       const body = {
         est_num: s.estNum || `DRAFT-${Date.now()}`,
         label: s.custRef || s.itemDesc || s.custName || "Untitled",
-        state: s,
-        status: currentStatus,
-        customer_code: s.custCode || null,
-        customer_name: s.custName || null,
+        state: s, status: currentStatus,
+        customer_code: s.custCode || null, customer_name: s.custName || null,
       };
-      // If this quote was already saved (or loaded from Saved), UPDATE it in
-      // place — never create a duplicate. update_quote on the backend preserves
-      // the pinned pricingVersionId, so a frozen quote stays frozen.
       const isUpdate = !!quoteId;
-      const saved = isUpdate
-        ? await updateQuote(quoteId, body)
-        : await createQuote(body);
-      // Stash the quote's id + status + pinned pricing version onto local state
-      // so the status dropdown can PATCH and recalcs stay on the right version.
+      const saved = isUpdate ? await updateQuote(quoteId, body) : await createQuote(body);
       setField("quoteId", saved.id);
       setField("quoteStatus", saved.status || currentStatus);
       if (saved.pricing_version_id) setField("pricingVersionId", saved.pricing_version_id);
-      // Migrate parser files from the draft tab id → saved-quote id on FIRST save
-      // so they remain accessible when the quote is later loaded back.
-      // (Bug fix 2026-02-15.) On update the files already live under quoteId.
       try {
         if (!isUpdate && active?.id && saved.id && active.id !== saved.id) {
           await reassignParserFiles(active.id, saved.id);
         }
       } catch (_) {}
       pushToast(`${isUpdate ? "Updated" : "Saved"} ${saved.est_num || s.estNum || "quote"}`, "ok");
-      // If "File" checkbox is checked, also download a .json snapshot
-      if (fileCbRef.current?.checked) {
-        const blob = new Blob([JSON.stringify({ est_num: saved.est_num, state: s }, null, 2)],
-          { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${(saved.est_num || s.estNum || "quote").replace(/[^A-Za-z0-9_.-]/g, "_")}.json`;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 200);
-      }
     } catch (e) {
       pushToast(`Save failed — ${e?.response?.data?.detail || e.message}`, "err");
     } finally { setSaving(false); }
@@ -131,109 +93,194 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
 
   return (
     <div data-testid="spot-toolbar" style={{
-      display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "6px 14px", height: 40, flexShrink: 0,
-      background: "var(--spot-bg2)", borderBottom: "1px solid var(--spot-line)",
+      display: "flex", alignItems: "stretch", height: 56, flexShrink: 0,
+      background: "var(--spot-bg)", borderBottom: "1px solid var(--spot-border)",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <SpotCube size={20} />
-        <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-.03em",
+      {/* ── Zone 1 · Brand ── */}
+      <div style={{ ...zone, gap: 9, paddingLeft: 16 }}>
+        <SpotCube size={22} />
+        <span style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-.03em",
           color: "var(--spot-text)" }} data-testid="logo-text">SPOT</span>
         <span className="sp-pill" style={{
           background: "var(--spot-bg3)", color: "var(--spot-text3)",
-          border: "1px solid var(--spot-border)", fontSize: 10,
+          border: "1px solid var(--spot-border)", fontSize: 9.5, fontWeight: 700,
         }} data-testid="version-pill">R2.0 Cloud</span>
-        {s.estNum && (
-          <span style={{ fontSize: 12, color: "var(--spot-text3)",
-            fontFamily: "'JetBrains Mono', monospace" }} data-testid="toolbar-est-num">
-            #{s.estNum}
-          </span>
-        )}
-        {s.custName && (
-          <span style={{ fontSize: 12, color: "var(--spot-text3)" }}
-            data-testid="toolbar-cust">— {s.custName}</span>
-        )}
-        {s.custRef && (
-          <span style={{ fontSize: 11, color: "var(--spot-text3)", opacity: 0.7 }}>/ {s.custRef}</span>
-        )}
-        {s.estInitials && (
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-accent)",
-            padding: "1px 6px", border: "1px solid var(--spot-accent)", borderRadius: 3,
-            marginLeft: 4 }}
-            data-testid="toolbar-initials">{s.estInitials}</span>
-        )}
         <ApiStatusPill />
       </div>
 
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button data-testid="toolbar-theme-toggle" onClick={toggleTheme}
-          title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-          style={{ ...btn, minWidth: 32, padding: "0 8px", fontSize: 14 }}>
-          {theme === "light" ? "🌙" : "☀"}
-        </button>
-        <button data-testid="toolbar-undo" title="Undo (Ctrl+Z)" style={btn}>↩</button>
-        <button data-testid="toolbar-toggle-mp" onClick={onToggleMP}
-          title={isMP ? "Convert this quote back to Simple (single piece)" : "Convert this quote to Multi-Part (display, kit, or set)"}
-          style={{ ...btn,
-            background: isMP ? "#f59e0b22" : "var(--spot-bg3)",
-            color: isMP ? "#f59e0b" : "var(--spot-text2)",
-            border: `1px solid ${isMP ? "#f59e0b88" : "var(--spot-border)"}`,
-            fontWeight: 700,
-          }}>{isMP ? `Multi-Part · ${itemCount}` : "→ Multi-Part"}</button>
-        <button data-testid="toolbar-save" onClick={onSave} disabled={saving} style={{ ...btn,
-          background: "var(--spot-green-soft)", color: "var(--spot-green)",
-          border: "1px solid var(--spot-green)",
-          opacity: saving ? 0.6 : 1, cursor: saving ? "wait" : "pointer" }}>
-          {saving ? "Saving…" : "Save"}
-        </button>
-        <select data-testid="toolbar-status" value={currentStatus}
-          onChange={(e) => onStatusChange(e.target.value)}
-          disabled={statusSaving}
-          title={quoteId ? "Quote status — saved instantly" : "Quote status — will be saved when you Save"}
-          style={{
-            ...btn,
-            background: statusTint.bg, color: statusTint.fg,
-            border: `1px solid ${statusTint.fg}55`,
-            fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em",
-            fontSize: 10, padding: "4px 6px", cursor: statusSaving ? "wait" : "pointer",
-            appearance: "auto",
-          }}>
-          <option value="draft">Draft</option>
-          <option value="saved">Saved</option>
-          <option value="sent">Sent</option>
-          <option value="won">Won</option>
-          <option value="lost">Lost</option>
-          <option value="hold">Hold</option>
-        </select>
-        <label title="Also export .json on Save"
-          style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11, color: "var(--spot-text3)" }}>
-          <input ref={fileCbRef} type="checkbox" data-testid="toolbar-file-checkbox" /> File
-        </label>
-        <button data-testid="toolbar-load" onClick={() => openModal("load")} style={btn}>Load</button>
-        <span style={{ width: 1, height: 16, background: "var(--spot-border)" }} />
-        <button data-testid="toolbar-quote-header" onClick={() => openModal("quote-header")} style={btn}>Quote Header</button>
-        <button data-testid="toolbar-preview" onClick={() => openModal("preview")} style={{ ...btn,
-          background: "var(--spot-accent-soft)", color: "var(--spot-accent)",
-          border: "1px solid var(--spot-accent)" }}>Preview Quote</button>
-        <button data-testid="toolbar-cost-report" onClick={() => openModal("cost-report")} style={{ ...btn,
-          background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
-          border: "1px solid var(--spot-purple)" }}>Cost Report</button>
-        <span style={{ width: 1, height: 16, background: "var(--spot-border)" }} />
-        <span style={{ fontSize: 10, color: "var(--spot-text3)" }} data-testid="toolbar-user-email">{user?.email}</span>
-        {user?.role === "admin" && onOpenAdmin && (
-          <button onClick={onOpenAdmin} data-testid="toolbar-admin" title="Pricing Admin Console"
-            style={{ ...btn, background: "var(--spot-purple-bg)", color: "var(--spot-purple)",
-              border: "1px solid var(--spot-purple)" }}>Admin</button>
+      {/* ── Zone 2 · Quote context (2 lines, truncated) ── */}
+      <div style={{ ...zone, flex: 1, minWidth: 0, flexDirection: "column",
+        alignItems: "flex-start", justifyContent: "center", gap: 2, paddingLeft: 16 }}
+        data-testid="toolbar-quote-context">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, width: "100%" }}>
+          {s.estInitials && (
+            <span data-testid="toolbar-initials" title="Estimator"
+              style={{ fontSize: 11, fontWeight: 800, color: "var(--spot-accent)",
+                padding: "1px 6px", border: "1px solid var(--spot-accent)", borderRadius: 4,
+                lineHeight: 1.4, flexShrink: 0 }}>{s.estInitials}</span>
+          )}
+          {s.estNum ? (
+            <span data-testid="toolbar-est-num" title={`Estimate ${s.estNum}`}
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--spot-text)",
+                fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>#{s.estNum}</span>
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--spot-text3)", fontStyle: "italic", flexShrink: 0 }}>
+              New quote
+            </span>
+          )}
+          {s.custName && (
+            <span data-testid="toolbar-cust" title={s.custName}
+              style={{ fontSize: 13, color: "var(--spot-text2)", fontWeight: 500,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                maxWidth: 260, minWidth: 0 }}>{s.custName}</span>
+          )}
+        </div>
+        {s.custRef && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, width: "100%" }}>
+            <span style={{ fontSize: 11, color: "var(--spot-text3)", flexShrink: 0 }}>↳</span>
+            <span data-testid="toolbar-project" title={s.custRef}
+              style={{ fontSize: 11.5, color: "var(--spot-text3)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                maxWidth: 340, minWidth: 0 }}>{s.custRef}</span>
+          </div>
         )}
-        <button onClick={logout} title="Sign out" data-testid="toolbar-logout" style={btn}>⎋</button>
+      </div>
+
+      {/* ── Zone 3 · Output actions (neutral ghost) ── */}
+      <div style={{ ...zone, gap: 2 }}>
+        <button data-testid="toolbar-load" onClick={() => openModal("load")} className="sp-tb-ghost" style={ghost} title="Load a saved quote">
+          <FolderOpen size={15} strokeWidth={2} /> Load
+        </button>
+        <button data-testid="toolbar-quote-header" onClick={() => openModal("quote-header")} className="sp-tb-ghost" style={ghost} title="Edit quote header / customer details">
+          <FileText size={15} strokeWidth={2} /> Header
+        </button>
+        <button data-testid="toolbar-preview" onClick={() => openModal("preview")} className="sp-tb-ghost" style={ghost} title="Preview the customer-facing quote">
+          <Eye size={15} strokeWidth={2} /> Preview
+        </button>
+        <button data-testid="toolbar-cost-report" onClick={() => openModal("cost-report")} className="sp-tb-ghost" style={ghost} title="Internal cost breakdown report">
+          <Calculator size={15} strokeWidth={2} /> Cost Report
+        </button>
+      </div>
+
+      {/* ── Zone 4 · Multi-Part / Status / Save ── */}
+      <div style={{ ...zone, gap: 8 }}>
+        <button data-testid="toolbar-toggle-mp" onClick={onToggleMP}
+          title={isMP ? "Convert back to Simple (single piece)" : "Convert to Multi-Part (display, kit, or set)"}
+          className="sp-tb-ghost" style={{ ...ghost, color: isMP ? "#F59E0B" : "var(--spot-text2)", fontWeight: 700 }}>
+          <Layers size={15} strokeWidth={2} />{isMP ? `Multi-Part · ${itemCount}` : "Multi-Part"}
+        </button>
+
+        <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 8, background: statusDot,
+            position: "absolute", left: 9, pointerEvents: "none" }} />
+          <select data-testid="toolbar-status" value={currentStatus}
+            onChange={(e) => onStatusChange(e.target.value)} disabled={statusSaving}
+            title={quoteId ? "Quote status — saved instantly" : "Quote status — saved when you Save"}
+            style={{ ...outline, paddingLeft: 22, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: ".04em", fontSize: 10, cursor: statusSaving ? "wait" : "pointer",
+              appearance: "auto" }}>
+            <option value="draft">Draft</option>
+            <option value="saved">Saved</option>
+            <option value="sent">Sent</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+            <option value="hold">Hold</option>
+          </select>
+        </div>
+
+        <button data-testid="toolbar-save" onClick={onSave} disabled={saving}
+          className="sp-tb-primary" style={{ ...primary, opacity: saving ? 0.65 : 1, cursor: saving ? "wait" : "pointer" }}>
+          <SaveIcon size={15} strokeWidth={2.2} />{saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      {/* ── Zone 5 · Account menu ── */}
+      <div style={{ display: "flex", alignItems: "center", paddingLeft: 12, paddingRight: 12 }}>
+        <AccountMenu user={user} theme={theme} toggleTheme={toggleTheme}
+          onOpenAdmin={onOpenAdmin} logout={logout} />
       </div>
     </div>
   );
 }
 
-const btn = {
-  all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 600,
-  padding: "4px 10px", borderRadius: 4,
-  background: "var(--spot-bg3)", color: "var(--spot-text2)",
-  border: "1px solid var(--spot-border)",
+function AccountMenu({ user, theme, toggleTheme, onOpenAdmin, logout }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const initials = (user?.email || "?").slice(0, 2).toUpperCase();
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button data-testid="toolbar-user-menu" onClick={() => setOpen((o) => !o)}
+        title="Account" className="sp-tb-ghost" style={{ ...ghost, gap: 6, paddingRight: 6 }}>
+        <span style={{ width: 24, height: 24, borderRadius: 24, flexShrink: 0,
+          background: "var(--spot-accent-soft)", color: "var(--spot-accent)",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          fontSize: 10, fontWeight: 800 }}>{initials}</span>
+        <ChevronDown size={14} strokeWidth={2} style={{
+          transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }} />
+      </button>
+      {open && (
+        <div data-testid="toolbar-user-dropdown" style={{
+          position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 220, zIndex: 1200,
+          background: "var(--spot-bg2)", border: "1px solid var(--spot-border)", borderRadius: 8,
+          boxShadow: "0 8px 28px rgba(0,0,0,0.22)", padding: 6,
+          animation: "spotMenuIn .12s ease",
+        }}>
+          <div style={{ padding: "6px 10px 8px", borderBottom: "1px solid var(--spot-line)", marginBottom: 4 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: "var(--spot-text3)",
+              textTransform: "uppercase", letterSpacing: ".06em" }}>Signed in as</div>
+            <div data-testid="toolbar-user-email" title={user?.email}
+              style={{ fontSize: 12, color: "var(--spot-text)", fontWeight: 600,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.email}</div>
+          </div>
+          <button data-testid="toolbar-theme-toggle" onClick={() => { toggleTheme(); }} className="sp-tb-menuitem" style={menuItem}>
+            {theme === "light" ? <Moon size={15} strokeWidth={2} /> : <Sun size={15} strokeWidth={2} />}
+            {theme === "light" ? "Dark mode" : "Light mode"}
+          </button>
+          {user?.role === "admin" && onOpenAdmin && (
+            <button data-testid="toolbar-admin" onClick={() => { setOpen(false); onOpenAdmin(); }} className="sp-tb-menuitem" style={menuItem}>
+              <Settings size={15} strokeWidth={2} /> Pricing Admin
+            </button>
+          )}
+          <button data-testid="toolbar-logout" onClick={() => { setOpen(false); logout(); }}
+            className="sp-tb-menuitem" style={{ ...menuItem, color: "#EF4444" }}>
+            <LogOut size={15} strokeWidth={2} /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const zone = {
+  display: "flex", alignItems: "center", paddingRight: 16, paddingLeft: 16,
+  borderRight: "1px solid var(--spot-line)",
+};
+const ghost = {
+  all: "unset", boxSizing: "border-box", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+  padding: "6px 10px", borderRadius: 6, color: "var(--spot-text)",
+  display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+  transition: "background-color .12s ease",
+};
+const outline = {
+  all: "unset", boxSizing: "border-box", cursor: "pointer",
+  border: "1px solid var(--spot-border)", borderRadius: 6, padding: "6px 8px",
+  background: "var(--spot-bg2)", color: "var(--spot-text)",
+};
+const primary = {
+  all: "unset", boxSizing: "border-box", cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+  padding: "7px 14px", borderRadius: 6, background: "var(--spot-green)", color: "#fff",
+  display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+  boxShadow: "0 1px 2px rgba(0,0,0,0.12)", transition: "filter .12s ease",
+};
+const menuItem = {
+  all: "unset", boxSizing: "border-box", cursor: "pointer", width: "100%",
+  display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 6,
+  fontSize: 12.5, fontWeight: 600, color: "var(--spot-text)",
+  transition: "background-color .12s ease",
 };

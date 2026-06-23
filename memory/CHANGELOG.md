@@ -2,6 +2,22 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — Header/toolbar redesign (design_agent blueprint) ✅
+Rebuilt `Toolbar.jsx` per `/app/design_guidelines.json` (Swiss/high-contrast, 56px 5-zone row):
+- **Zone 1 Brand:** cube · SPOT · R2.0 Cloud pill · API status.
+- **Zone 2 Quote context** (was the squished part): initials badge · `#EST` (mono) · Customer
+  (truncate+tooltip) on line 1; `↳ Project` (truncate+tooltip) on line 2. No more collisions.
+- **Zone 3 Output:** Load / Header / Preview / Cost Report — neutralized to monochrome **ghost**
+  buttons w/ lucide icons (killed the rainbow-button noise).
+- **Zone 4:** Multi-Part toggle (amber when active) · Status dropdown as a **colored-dot outline**
+  (not full-bg) · **Save** = the only solid green primary.
+- **Zone 5 Account menu:** self-contained themed dropdown (email · theme toggle · Admin · Sign out).
+- **Removed** the File-export checkbox (cloud-native now) and the non-functional Undo button,
+  per user. Hover states + menu animation via `.sp-tb-*` classes in theme.css.
+Verified both themes (dark toolbar computes #0b0d11 / light text) + account menu + all testids.
+Frontend-only; needs redeploy for prod.
+
+
 ### 2026-06-23 — Minor UI batch (pre-fork) ✅
 1. **Medium label → "Medium Upgrade"** (`ItemSetupSec.jsx`). Board-spec row labels widened
    to `fw=108` so Flute/Grade/Outside/Inside/Medium Upgrade stay aligned.

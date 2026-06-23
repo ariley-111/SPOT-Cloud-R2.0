@@ -260,6 +260,15 @@ body.spot-app-body {
   display: flex; justify-content: flex-end; gap: 8px;
 }
 
+/* ─── Redesigned toolbar (design_guidelines.json) ─── */
+.sp-tb-ghost:hover { background: var(--spot-bg2); }
+.sp-tb-menuitem:hover { background: var(--spot-bg3); }
+.sp-tb-primary:hover { filter: brightness(1.08); }
+@keyframes spotMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* ─── Resizable file-preview modal (#5): drag the bottom-right corner ─── */
 .sp-modal-resizable {
   resize: both;
