@@ -156,7 +156,7 @@ export default function ProductionSpecsSec({ result }) {
                         background: s.cadDifficulty === recommend ? "var(--spot-green-soft, #22c55e22)" : "#f59e0b22",
                         border: `1px solid ${s.cadDifficulty === recommend ? "var(--spot-green)" : "#f59e0b"}`,
                       }}>
-                      {ri.toFixed(0)}″ · {ratio.toFixed(1)}× {s.cadDifficulty === recommend ? "✓" : `→ ${recommend === "Standard" ? "Std" : recommend}?`}
+                      {s.cadDifficulty === recommend ? `${recommend === "Standard" ? "Std" : recommend} \u2713` : `Suggest: ${recommend === "Standard" ? "Std" : recommend}`}
                     </span>
                   )}
                 </div>
