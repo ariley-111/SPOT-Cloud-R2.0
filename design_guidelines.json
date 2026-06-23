@@ -1,0 +1,101 @@
+{
+  "theme": "Light & Dark (Adaptive via CSS variables)",
+  "archetype": "Archetype 4: Swiss & High-Contrast (Data-Heavy SaaS)",
+  "rationale": "Redesigning a cramped B2B estimating toolbar requires functional clarity over decorative flair. We eliminate the 'rainbow button' noise by standardizing most actions to monochrome/ghost styles and reserving high-contrast color exclusively for status indicators and primary actions (Save). The layout shifts from a jammed 40px row to a structured 56px row with logical vertical zones and an overflow account menu, achieving breathing room without sacrificing density.",
+  "color_system": {
+    "backgrounds": {
+      "header": "var(--spot-bg)",
+      "hover": "var(--spot-bg2)",
+      "pill": "var(--spot-bg3)"
+    },
+    "text": {
+      "primary": "var(--spot-text)",
+      "secondary": "var(--spot-text2)",
+      "tertiary": "var(--spot-text3)"
+    },
+    "borders": {
+      "main": "var(--spot-border)",
+      "divider": "var(--spot-line)"
+    },
+    "accents": {
+      "primary_action": "var(--spot-green)",
+      "primary_action_hover": "var(--spot-green-soft)",
+      "secondary_accent": "var(--spot-accent)",
+      "cost_report": "var(--spot-purple)",
+      "preview": "var(--spot-accent)"
+    },
+    "status_colors": {
+      "Draft": "#9CA3AF",
+      "Saved": "#3B82F6",
+      "Sent": "#F59E0B",
+      "Won": "#10B981",
+      "Lost": "#EF4444",
+      "Hold": "#8B5CF6"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "sans": "Inter, system-ui, sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "sizing": {
+      "brand": "text-lg font-bold tracking-tight",
+      "estimate_number": "text-sm font-mono tracking-tight",
+      "labels": "text-sm font-medium",
+      "sub_labels": "text-xs font-normal text-[var(--spot-text3)]"
+    }
+  },
+  "layout_zones": {
+    "height": "h-14 (56px)",
+    "structure": "Flex container with 5 distinct zones separated by subtle vertical dividers (`border-r border-[var(--spot-line)]`).",
+    "Zone_1_Brand": {
+      "elements": ["Cube Logo", "SPOT wordmark", "R2.0 Cloud pill", "API Status Pill"],
+      "styling": "flex items-center gap-3 pr-4 border-r border-[var(--spot-line)]"
+    },
+    "Zone_2_Context": {
+      "elements": ["Estimator Initials", "Estimate #", "Customer Name", "Project Name"],
+      "styling": "flex-1 min-w-0 flex flex-col justify-center px-4 border-r border-[var(--spot-line)]",
+      "behavior": "Stacked 2-line layout. Line 1: `[Initials Pill]` + `[Est # in Mono]` + `[Customer Name truncate max-w-[200px]]`. Line 2: `↳ [Project Name truncate max-w-[300px]]`. Wrap truncated strings in tooltips."
+    },
+    "Zone_3_Actions": {
+      "elements": ["Load", "Quote Header", "Preview Quote", "Cost Report"],
+      "styling": "flex items-center gap-1 px-4 border-r border-[var(--spot-line)]",
+      "hierarchy": "Neutralized. All buttons are 'ghost' variants with lucide-react icons. Stripped of their original pink/purple/blue backgrounds to reduce noise. Hover states apply `bg-[var(--spot-bg2)]`."
+    },
+    "Zone_4_Status_Save": {
+      "elements": ["Multi-Part Toggle", "Quote Status Dropdown", "Save Button"],
+      "styling": "flex items-center gap-3 px-4 border-r border-[var(--spot-line)]",
+      "hierarchy": "Multi-Part is ghost (amber icon if active). Status Dropdown is an outline button with a colored DOT indicator (not full bg). Save is the only solid colored button (Green) to guide primary intent."
+    },
+    "Zone_5_User": {
+      "elements": ["Account/Overflow Menu"],
+      "styling": "flex items-center pl-4",
+      "behavior": "A simple 'User' avatar or '⋯' trigger button. Clicking opens a Shadcn DropdownMenu containing: User Email (disabled label), Theme Toggle, Admin Console (if applicable), and Logout."
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[var(--spot-green)] text-white hover:bg-[var(--spot-green-soft)] transition-colors rounded-md px-4 py-2 text-sm font-medium shadow-sm",
+      "ghost": "bg-transparent text-[var(--spot-text)] hover:bg-[var(--spot-bg2)] transition-colors rounded-md px-3 py-1.5 text-sm font-medium inline-flex items-center gap-2",
+      "outline": "border border-[var(--spot-border)] text-[var(--spot-text)] hover:bg-[var(--spot-bg2)] transition-colors rounded-md px-3 py-1.5 text-sm font-medium shadow-sm inline-flex items-center gap-2"
+    },
+    "status_dropdown": {
+      "design": "Instead of full colored backgrounds (which screamed for attention unnecessarily), use a neutral outline button with a 8px colored circle (`w-2 h-2 rounded-full`) next to the text. This maps perfectly to the `status_colors` schema."
+    },
+    "tooltips": {
+      "design": "Standard inverted tooltips wrapping the Customer Name and Project Name elements to reveal full text upon hover since they are truncated to prevent layout collapsing."
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. Do NOT modify any part of the application other than the top toolbar (Toolbar.jsx / Header.jsx).",
+    "2. COMPLETELY REMOVE the 'File checkbox' and 'Undo button' from the UI per the user's explicit request.",
+    "3. Apply the 56px (`h-14`) Mega-Row layout structured into the 5 explicit flex zones defined above. Ensure the header uses `bg-[var(--spot-bg)]` and a bottom border of `border-b border-[var(--spot-border)]`.",
+    "4. Implement string truncation using Tailwind's `truncate` class on Customer Name and Project Name strings. Constrain their max-widths (e.g., `max-w-[200px]` and `max-w-[300px]`) on standard screens and wrap them in Radix/Shadcn Tooltips to expose full text.",
+    "5. Fold the rarely used items ('Theme toggle', 'User email display', 'Admin button', and 'Sign out') into a clean Dropdown Menu positioned on the far right (Zone 5).",
+    "6. Convert the loud actions ('Load', 'Quote Header', 'Preview Quote', and 'Cost Report') into neutral 'ghost' buttons with icons. Ensure text color maps to `--spot-text` to kill the rainbow noise.",
+    "7. Update the Quote Status dropdown to utilize the 'colored dot' indicator pattern instead of full-button background colors.",
+    "8. Ensure the 'Save' button remains the most prominent primary action mapped to `--spot-green`.",
+    "9. Use `data-testid` attributes on all interactive elements in the toolbar (e.g., `data-testid=\"toolbar-save-btn\"`, `data-testid=\"toolbar-status-dropdown\"`, `data-testid=\"toolbar-user-menu\"`).",
+    "10. Verify that your styling relies heavily on the `--spot-*` variables so the new header works flawlessly in both existing Light and Dark themes."
+  ]
+}
