@@ -2,6 +2,28 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-23 — CAD pricing: Rule-Inches vs Difficulty parity (Option A) ✅
+**User issue:** Cloud auto-overwrote CAD Difficulty from parsed rule-inches, which then
+shifted the auto-route (route gate reads difficulty). Legacy never does this — it has an
+explicit `CAD Price: [Diff]/[Rule]` toggle, prices the cut from whichever the user picks,
+and the auto-route decision is ALWAYS difficulty-based (spot_r1_5.jsx L419/L3511) — rule-
+inches NEVER move the route.
+**Fix (Option A — strict legacy parity + non-destructive recommendation):**
+- `ProductionSpecsSec.jsx`: added the legacy `CAD Price [Diff]/[Rule]` toggle
+  (`tile-cadprice-diff` / `tile-cadprice-rule`). REMOVED the auto-difficulty overwrite —
+  rule-inches now only drive a NON-destructive recommendation: the suggested Difficulty
+  tile glows + a hint badge shows `{rule}″ · {ratio}× → Std/Complex?` (or ✓ when matched).
+  The estimator clicks the difficulty themselves. Rule In/Pc input + `×N ×1.15 = X in/sheet`
+  breakdown shown only in Rule mode (legacy L6140).
+- `useEngine.buildPayload`: now sends `cadPricingMethod` on single-part (MP already did);
+  engine math in `pricing.py` L79 was already present but never reached before.
+**Verified (curl, identical 24×36 / qty1000 / rule 300):** By Difficulty → route CAD,
+cadHrs 5.98, cutting $825.70 (bucket "Standard"); By Inches of Rule → route STILL CAD
+(unchanged ✓), cadHrs 9.28, cutting $1,280.71 (basis "300 in/pc × 6 out × 1.15 = 2070
+in/sh"). Route does not move when pricing by rule-inches — exact legacy behavior. UI
+elements render (smoke). Frontend-only + payload; needs redeploy for prod.
+
+
 ### 2026-06-19 — Individual-mode scenario freight missing 15% markup 🐛✅
 **Symptom:** Same multi-part quote priced Individual vs Matched-Set returned different
 JOB totals per qty. Items were IDENTICAL ($3,789.92 @100); only freight differed.

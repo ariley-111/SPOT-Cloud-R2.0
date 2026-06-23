@@ -105,66 +105,88 @@ export default function ProductionSpecsSec({ result }) {
             {ovr && <span style={{ fontSize: 11, fontWeight: 700, color: "#f472b6", alignSelf: "center", marginLeft: 2 }}>ALL {ovr.toUpperCase()}</span>}
           </div>
         </F>
-        <F l="Difficulty" inline>
-          <div style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-            {DIFFICULTY.map((d) => {
-              const lbl = d === "Standard" ? "Std" : d;
-              return <Tile key={d} label={lbl} active={s.cadDifficulty === d}
-                data-testid={`tile-difficulty-${lbl}`}
-                onClick={() => setField("cadDifficulty", d)} small tint="#22c55e" />;
-            })}
-            <span style={{ width: 1, height: 18, background: "var(--spot-border)", margin: "0 4px" }} />
-            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--spot-text3)",
-              textTransform: "uppercase", letterSpacing: ".06em" }}>RULE IN</span>
-            <input type="number" step="0.1" min="0"
-              value={s.totalRuleInches || ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setField("totalRuleInches", v);
-                const ri = parseFloat(v || 0);
-                const uw = parseFloat(s.oneUpW || 0);
-                const ul = parseFloat(s.oneUpL || 0);
-                const perim = 2 * (uw + ul);
-                if (ri > 0 && perim > 0) {
-                  const recommend = (ri / perim) > 3 ? "Complex" : "Standard";
-                  if (s.cadDifficulty !== recommend && s.cadDifficulty !== "Simple") {
-                    setField("cadDifficulty", recommend);
-                  }
-                }
-              }}
-              placeholder="0"
-              data-testid="input-rule-inches"
-              style={{
-                width: 56, padding: "2px 5px", fontSize: 11, textAlign: "center",
-                background: "var(--spot-bg2)", color: "var(--spot-text)",
-                border: "1px solid var(--spot-border)", borderRadius: 3,
-                fontFamily: "'JetBrains Mono', monospace",
-              }} />
-            {/* Auto-classifier indicator */}
-            {(() => {
-              const ri = parseFloat(s.totalRuleInches || 0);
-              const uw = parseFloat(s.oneUpW || 0);
-              const ul = parseFloat(s.oneUpL || 0);
-              if (ri <= 0 || uw <= 0 || ul <= 0) return null;
-              const perim = 2 * (uw + ul);
-              const ratio = ri / perim;
-              const recommend = ratio > 3 ? "Complex" : "Standard";
-              const matches = s.cadDifficulty === recommend;
-              return (
-                <span data-testid="difficulty-rule-hint"
-                  title={`${ri.toFixed(1)}″ rule ÷ ${perim.toFixed(1)}″ perim = ${ratio.toFixed(2)}× — iQuote rule suggests ${recommend}`}
-                  style={{
-                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 2,
-                    color: matches ? "var(--spot-green)" : "#f59e0b",
-                    background: matches ? "var(--spot-green-soft, #22c55e22)" : "#f59e0b22",
-                    border: `1px solid ${matches ? "var(--spot-green)" : "#f59e0b"}`,
-                  }}>
-                  {ratio.toFixed(1)}×
-                </span>
-              );
-            })()}
-          </div>
-        </F>
+        {(() => {
+          // ── Legacy parity (spot_r1_5.jsx L6139-6140): CAD pricing basis is an
+          // explicit user choice — "By Difficulty" (bucket) OR "By Inches of Rule"
+          // (actual knife length). The rule-inches value (often parsed from the
+          // CAD/email) drives a NON-DESTRUCTIVE difficulty recommendation; it never
+          // auto-overwrites the user's difficulty pick, and never changes the route
+          // (auto-route is always difficulty-based, matching legacy L419/L3511).
+          const method = s.cadPricingMethod || "By Difficulty";
+          const byRule = method === "By Inches of Rule";
+          const ri = parseFloat(s.totalRuleInches || 0);
+          const uw = parseFloat(s.oneUpW || 0);
+          const ul = parseFloat(s.oneUpL || 0);
+          const perim = 2 * (uw + ul);
+          const ratio = ri > 0 && perim > 0 ? ri / perim : 0;
+          const recommend = ratio > 3 ? "Complex" : "Standard";
+          const hasRec = ri > 0 && perim > 0;
+          const pps = result?.pcsPerSheet || 0;
+          const sheetRuleIn = ri > 0 && pps > 0 ? ri * pps * 1.15 : 0;
+          return (
+            <>
+              <F l="CAD Price" inline>
+                <div style={{ display: "flex", gap: 2 }}>
+                  <Tile label="Diff" active={!byRule}
+                    onClick={() => setField("cadPricingMethod", "By Difficulty")}
+                    small tint="#22c55e" data-testid="tile-cadprice-diff" />
+                  <Tile label="Rule" active={byRule}
+                    onClick={() => setField("cadPricingMethod", "By Inches of Rule")}
+                    small tint="#22c55e" data-testid="tile-cadprice-rule" />
+                </div>
+              </F>
+              <F l="Difficulty" inline>
+                <div style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+                  {DIFFICULTY.map((d) => {
+                    const lbl = d === "Standard" ? "Std" : d;
+                    const suggested = hasRec && d === recommend && s.cadDifficulty !== d;
+                    return <Tile key={d} label={lbl} active={s.cadDifficulty === d}
+                      glow={suggested}
+                      data-testid={`tile-difficulty-${lbl}`}
+                      onClick={() => setField("cadDifficulty", d)} small tint="#22c55e" />;
+                  })}
+                  {/* Non-destructive recommendation (parsed rule-inches → suggested difficulty) */}
+                  {hasRec && (
+                    <span data-testid="difficulty-rule-hint"
+                      title={`${ri.toFixed(1)}″ rule ÷ ${perim.toFixed(1)}″ perim = ${ratio.toFixed(2)}× — iQuote rule suggests ${recommend}`}
+                      style={{
+                        fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
+                        whiteSpace: "nowrap",
+                        color: s.cadDifficulty === recommend ? "var(--spot-green)" : "#f59e0b",
+                        background: s.cadDifficulty === recommend ? "var(--spot-green-soft, #22c55e22)" : "#f59e0b22",
+                        border: `1px solid ${s.cadDifficulty === recommend ? "var(--spot-green)" : "#f59e0b"}`,
+                      }}>
+                      {ri.toFixed(0)}″ · {ratio.toFixed(1)}× {s.cadDifficulty === recommend ? "✓" : `→ ${recommend === "Standard" ? "Std" : recommend}?`}
+                    </span>
+                  )}
+                </div>
+              </F>
+              {byRule && (
+                <F l="Rule In/Pc" inline>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input type="number" step="0.1" min="0"
+                      value={s.totalRuleInches || ""}
+                      onChange={(e) => setField("totalRuleInches", e.target.value)}
+                      placeholder="0"
+                      data-testid="input-rule-inches"
+                      style={{
+                        width: 64, padding: "4px 6px", fontSize: 12, textAlign: "center",
+                        background: "var(--spot-bg2)", color: "var(--spot-text)",
+                        border: "1px solid var(--spot-border)", borderRadius: 3,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }} />
+                    {sheetRuleIn > 0 && (
+                      <span style={{ fontSize: 11, color: "var(--spot-text2)", whiteSpace: "nowrap" }}
+                        data-testid="rule-sheet-hint">
+                        {"\u00D7"}{pps} {"\u00D7"}1.15 = <b style={{ color: sheetRuleIn > 1000 ? "#f59e0b" : "var(--spot-text)" }}>{Math.round(sheetRuleIn)}</b> in/sheet
+                      </span>
+                    )}
+                  </div>
+                </F>
+              )}
+            </>
+          );
+        })()}
         <F l="Perf %" inline>
           <Num value={s.perfPct} onChange={(v) => setField("perfPct", v)} step="0.01" min="0" max="1" style={{ width: 60, textAlign: "center" }} data-testid="input-perf-pct" />
         </F>
