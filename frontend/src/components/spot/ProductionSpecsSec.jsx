@@ -17,6 +17,16 @@ export default function ProductionSpecsSec({ result }) {
 
   const overridden = !!ovr;
 
+  // Smart default for CAD pricing method: when inches of rule are present
+  // (typed or parsed), default to "By Inches of Rule"; otherwise "By Difficulty".
+  // Only auto-manages until the estimator explicitly picks a method (cadMethodTouched).
+  React.useEffect(() => {
+    if (s.cadMethodTouched) return;
+    const ri = parseFloat(s.totalRuleInches || 0);
+    const want = ri > 0 ? "By Inches of Rule" : "By Difficulty";
+    if ((s.cadPricingMethod || "By Difficulty") !== want) setField("cadPricingMethod", want);
+  }, [s.totalRuleInches, s.cadMethodTouched, s.cadPricingMethod]);
+
   // Collapsed summary: print · saber(+layout) · route · cut · strip · glue · tape · perf.
   const sidesShort = s.printSides === "2-Sided" ? "2S" : s.printSides === "1-Sided" ? "1S" : "";
   const printPart = hasPrint
@@ -167,10 +177,10 @@ export default function ProductionSpecsSec({ result }) {
               <F l="CAD Price" inline>
                 <div style={{ display: "flex", gap: 2 }}>
                   <Tile label="Diff" active={!byRule}
-                    onClick={() => setField("cadPricingMethod", "By Difficulty")}
+                    onClick={() => setManyFields({ cadPricingMethod: "By Difficulty", cadMethodTouched: true })}
                     small tint="#22c55e" data-testid="tile-cadprice-diff" />
                   <Tile label="Rule" active={byRule}
-                    onClick={() => setField("cadPricingMethod", "By Inches of Rule")}
+                    onClick={() => setManyFields({ cadPricingMethod: "By Inches of Rule", cadMethodTouched: true })}
                     small tint="#22c55e" data-testid="tile-cadprice-rule" />
                 </div>
               </F>
