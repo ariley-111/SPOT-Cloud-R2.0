@@ -1,0 +1,68 @@
+{
+  "summary": "RUNTIME Playwright verification (frontend-only) of SPOT estimator section-header pill changes. Logged in via password (admin@standardprinting.com), drove inputs/tiles, collapsed each section, read the live data-testid badges. All 4 pill behaviors + the route-override caution PASS at runtime. One sub-acceptance (Pricing Strategy FOB=LocalDelivery) could not be exercised because the UI exposes only Will-Call and Ship FOB controls — no LocalDelivery toggle is rendered anywhere in the freight panel or FreightDashModal.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Pricing Strategy badge - FOB Local Delivery", "issue": "Acceptance criterion 'Set FOB to Local Delivery (quoteFOB=LocalDelivery) → expect Freight - Local Delivery' could not be exercised. Both the inline freight panel and the Freight Dashboard modal only expose FOB tiles for Will-Call and Ship (testids tile-fob-willcall, tile-fob-ship, dash-fob-willcall, dash-fob-ship). No tile/control sets quoteFOB='LocalDelivery'. Code path in Placeholders.jsx PricingStrategySec (L40-49) does support this value, but the UI does not surface it.", "affected_selectors": ["tile-fob-localdelivery (missing)", "dash-fob-localdelivery (missing)"]}
+    ],
+    "design_issues": []
+  },
+  "runtime_results": {
+    "1_route_override_caution": {
+      "verdict": "PASS",
+      "evidence": {
+        "rob_text_after_cad_click": "⚠ CAD",
+        "rob_computed_background": "rgb(253, 230, 138)  (== #fde68a, expected yellow)",
+        "starts_with_warning_glyph": true,
+        "rob_count_after_auto_click": 0,
+        "sec_production_badge_after_auto_collapsed": "Gloss 1S·Saber 1@63×126 (30/blk)·auto → CAD·Cut Complex·Strip Complex·Tape Clear·Perf 25%",
+        "contains_auto_arrow": true
+      }
+    },
+    "2_production_specs_collapsed_pill": {
+      "verdict": "PASS",
+      "collapsed_badge_text": "Gloss 1S·Saber 1@63×126 (30/blk)·⚠ CAD·Cut Complex·Strip Complex·Tape Clear·Perf 25%",
+      "segments_found": {"Saber": true, "route_with_warn": true, "Cut_difficulty": "Cut Complex", "Strip": "Strip Complex", "Tape_Clear": true, "Perf_pct": "Perf 25%"}
+    },
+    "3_item_setup_one_time_costs_pill": {
+      "verdict": "PASS",
+      "collapsed_badge_text": "200 E · Kla/Kraft · 5×6 → 30 out on 63×126 · Prep Line · Die Line · Misc Line",
+      "segments_found": {"Die_Line": true, "Prep_segment": "Prep Line", "Misc_Line": true, "board_layout_summary": "200 E · Kla/Kraft · 5×6 → 30 out on 63×126"}
+    },
+    "4_item_setup_board_substitution_bug_fix": {
+      "verdict": "PASS (substitution was already active in the loaded estimate)",
+      "spec_grade": "ECT 32",
+      "running_grade_in_pill": "200",
+      "pill_shows_running_not_spec": true,
+      "ui_banner": "Stock substitution approved — 200# meets ECT 32 spec"
+    },
+    "5_pricing_strategy_freight_by_type": {
+      "verdict": "PARTIAL PASS",
+      "amort_state_badge": "GM% · GM% × Freight - Amort",
+      "amort_contains_expected_phrase": "contains 'GM% × Freight - Amort'",
+      "line_state_badge": "GM% · Freight - Line",
+      "line_contains_expected_phrase": "contains 'Freight - Line'",
+      "local_delivery_state": "NOT TESTABLE — UI exposes no LocalDelivery FOB control",
+      "prep_segment_absent": true
+    }
+  },
+  "critical_code_review_comments": [
+    "FOB control surface is incomplete vs. code support: PricingStrategySec.freightPart handles quoteFOB==='LocalDelivery' but neither freight-panel nor FreightDashModal renders a Local Delivery option. Either expose tile-fob-localdelivery (and dash-fob-localdelivery), or remove the unreachable code path. Main agent should reconcile.",
+    "Section header click target: clicking the outer container with data-testid='sec-production' / 'sec-item-setup' does NOT toggle collapse — the onClick lives on the inner .sp-sec-head. This is fine for normal users (they click the header strip), but worth noting for test authors. Testing agents must use [data-testid='sec-...'] .sp-sec-head as the toggle handle.",
+    "ItemSetupSec.jsx is 1012 lines (carry-over from iteration_54) — still > 700-line threshold; recommend split."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Expose a LocalDelivery FOB tile in the freight panel and/or FreightDashModal so the existing 'Freight - Local Delivery' summary string in PricingStrategySec can actually be reached from the UI. Suggested testids: tile-fob-localdelivery and dash-fob-localdelivery. Without this, the acceptance criterion cannot be re-validated by future testing.",
+    "Optional: consider routing the outer sec-* data-testid container's onClick through to onToggle, or document that .sp-sec-head is the click target."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% on testable acceptance criteria; 1 criterion (FOB LocalDelivery) not testable due to missing UI control"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 — used; password sign-in worked end-to-end",
+  "seed_data_creation": "None — exercised the auto-loaded estimate SA-260624-085733 (Lynk Packaging — BJ Sedona 19in Planter 2-Pack-Pallet Wrap). This estimate also conveniently has an active board substitution which let us verify the bug-fix at runtime.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All five pill features are verified at runtime. Toggle pattern: click [data-testid='sec-<name>'] .sp-sec-head (NOT the outer container). Pill badges read via [data-testid='sec-<name>-badge']. The route-override-badge renders both when Production Specs is open AND collapsed (per code: badge={sec.prod ? routeNode : collapsedNode}). The only outstanding gap is the missing LocalDelivery FOB control — needs main-agent to add a tile or treat the code path as unreachable.",
+  "rca of the issue": "FOB LocalDelivery acceptance: PricingStrategySec.jsx (~L40) checks quoteFOB==='LocalDelivery' and returns 'Freight - Local Delivery', but there is no UI affordance to set quoteFOB to that value. The visible FOB tiles are limited to Will-Call and Ship (in both the inline freight panel and the FreightDashModal). To enable the test, add a LocalDelivery tile and wire its onClick to setField('quoteFOB','LocalDelivery')."
+}
