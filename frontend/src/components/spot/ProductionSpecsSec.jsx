@@ -23,6 +23,10 @@ export default function ProductionSpecsSec({ result }) {
     ? `${s.printMode || "Print"}${sidesShort ? " " + sidesShort : ""}${s.whiteInk === "Yes" ? " +W" : ""}`
     : "No Print";
   const cadShort = s.cadDifficulty === "Standard" ? "Std" : s.cadDifficulty;
+  // When the route is Crest it carries its OWN difficulty (Std/Adv) — show that
+  // in place of the CAD difficulty.
+  const isCrestRoute = route === "Crest" || ovr === "Crest";
+  const crestShort = s.crestComplexity === "Advanced" ? "Adv" : "Std";
   const perfNum = Number(s.perfPct) || 0;
   const saberPart = s.saber === "Yes"
     ? (result?.saberBlanksOutN && result?.saberBlankW
@@ -31,7 +35,7 @@ export default function ProductionSpecsSec({ result }) {
     : null;
   const preParts = [printPart, saberPart].filter(Boolean);
   const postParts = [
-    s.cadDifficulty ? `Cut ${cadShort}` : null,
+    isCrestRoute ? `Crest ${crestShort}` : (s.cadDifficulty ? `Cut ${cadShort}` : null),
     s.handStripping === "Yes" ? `Strip ${s.strippingComplexity || ""}`.trim() : null,
     s.handGluing === "Yes" ? `Glue ${s.jointsPerPiece || 1}j${s.gluingComplexity ? " " + s.gluingComplexity : ""}` : null,
     s.tape === "Yes" ? `Tape ${s.tapeType === "Reinforced" ? "Reinf" : (s.tapeType || "")}`.trim() : null,

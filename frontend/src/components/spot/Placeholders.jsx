@@ -38,15 +38,18 @@ export function PricingStrategySec() {
   // Freight shows BY TYPE here: GM% × Freight - Amort / Freight - Line /
   // Freight - Local Delivery.
   const basisLabel = s.pricingBasis === "Sell $/MSF" ? "$/MSF" : "GM%";
+  let basisSeg = basisLabel;
   let freightPart = null;
   if (s.quoteFOB === "LocalDelivery") {
     freightPart = "Freight - Local Delivery";
   } else {
     const ft = s.freightScope === "Per Job" ? (s.jobFreightTreatment || "None") : (s.freightTreatment || "None");
-    if (ft === "Amortize") freightPart = "GM% × Freight - Amort";
+    // Amortized freight is marked up at the chosen pricing basis — fold the
+    // basis INTO the freight segment so it isn't shown twice (GM% · GM% × …).
+    if (ft === "Amortize") { freightPart = `${basisLabel} × Freight - Amort`; basisSeg = null; }
     else if (ft === "Separate Line") freightPart = "Freight - Line";
   }
-  const pricingSummary = [isMP ? s.pricingMode : null, basisLabel, freightPart].filter(Boolean).join(" · ");
+  const pricingSummary = [isMP ? s.pricingMode : null, basisSeg, freightPart].filter(Boolean).join(" · ");
 
   return (
     <Sec label="Pricing Strategy" hue="#8b5cf6" open={sec.pricing} onToggle={() => toggleSec("pricing")}

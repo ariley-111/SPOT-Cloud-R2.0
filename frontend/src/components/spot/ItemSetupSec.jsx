@@ -220,7 +220,9 @@ export default function ItemSetupSec({ result }) {
     <Sec label="Item Setup" hue="#3b82f6" open={sec.qty} onToggle={() => toggleSec("qty")}
       badge={sec.qty
         ? (fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION")
-        : (boardSummary || (fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION"))}
+        : ((boardSummary || s.fscEnabled)
+            ? <>{boardSummary}{boardSummary && s.fscEnabled ? <span style={{ opacity: .4, margin: "0 3px" }}>·</span> : null}{s.fscEnabled && <span style={{ color: "var(--spot-green)", fontWeight: 800 }}>✓ FSC</span>}</>
+            : (fullyResolved ? "READY" : !s.oneUpW || !s.oneUpL ? null : "ATTENTION"))}
       accent={sec.qty && fullyResolved} warn={sec.qty && !fullyResolved && s.oneUpW && s.oneUpL}
       data-testid="sec-item-setup">
 

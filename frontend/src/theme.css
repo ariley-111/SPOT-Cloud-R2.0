@@ -191,7 +191,7 @@ body.spot-app-body {
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.06em;
   font-family: inherit;
-  max-width: 460px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 860px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   flex-shrink: 0;
 }
 .sp-badge-green   { background: var(--spot-green-soft);  color: var(--spot-green);  border: 1px solid var(--spot-green);  }

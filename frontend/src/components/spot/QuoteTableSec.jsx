@@ -111,9 +111,17 @@ export default function QuoteTableSec({ results, componentPricing, jobTotals, me
 
   return (
     <Sec label="Quote Table" hue="#a855f7" open={sec.quoteTable} onToggle={() => toggleSec("quoteTable")}
-      badge={useComponentLayout
-        ? `${componentPricing.length} comp · ${componentPricing.reduce((a, c) => a + (c.rows || []).length, 0)} qty`
-        : (total > 0 ? `${activeCount}/${total}` : null)}
+      badge={(() => {
+        const countBadge = useComponentLayout
+          ? `${componentPricing.length} comp · ${componentPricing.reduce((a, c) => a + (c.rows || []).length, 0)} qty`
+          : (total > 0 ? `${activeCount}/${total}` : null);
+        // Collapsed: surface the Order Total for the selected qty.
+        const orderTotal = useComponentLayout
+          ? componentPricing.reduce((a, c) => { const cr = c.rows || []; const row = cr[Math.min(selSlot, cr.length - 1)] || cr[0]; return a + (row?.sellTotal || 0); }, 0)
+          : (rows[selSlot]?.sellTotal || 0);
+        if (sec.quoteTable) return countBadge;
+        return orderTotal > 0 ? `Order ${fmtMoney(orderTotal)}` : countBadge;
+      })()}
       data-testid="sec-quote-table">
 
       {/* D-070 Route fallback warning (legacy spot_r1_5.jsx L811-814):
