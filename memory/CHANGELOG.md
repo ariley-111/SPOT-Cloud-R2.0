@@ -2,6 +2,25 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-24 — Section-header pill refinements ✅ (iter53–56, all PASS)
+Reorganized + enriched the collapsed-section summary pills (verified live):
+- **Item Setup pill:** now shows the RUNNING (substituted) board grade instead of the spec'd
+  grade (bug fix); added One-Time Cost treatments — Prep (Auto/Line/Amort), Die (Line/Amort),
+  Misc (Line/Amort); and a green **✓ FSC** chip when FSC is enabled (nothing when off).
+- **Pricing Strategy pill:** Freight **by type** — `<basis> × Freight - Amort` (basis = GM% or
+  $/MSF, shown ONCE — fixed the duplicate "GM% · GM%"), `Freight - Line`, or
+  `Freight - Local Delivery`. Prep moved out of this pill to Item Setup.
+- **Production Specs pill:** added Cut difficulty, Strip difficulty, Glue (#joints + difficulty),
+  Saber layout detail, Perf % (≠0), Tape type; **Crest** difficulty (Std/Adv) replaces the CAD
+  difficulty when the route is Crest. Badge max-width raised 460→860px so Strip/Glue no longer
+  truncate. Route **override** now shows a yellow ⚠ caution pill (data-testid route-override-badge).
+- **Quote Table header:** shows the **Order Total** for the selected qty when collapsed; count
+  badge when open.
+- Frontend + theme.css only; needs redeploy for prod.
+- KNOWN GAP: the "Freight - Local Delivery" pill branch is wired, but there is no UI control to
+  set FOB = Local Delivery yet (only Will-Call / Ship are exposed) — add if Local Delivery FOB is wanted.
+
+
 ### 2026-06-23 — Saber in Cost Buildup, parser scope rules, always-on qty verify ✅
 Three changes, all verified live (test iter53, 11/11 PASS):
 - **Saber charge now shows in Cost Buildup** — the right-rail "Cutting" line silently dropped
