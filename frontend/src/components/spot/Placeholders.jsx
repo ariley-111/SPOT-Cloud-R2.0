@@ -33,14 +33,20 @@ export function PricingStrategySec() {
   const resetTiers = () =>
     setManyFields({ gmByTier: { ...defaultGmByTier }, sellByTier: { ...defaultSellByTier } });
 
-  // Collapsed-section summary pill — only shown when closed. Freight/prepress
-  // appear ONLY when actually in play (Per-Job freight, or prepress with print on).
+  // Collapsed-section summary pill — only shown when closed.
+  // Prep/Die/Misc moved to the Item Setup pill (those inputs live there).
+  // Freight shows BY TYPE here: GM% × Freight - Amort / Freight - Line /
+  // Freight - Local Delivery.
   const basisLabel = s.pricingBasis === "Sell $/MSF" ? "$/MSF" : "GM%";
-  const freightPart = s.freightScope === "Per Job" ? "Frt Job" : null;
-  const pScopeRaw = s.prepressScope || "Per Item";
-  const prepPart = (s.printReq === "Yes" && pScopeRaw !== "None")
-    ? `Prep ${pScopeRaw === "Per Job" ? "Lot" : "Item"}` : null;
-  const pricingSummary = [isMP ? s.pricingMode : null, basisLabel, freightPart, prepPart].filter(Boolean).join(" · ");
+  let freightPart = null;
+  if (s.quoteFOB === "LocalDelivery") {
+    freightPart = "Freight - Local Delivery";
+  } else {
+    const ft = s.freightScope === "Per Job" ? (s.jobFreightTreatment || "None") : (s.freightTreatment || "None");
+    if (ft === "Amortize") freightPart = "GM% × Freight - Amort";
+    else if (ft === "Separate Line") freightPart = "Freight - Line";
+  }
+  const pricingSummary = [isMP ? s.pricingMode : null, basisLabel, freightPart].filter(Boolean).join(" · ");
 
   return (
     <Sec label="Pricing Strategy" hue="#8b5cf6" open={sec.pricing} onToggle={() => toggleSec("pricing")}

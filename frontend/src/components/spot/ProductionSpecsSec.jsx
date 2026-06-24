@@ -15,26 +15,46 @@ export default function ProductionSpecsSec({ result }) {
   const ovr = s.routeOverride;
   const hasPrint = s.printReq === "Yes";
 
-  const routeBadge = !route ? null : `${ovr ? "" : "auto → "}${route}`;
+  const overridden = !!ovr;
 
-  // Collapsed summary (legacy parity request 2026-06-23): print mode/sides · saber ·
-  // route · strip · glue · tape — each shown only when active. Route badge stays when open.
+  // Collapsed summary: print · saber(+layout) · route · cut · strip · glue · tape · perf.
   const sidesShort = s.printSides === "2-Sided" ? "2S" : s.printSides === "1-Sided" ? "1S" : "";
   const printPart = hasPrint
     ? `${s.printMode || "Print"}${sidesShort ? " " + sidesShort : ""}${s.whiteInk === "Yes" ? " +W" : ""}`
     : "No Print";
-  const collapsedSummary = [
-    printPart,
-    s.saber === "Yes" ? "Saber" : null,
-    routeBadge,
-    s.handStripping === "Yes" ? "Strip" : null,
-    s.handGluing === "Yes" ? "Glue" : null,
-    s.tape === "Yes" ? "Tape" : null,
-  ].filter(Boolean).join(" · ");
+  const cadShort = s.cadDifficulty === "Standard" ? "Std" : s.cadDifficulty;
+  const perfNum = Number(s.perfPct) || 0;
+  const saberPart = s.saber === "Yes"
+    ? (result?.saberBlanksOutN && result?.saberBlankW
+        ? `Saber ${result.saberBlanksOutN}@${Math.round(result.saberBlankW)}×${Math.round(Number(result.saberBlankL))}${result.saberOut > 0 ? " (" + result.saberOut + "/blk)" : ""}`
+        : `Saber ${s.saberCuts || 1}c×${s.saberBlanksOut || 1}`)
+    : null;
+  const preParts = [printPart, saberPart].filter(Boolean);
+  const postParts = [
+    s.cadDifficulty ? `Cut ${cadShort}` : null,
+    s.handStripping === "Yes" ? `Strip ${s.strippingComplexity || ""}`.trim() : null,
+    s.handGluing === "Yes" ? `Glue ${s.jointsPerPiece || 1}j${s.gluingComplexity ? " " + s.gluingComplexity : ""}` : null,
+    s.tape === "Yes" ? `Tape ${s.tapeType === "Reinforced" ? "Reinf" : (s.tapeType || "")}`.trim() : null,
+    perfNum > 0 ? `Perf ${+(perfNum * 100).toFixed(1)}%` : null,
+  ].filter(Boolean);
+
+  // Route node — when the estimator OVERRIDES the auto route, flag it with a
+  // caution glyph and a yellow highlight pill.
+  const routeNode = !route ? null : (overridden ? (
+    <span data-testid="route-override-badge" title="Route manually overridden — not auto-selected"
+      style={{ color: "#92400e", background: "#fde68a", border: "1px solid #f59e0b",
+        borderRadius: 3, padding: "0 5px", fontWeight: 800 }}>⚠ {route}</span>
+  ) : <span>auto → {route}</span>);
+
+  const joinNodes = (arr) => arr.reduce((acc, n, i) =>
+    i === 0 ? [<React.Fragment key={`n${i}`}>{n}</React.Fragment>]
+            : [...acc, <span key={`s${i}`} style={{ opacity: .4, margin: "0 3px" }}>·</span>,
+               <React.Fragment key={`n${i}`}>{n}</React.Fragment>], []);
+  const collapsedNode = joinNodes([...preParts, routeNode, ...postParts].filter(Boolean));
 
   return (
     <Sec label="Production Specs" hue="#22c55e" open={sec.prod} onToggle={() => toggleSec("prod")}
-      badge={sec.prod ? routeBadge : collapsedSummary} accent={!!route}
+      badge={sec.prod ? routeNode : collapsedNode} accent={!!route}
       data-testid="sec-production">
 
       {/* Row 1: Print */}

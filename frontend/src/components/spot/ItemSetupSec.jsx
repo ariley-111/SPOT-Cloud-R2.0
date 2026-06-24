@@ -28,18 +28,41 @@ export default function ItemSetupSec({ result }) {
   const fullyResolved = !!(r && !r.error && r.sheetW);
   const corrFlipped = !!s.corrFlipped;
 
-  // Collapsed-section summary pill — board specs chosen + layout/sheet dims.
+  // Collapsed-section summary pill — RUNNING board (reflects substitution) +
+  // layout/sheet dims + One-Time Cost treatments (prep / die / misc).
   const _fmLnr = (l) => (!l || l === "None") ? "Kraft"
     : String(l).replace(/^\d+#\s*/, "").replace("-Lite", "").replace("-White", "");
-  const _medLabel = s.medium && s.medium !== "None"
-    ? String(s.medium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "";
-  const _boardPart = (s.boardGrade || s.flute)
-    ? `${s.boardGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medLabel ? " · " + _medLabel : ""}`.trim()
+  // Show the board ACTUALLY RUNNING: when the engine substitutes a fallback
+  // grade/medium (and it isn't force-spec'd), the pill must reflect the
+  // substitute — not the originally-spec'd board.
+  const _subForced = s.boardSubstitution === "forced";
+  const _runGrade = (!_subForced && r?.gradeFallback) ? r.gradeFallback : s.boardGrade;
+  const _runMedium = (!_subForced && r?.mediumFallback?.medium) ? r.mediumFallback.medium : s.medium;
+  const _medLabel = _runMedium && _runMedium !== "None"
+    ? String(_runMedium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "";
+  const _boardPart = (_runGrade || s.flute)
+    ? `${_runGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medLabel ? " · " + _medLabel : ""}`.trim()
     : null;
   const _layoutPart = fullyResolved
     ? `${r.numUp}×${r.numOut} → ${r.pcsPerSheet} out on ${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}`
     : null;
-  const boardSummary = [_boardPart, _layoutPart].filter(Boolean).join(" · ") || null;
+  // One-Time Costs by treatment (these inputs live in this section).
+  let _prepPart = null;
+  if (s.printReq === "Yes") {
+    if (s.prepressScope === "Per Job") {
+      const t = s.jobPrepressTreatment;
+      _prepPart = t === "Amortize" ? "Prep Lot-Amort" : t === "Separate Line" ? "Prep Lot-Line" : null;
+    } else if (s.prepressScope !== "None") {
+      const t = s.prepressTreatment;
+      _prepPart = t === "Auto" ? "Prep Auto" : t === "Separate Line" ? "Prep Line" : t === "Amortize" ? "Prep Amort" : null;
+    }
+  }
+  const _diePart = s.dieTreatment === "Amortize" ? "Die Amort" : s.dieTreatment === "Separate Line" ? "Die Line" : null;
+  const _miscTreats = [...new Set((s.miscCharges || [])
+    .filter((c) => c.treatment && c.treatment !== "None")
+    .map((c) => (c.treatment === "Amortize" ? "Amort" : "Line")))];
+  const _miscPart = _miscTreats.length ? `Misc ${_miscTreats.join("/")}` : null;
+  const boardSummary = [_boardPart, _layoutPart, _prepPart, _diePart, _miscPart].filter(Boolean).join(" · ") || null;
 
   const onBoxStyle = (style) => {
     const cur = s.boxStyle === style ? "" : style;

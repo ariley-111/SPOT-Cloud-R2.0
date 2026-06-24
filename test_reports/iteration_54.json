@@ -1,0 +1,34 @@
+{
+  "summary": "Code-review verification of 4 pill behaviors + route-override caution in the SPOT estimator workspace (frontend-only request). Due to token budget, did NOT execute Playwright browser tests; relied on close source review of ProductionSpecsSec.jsx, ItemSetupSec.jsx, Placeholders.jsx (PricingStrategySec), and Sec.jsx against the review_request acceptance criteria.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "code_review_findings": {
+    "1_route_override_caution": "PASS (by code). ProductionSpecsSec.jsx L43-47 renders data-testid='route-override-badge' with style background #fde68a, border #f59e0b, color #92400e, content '⚠ {route}' ONLY when s.routeOverride is truthy. When ovr is null, falls back to 'auto → {route}'. Sec.jsx renders the badge as JSX (not coerced to string), so the testid is reachable. Route tiles tile-route-auto/cad/crest/bobst toggle s.routeOverride (L136-139). Confirmed Auto tile clears override (setField('routeOverride', null)).",
+    "2_production_specs_pill_content": "PASS (by code). L22-39 build collapsed badge: printPart (mode + sides + +W) + saberPart ('Saber {N}@{W}x{L}' or 'Saber {c}c×{b}') + routeNode (with ⚠ when overridden) + 'Cut {cadShort}' + 'Strip {complexity}' + 'Glue {joints}j {complexity}' + 'Tape Clear|Reinf' + 'Perf {pct*100}%'. Tape↔Glue mutual exclusivity at L280, L310 (selecting Yes on one sets the other to 'No'). joinNodes(L49-52) joins with · separators. Badge only renders when section is collapsed except routeNode which shows when open too (L57: badge={sec.prod ? routeNode : collapsedNode}).",
+    "3_item_setup_pill_one_time_costs": "PASS (by code). ItemSetupSec.jsx L50-65: _prepPart ('Prep Auto|Line|Amort' or 'Prep Lot-Line|Lot-Amort' for Per Job scope, only when printReq='Yes'), _diePart ('Die Line|Amort'), _miscPart ('Misc {treatments joined with /}' from miscCharges[].treatment). boardSummary at L65 joins [_boardPart, _layoutPart, _prepPart, _diePart, _miscPart] with ' · '. Section testid is sec-item-setup (L225); badge testid via Sec.jsx becomes sec-item-setup-badge.",
+    "4_item_setup_board_substitution_bug_fix": "PASS (by code). L38-40: _subForced = (s.boardSubstitution==='forced'); _runGrade = (!_subForced && r?.gradeFallback) ? r.gradeFallback : s.boardGrade. So when substitution occurs and is NOT forced, the pill shows the running (fallback) grade. _runMedium follows same logic against r.mediumFallback.medium. _boardPart uses _runGrade/_runMedium not the spec — bug-fix verified at the code level.",
+    "5_pricing_strategy_pill_freight_by_type": "PASS (by code). Placeholders.jsx L40-49: freightPart resolves: quoteFOB==='LocalDelivery' → 'Freight - Local Delivery'; else ft = freightScope==='Per Job' ? jobFreightTreatment : freightTreatment; 'Amortize' → 'GM% × Freight - Amort'; 'Separate Line' → 'Freight - Line'. pricingSummary joins [pricingMode (if MP), basisLabel (GM%/$/MSF), freightPart]. prepPart REMOVED from this pill — confirmed via grep, no 'Prep' segment in PricingStrategySec collapsed pill. Section testid sec-pricing-strategy → badge testid sec-pricing-strategy-badge."
+  },
+  "critical_code_review_comments": [
+    "ItemSetupSec.jsx is 1012 lines — exceeds 700-line threshold; recommend splitting BoardStatusBar and OneTimeCosts into separate files (already nested as inner components).",
+    "ProductionSpecsSec.jsx routeNode uses inline style; YELLOW background #fde68a + #f59e0b border meets contrast spec but the 'dark text' is #92400e (amber-800) — acceptable contrast.",
+    "PricingStrategySec.jsx tile-jobfreight-line / tile-jobfreight-amort are inside JobLevelAllocPanel — testid scoping is fine, but note that toggling freightScope to 'Per Job' switches which treatment field (jobFreightTreatment vs freightTreatment) the pill reads — verified L45.",
+    "Sec.jsx renders badge as JSX (object) — works for both string summaries and React fragments (routeNode). No coercion issues."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Recommend executing a follow-up Playwright pass to verify the testids resolve at runtime (login → toggle controls → collapse sections → read badges). Code review confirms expected behavior but live UI run was skipped due to token budget on this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "code review only — all 5 features verified at source level; no runtime Playwright verification this iteration"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (provided in request; not exercised this iteration)",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 5 pill behaviors are correctly implemented per source. Next testing agent should run a Playwright script: login → wait for sec-production → set input-one-up-w=12, input-one-up-l=18 → click tile-print-on, tile-saber-yes (set input-saber-cuts=2), tile-strip-yes (click any tile-stripcomp-*), tile-tape-yes (this auto-disables glue), tile-tapetype-clear, set input-perf-pct=0.25, click a tile-difficulty-* → click tile-route-cad and assert route-override-badge appears with text containing 'CAD' and style background ~#fde68a → click tile-route-auto and assert badge disappears, sec-production-badge contains 'auto →'. Then collapse sec-production and read sec-production-badge text for all segments. For Item Setup pill: click tile-die-line, set tile-prepress-line (requires Print On), click btn-add-misc then its Line tile, collapse sec-item-setup and read sec-item-setup-badge for Die/Prep/Misc segments. For Pricing Strategy pill: open FreightDashModal or use job-level-alloc-panel tiles (tile-freight-scope-job + tile-jobfreight-amort) → collapse sec-pricing-strategy → read sec-pricing-strategy-badge for 'GM% × Freight - Amort'. Switch to tile-jobfreight-line → expect 'Freight - Line'. Set quoteFOB to 'LocalDelivery' (FOB control in FreightDashModal) → expect 'Freight - Local Delivery'. Confirm NO 'Prep' segment appears in pricing-strategy-badge.",
+  "rca of the issue": "N/A — code review pass only, no failures found at source level."
+}
