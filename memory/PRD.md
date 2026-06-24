@@ -706,3 +706,12 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   project name / status).
 - **P2/P3: Phase 5 — Ignition customer sync (mocked today), SharePoint PDF archive,
   Cover Letter note field, Admin approval-workflow governance.**
+- **P3 (onboarding): "ℹ️ How cutting is priced" explainer tooltip** on the CAD difficulty /
+  By-Inches-of-Rule controls (and possibly route selector). Plain-language popover explaining:
+  cutting cost = (setup minutes + run minutes) ÷ 60 × $138/hr, with a min-charge floor; setup
+  minutes ALWAYS apply and are set by difficulty (Simple 8 / Standard 25 / Complex 22); CAD
+  per-sheet min/sheet (Simple 2 / Standard 2 / Complex 4) is used ONLY in Difficulty mode, while
+  By-Inches-of-Rule computes run time from rule inches × pieces × 1.15 × sheets ÷ 650 in/min
+  (perf runs at 40% speed). Footnotes: difficulty still sets setup in rule mode; Product Mats
+  forces setup ≥ Standard; manual sheets/hr override replaces run-time calc but setup still added.
+  Goal: help NEW estimators understand the cutting math without asking. (Requested 2026-06-24.)
