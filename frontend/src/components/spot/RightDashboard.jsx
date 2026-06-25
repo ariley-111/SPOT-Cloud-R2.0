@@ -1597,7 +1597,13 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
       </div>
       <div style={{ padding: "8px 10px", fontSize: 12 }}>
         <SubHead label="Direct Production" color="var(--spot-green)" />
-        <Row label={detail ? <RowInline main="Material" sub={`${r.msfTier || "—"} tier, ${fmtMoney(r.matPerMsf || r.boardEffRate)}/MSF`} /> : "Material"} value={fmtMoney(r.matTotal)} />
+        {/* Material header rolls up base board + MR/Spoil makeready so it sums
+            its sub-lines (matches the Print pattern AND the Cost Report modal,
+            which uses matTotal + matMakeready). */}
+        <Row label="Material" value={fmtMoney((r.matTotal || 0) + (r.matMakeready || 0))} />
+        {detail && (
+          <SubRow label={`Board ${r.msfTier || "—"} tier, ${fmtMoney(r.matPerMsf || r.boardEffRate)}/MSF`} value={fmtMoney(r.matTotal)} />
+        )}
         {detail && (r.matMakeready > 0) && (
           <SubRow label={`MR/Spoil Board ${spoilSheets} extra sheets`} value={fmtMoney(r.matMakeready)} />
         )}
