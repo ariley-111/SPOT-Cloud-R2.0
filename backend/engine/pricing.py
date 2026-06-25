@@ -144,7 +144,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
     assembly_cost = 0
     if prod.get("handGluing") == "Yes":
         jppc = pn(prod.get("jointsPerPiece"))
-        per_j = GLUE_DEFAULTS.get(prod.get("gluingComplexity"), 0.75)
+        per_j = active_glue_defaults().get(prod.get("gluingComplexity"), 0.75)
         assembly_cost = max((ord_qty * jppc * per_j / 60) * asmp.get("handGluingRate", 23),
                             asmp.get("handGluingMinCharge", 0))
     elif prod.get("tape") == "Yes":

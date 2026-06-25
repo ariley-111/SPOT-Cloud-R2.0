@@ -40,6 +40,11 @@ class SetRateBody(BaseModel):
     value: Any  # string for "rate"; numeric for tiers/adders
 
 
+class BulkSetBody(BaseModel):
+    category: str
+    values: Dict[str, Any]  # {key: value} — saves a whole section at once
+
+
 # ─── Category metadata — drives the UI grouping & labels ───────────────
 CATEGORY_META = {
     svc.RATE: {
@@ -80,6 +85,20 @@ CATEGORY_META = {
         "description": "Per-sheet CAD cutting minutes by cutting complexity (run-time fallback). "
                        "min/sheet × sheets ÷ 60 × CAD $/hr = the variable cutting run cost.",
     },
+    svc.STRIP_CAT: {
+        "label": "Hand Stripping (min/sheet)",
+        "description": "Hand-stripping minutes per sheet by stripping complexity. "
+                       "min/sheet × sheets ÷ 60 × hand-strip $/hr = the stripping cost. "
+                       "NOTE: these are legacy placeholders — not yet calibrated to actual costs.",
+        "calibrated": False,
+    },
+    svc.GLUE_CAT: {
+        "label": "Hand Gluing (min/joint)",
+        "description": "Hand-gluing minutes per joint by gluing complexity. "
+                       "min/joint × joints ÷ 60 × hand-glue $/hr = the gluing cost. "
+                       "NOTE: these are legacy placeholders — not yet calibrated to actual costs.",
+        "calibrated": False,
+    },
 }
 
 
@@ -114,6 +133,25 @@ async def get_categories(_admin: User = Depends(require_admin)) -> Dict[str, Any
 async def get_calibration(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
     """Read-only — fleet R² baseline (D-110 FINAL)."""
     return CALIBRATION_BASELINE
+
+
+@router.post("/bulk")
+async def set_rates_bulk(body: BulkSetBody,
+                        admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """Save a whole section at once — applies every {key: value} for one category.
+    Only changed keys should be sent by the UI. Each write is individually audited."""
+    saved: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    for key, val in (body.values or {}).items():
+        try:
+            saved.append(await svc.set_override(body.category, key, val, admin.email))
+        except ValueError as e:
+            errors.append({"key": key, "error": str(e)})
+        except Exception as e:
+            errors.append({"key": key, "error": f"{type(e).__name__}: {e}"})
+    if errors and not saved:
+        raise HTTPException(400, f"No values saved: {errors}")
+    return {"saved": saved, "errors": errors, "count": len(saved)}
 
 
 @router.put("/{category}/{key}")

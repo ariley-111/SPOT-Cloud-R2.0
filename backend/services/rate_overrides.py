@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from db import db, COL_RATE_OVERRIDES, COL_AUDIT_LOG
 from engine.core import (
     RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, GRADE_ADDER_DEFAULTS,
-    CAD_SETUP, CAD_FALLBACK,
+    CAD_SETUP, CAD_FALLBACK, STRIP_DEFAULTS, GLUE_DEFAULTS,
 )
 from engine.runner import ASMP_DEFAULTS
 
@@ -109,7 +109,9 @@ SELL_TIER = "sell_tier"
 GRADE     = "grade_adder"
 CAD_SETUP_CAT    = "cad_setup"     # cutting setup minutes by complexity
 CAD_FALLBACK_CAT = "cad_fallback"  # per-sheet cutting minutes by complexity
-CATEGORIES = (RATE, GM_TIER, SELL_TIER, GRADE, CAD_SETUP_CAT, CAD_FALLBACK_CAT)
+STRIP_CAT        = "strip_complexity"  # hand-strip minutes/sheet by complexity
+GLUE_CAT         = "glue_complexity"   # hand-glue minutes/joint by complexity
+CATEGORIES = (RATE, GM_TIER, SELL_TIER, GRADE, CAD_SETUP_CAT, CAD_FALLBACK_CAT, STRIP_CAT, GLUE_CAT)
 
 # Live dict lookup — engine reads from these by reference, so mutations
 # propagate immediately. NEVER replace these dicts (would break imports);
@@ -121,6 +123,8 @@ _LIVE = {
     GRADE:     GRADE_ADDER_DEFAULTS,
     CAD_SETUP_CAT:    CAD_SETUP,
     CAD_FALLBACK_CAT: CAD_FALLBACK,
+    STRIP_CAT:        STRIP_DEFAULTS,
+    GLUE_CAT:         GLUE_DEFAULTS,
 }
 
 # Snapshot at module-import time — this IS the source-of-truth baseline,
@@ -177,6 +181,8 @@ _VALUE_COERCERS = {
     GRADE:     lambda v: float(v),
     CAD_SETUP_CAT:    lambda v: float(v),
     CAD_FALLBACK_CAT: lambda v: float(v),
+    STRIP_CAT:        lambda v: float(v),
+    GLUE_CAT:         lambda v: float(v),
 }
 
 

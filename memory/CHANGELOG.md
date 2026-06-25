@@ -2,6 +2,20 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-25 — Difficulty Calibration page (consolidated) + Strip/Glue calibratable ✅
+- **Strip & Glue complexity now calibratable:** added override categories `strip_complexity` (min/sheet)
+  and `glue_complexity` (min/joint) to `rate_overrides.py` (CATEGORIES/_LIVE/coercers), `active_strip_defaults()`
+  + `active_glue_defaults()` in `core.py`, and `pricing.py` now reads them via the active getters (so admin
+  edits + per-quote freeze both apply, same as CAD tiers). Legacy finding: CAD setup/per-sheet were D-110
+  fleet-calibrated; Strip/Glue were NEVER calibrated (only relabeled in D-106) — flagged as ⚠ Placeholder.
+- **Consolidated "Difficulty Calibration" admin tab:** replaced the old "Cutting (CAD)" tab with one page
+  sectioned by type — CAD Setup, CAD Per-Sheet (✓ Calibrated), Hand Stripping, Hand Gluing (⚠ Placeholder).
+  Every box editable; **Save section** persists all changed tiers at once via new `POST /api/admin/rates/bulk`
+  (`adminSetRatesBulk`); per-section Reset. Verified: bulk save/reset (curl), 4 sections render w/ badges.
+- **Removed "Straight" from the Strip selector** in the main UI (`STRIP_COMP` in defaults.js) and hid it from
+  the Strip calibration section (HIDDEN_TIER_KEYS). Engine keeps Straight=1.0 as a harmless fallback for any
+  legacy quote still carrying it.
+
 ### 2026-06-25 — Crest CAD-control gating + "Placeholder" rate badges ✅
 - **Gate CAD controls on Crest route:** in `ProductionSpecsSec.jsx`, the CAD "Difficulty" (Simple/Std/Complex)
   + "CAD Price" + "Rule In/Pc" inputs are now hidden when the route is Crest (they only drive CAD, never

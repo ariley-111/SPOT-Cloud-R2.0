@@ -8,7 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import { useQuote } from "../context/QuoteContext";
 import {
   adminGetRates, adminGetCategories, adminGetCalibration,
-  adminSetRate, adminResetRate, adminResetAll, adminGetAudit,
+  adminSetRate, adminSetRatesBulk, adminResetRate, adminResetAll, adminGetAudit,
   adminGetIntegrations, adminSetIntegration, adminResetIntegration, adminGetUsage,
   adminGetSheets, adminAddSheet, adminEditSheet, adminDisableSheet, adminEnableSheet,
   adminExportSheetsCsv, adminImportSheetsCsv,
@@ -25,6 +25,9 @@ const TAB_LABELS = {
   cad:          "Cutting (CAD)",
   cad_setup:    "CAD Setup",
   cad_fallback: "CAD Per-Sheet",
+  strip_complexity: "Hand Stripping",
+  glue_complexity:  "Hand Gluing",
+  difficulty:   "Difficulty Calibration",
   board_pricing:"Board Pricing",
   sheets:       "Sheet Library",
   integrations: "Integrations",
@@ -32,7 +35,7 @@ const TAB_LABELS = {
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
-const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "cad", "board_pricing",
+const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "difficulty", "board_pricing",
                    "sheets", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
@@ -83,6 +86,13 @@ export default function AdminPage({ onClose }) {
       const r = await adminResetAll(cat);
       await reload();
       flash(`Reset ${r.reset_count} override${r.reset_count !== 1 ? "s" : ""}`);
+    } catch (e) { flash(`✗ ${e?.response?.data?.detail || e.message}`); }
+  };
+  const onBulkSave = async (cat, values) => {
+    try {
+      const r = await adminSetRatesBulk(cat, values);
+      await reload();
+      flash(`Saved ${r.count} value${r.count !== 1 ? "s" : ""} in ${TAB_LABELS[cat] || cat}`);
     } catch (e) { flash(`✗ ${e?.response?.data?.detail || e.message}`); }
   };
 
@@ -160,31 +170,11 @@ export default function AdminPage({ onClose }) {
                 onResetAll={() => onResetAll(tab)}
               />
             )}
-            {tab === "cad" && (
-              <div data-testid="admin-cad-tab">
-                <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8,
-                  background: "var(--spot-bg2)", border: "1px solid var(--spot-border)" }}>
-                  <div style={{ fontSize: 12, color: "var(--spot-text2)" }}>
-                    Cutting cost = (<b>Setup min</b> + <b>Per-sheet min</b> × sheets) ÷ 60 × <b>CAD $/hr</b>.
-                    The CAD $/hr lives under the <b>Rates</b> tab (<code>cadRate</code>); the minutes below
-                    drive how many cutting hours a job needs, by complexity.
-                  </div>
-                </div>
-                <CategoryPanel
-                  category="cad_setup"
-                  rows={data.categories["cad_setup"] || []}
-                  meta={cats?.["cad_setup"]}
-                  onSave={onSave} onReset={onReset}
-                  onResetAll={() => onResetAll("cad_setup")}
-                />
-                <CategoryPanel
-                  category="cad_fallback"
-                  rows={data.categories["cad_fallback"] || []}
-                  meta={cats?.["cad_fallback"]}
-                  onSave={onSave} onReset={onReset}
-                  onResetAll={() => onResetAll("cad_fallback")}
-                />
-              </div>
+            {tab === "difficulty" && (
+              <DifficultyCalibrationPanel
+                data={data} cats={cats}
+                onBulkSave={onBulkSave} onResetAll={onResetAll}
+              />
             )}
             {tab === "sheets" && <SheetLibraryPanel />}
             {tab === "board_pricing" && <BoardPricingPanel flash={flash} />}
@@ -347,6 +337,157 @@ function RateRow({ r, onSave, onReset, category }) {
     </tr>
   );
 }
+
+// ─── Difficulty Calibration (consolidated: CAD setup/per-sheet + Strip + Glue) ──
+// One page, sectioned by type. Every box is editable; each section saves as a
+// batch via the bulk endpoint. CAD tiers are fleet-calibrated (D-110); Strip &
+// Glue are legacy placeholders flagged for calibration.
+const DIFFICULTY_SECTIONS = [
+  { cat: "cad_setup",        unit: "min / job",   tint: "#22c55e",
+    blurb: "One-time CAD/router setup minutes by cutting complexity. Setup ÷ 60 × CAD $/hr = fixed setup cost." },
+  { cat: "cad_fallback",     unit: "min / sheet", tint: "#22c55e",
+    blurb: "Per-sheet CAD cutting minutes by complexity. min/sheet × sheets ÷ 60 × CAD $/hr = variable run cost." },
+  { cat: "strip_complexity", unit: "min / sheet", tint: "#f59e0b",
+    blurb: "Hand-stripping minutes per sheet by complexity. min/sheet × sheets ÷ 60 × hand-strip $/hr." },
+  { cat: "glue_complexity",  unit: "min / joint", tint: "#f59e0b",
+    blurb: "Hand-gluing minutes per joint by complexity. min/joint × joints ÷ 60 × hand-glue $/hr." },
+];
+// "Straight" was retired from the Strip selector in the main UI (2026-06-25) —
+// hide it here too so the calibration tiers match what estimators can pick.
+const HIDDEN_TIER_KEYS = { strip_complexity: ["Straight"] };
+
+function DifficultyCalibrationPanel({ data, cats, onBulkSave, onResetAll }) {
+  return (
+    <div data-testid="admin-difficulty-tab">
+      <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8,
+        background: "var(--spot-bg2)", border: "1px solid var(--spot-border)" }}>
+        <div style={{ fontSize: 12, color: "var(--spot-text2)", lineHeight: 1.5 }}>
+          All complexity-tier calibrations in one place. Edit any box, then <b>Save section</b>.
+          The labor $/hr rates (<code>cadRate</code>, <code>handStripRate</code>, <code>handGlueRate</code>)
+          live under the <b>Rates</b> tab. Changes apply to new/draft quotes only — historical quotes stay frozen.
+        </div>
+      </div>
+      {DIFFICULTY_SECTIONS.map((sec) => {
+        const hidden = HIDDEN_TIER_KEYS[sec.cat] || [];
+        const rows = (data.categories[sec.cat] || []).filter((r) => !hidden.includes(r.key));
+        return (
+          <DifficultySection key={sec.cat} sec={sec} rows={rows}
+            meta={cats?.[sec.cat]} onBulkSave={onBulkSave} onResetAll={onResetAll} />
+        );
+      })}
+    </div>
+  );
+}
+
+function DifficultySection({ sec, rows, meta, onBulkSave, onResetAll }) {
+  const [edits, setEdits] = React.useState({});
+  const [saving, setSaving] = React.useState(false);
+  // Reset local edits whenever the underlying rows change (after a save/reload).
+  React.useEffect(() => {
+    const init = {};
+    rows.forEach((r) => { init[r.key] = String(r.value ?? ""); });
+    setEdits(init);
+  }, [rows.map((r) => `${r.key}:${r.value}`).join("|")]);
+
+  const dirtyKeys = rows.filter((r) => String(edits[r.key] ?? "") !== String(r.value ?? "")).map((r) => r.key);
+  const overrideCount = rows.filter((r) => r.is_override).length;
+  const isCalibrated = meta?.calibrated !== false;
+
+  const saveSection = async () => {
+    if (!dirtyKeys.length) return;
+    const values = {};
+    dirtyKeys.forEach((k) => { values[k] = parseFloat(edits[k]); });
+    setSaving(true);
+    try { await onBulkSave(sec.cat, values); } finally { setSaving(false); }
+  };
+
+  return (
+    <div data-testid={`difficulty-section-${sec.cat}`} style={{ marginBottom: 26,
+      border: "1px solid var(--spot-border)", borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        padding: "10px 14px", background: "var(--spot-bg2)", borderBottom: "1px solid var(--spot-line)" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)" }}>
+          {meta?.label || TAB_LABELS[sec.cat]}
+        </span>
+        <span style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 600 }}>{sec.unit}</span>
+        {isCalibrated ? (
+          <span title="Fleet-calibrated (D-110)" style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px",
+            borderRadius: 3, background: "#22c55e1f", color: "#22c55e", border: "1px solid #22c55e66",
+            textTransform: "uppercase", letterSpacing: ".03em" }}>✓ Calibrated</span>
+        ) : (
+          <span data-testid={`difficulty-placeholder-${sec.cat}`}
+            title="Placeholder default — not yet calibrated to actual costs"
+            style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
+              background: "#f59e0b1f", color: "#f59e0b", border: "1px solid #f59e0b66",
+              textTransform: "uppercase", letterSpacing: ".03em" }}>⚠ Placeholder</span>
+        )}
+        <div style={{ flex: 1 }} />
+        {overrideCount > 0 && (
+          <button onClick={() => onResetAll(sec.cat)} data-testid={`difficulty-reset-${sec.cat}`}
+            style={{ ...btnSmall }}>↶ Reset section</button>
+        )}
+        <button onClick={saveSection} disabled={!dirtyKeys.length || saving}
+          data-testid={`difficulty-save-${sec.cat}`}
+          style={{ ...btnSmall, background: dirtyKeys.length ? "var(--spot-green)" : "var(--spot-bg2)",
+            color: dirtyKeys.length ? "#fff" : "var(--spot-text3)",
+            borderColor: dirtyKeys.length ? "var(--spot-green)" : "var(--spot-border)",
+            cursor: dirtyKeys.length && !saving ? "pointer" : "default" }}>
+          {saving ? "Saving…" : dirtyKeys.length ? `Save section (${dirtyKeys.length})` : "Save section"}
+        </button>
+      </div>
+      <div style={{ padding: "6px 14px 12px" }}>
+        <div style={{ fontSize: 11, color: "var(--spot-text3)", margin: "6px 0 10px", lineHeight: 1.5 }}>{sec.blurb}</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "40%" }} /><col style={{ width: "24%" }} />
+            <col style={{ width: "18%" }} /><col style={{ width: "18%" }} />
+          </colgroup>
+          <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
+            <th style={th}>Complexity</th>
+            <th style={{ ...th, textAlign: "right" }}>Value</th>
+            <th style={{ ...th, textAlign: "right" }}>Baseline</th>
+            <th style={{ ...th, textAlign: "center" }}>Status</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r) => {
+              const val = edits[r.key] ?? "";
+              const isDirty = String(val) !== String(r.value ?? "");
+              return (
+                <tr key={r.key} style={{ borderBottom: "1px solid var(--spot-line)" }}
+                  data-testid={`difficulty-row-${sec.cat}-${r.key}`}>
+                  <td style={{ ...td, fontWeight: 600, color: "var(--spot-text2)" }}>
+                    {r.key === "Standard" ? "Standard" : r.key}
+                  </td>
+                  <td style={{ ...td, textAlign: "right" }}>
+                    <input type="number" step="0.1" min="0" value={val}
+                      data-testid={`difficulty-input-${sec.cat}-${r.key}`}
+                      onChange={(e) => setEdits((cur) => ({ ...cur, [r.key]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveSection(); }}
+                      style={{ background: isDirty ? "var(--spot-bg2)" : "transparent",
+                        border: `1px solid ${isDirty ? sec.tint : "var(--spot-border)"}`,
+                        padding: "3px 6px", borderRadius: 3, fontSize: 12, width: 110, textAlign: "right",
+                        fontFamily: "'JetBrains Mono', monospace",
+                        color: r.is_override ? "var(--spot-warn)" : "var(--spot-text)",
+                        fontWeight: r.is_override ? 700 : 400, outline: "none", boxSizing: "border-box" }} />
+                  </td>
+                  <td style={{ ...td, textAlign: "right", color: "var(--spot-text3)",
+                    fontFamily: "'JetBrains Mono', monospace" }}>{String(r.baseline)}</td>
+                  <td style={{ ...td, textAlign: "center" }}>
+                    {r.is_override
+                      ? <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, fontWeight: 700,
+                          background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b66" }}>OVERRIDE</span>
+                      : <span style={{ fontSize: 9, color: "var(--spot-text3)" }}>baseline</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Audit log ──────────────────────────────────────────────────────────
 function AuditPanel() {

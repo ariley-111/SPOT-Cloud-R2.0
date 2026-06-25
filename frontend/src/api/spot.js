@@ -39,6 +39,8 @@ export const adminGetCategories  = () => api.get("/admin/rates/categories").then
 export const adminGetCalibration = () => api.get("/admin/rates/calibration").then((r) => r.data);
 export const adminSetRate        = (cat, key, value) =>
   api.put(`/admin/rates/${cat}/${encodeURIComponent(key)}`, { value }).then((r) => r.data);
+export const adminSetRatesBulk   = (category, values) =>
+  api.post(`/admin/rates/bulk`, { category, values }).then((r) => r.data);
 export const adminResetRate      = (cat, key) =>
   api.delete(`/admin/rates/${cat}/${encodeURIComponent(key)}`).then((r) => r.data);
 export const adminResetAll       = (category) =>

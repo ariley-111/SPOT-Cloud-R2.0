@@ -176,7 +176,7 @@ export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","
 export const PRINT_MODES  = ["Satin","Gloss","OnQ Styrene","OnQ Lightbox"];
 export const PRINT_SIDES  = ["1-Sided","2-Sided"];
 export const DIFFICULTY   = ["Simple","Standard","Complex"];  // "Straight" removed 2026-06-22 (cutting complexity)
-export const STRIP_COMP   = ["Simple","Straight","Standard","Complex"];
+export const STRIP_COMP   = ["Simple","Standard","Complex"];  // "Straight" removed 2026-06-25
 export const GLUE_COMP    = ["Simple","Standard","Complex"];
 export const ITEM_TINTS = [
   { hex: "#e8927c" }, { hex: "#b08cf5" }, { hex: "#7dd3c0" },
