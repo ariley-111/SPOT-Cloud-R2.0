@@ -1612,6 +1612,20 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         {detail && r.inkCost > 0 && (
           <SubRow label={`Ink ${fmtInt(r.inkSqFt)} sqft @ ${fmtMoney(r.inkRate, 2)}/sqft`} value={fmtMoney(r.inkCost)} />
         )}
+        {/* White Ink + Side 2 Print — components of Print, legacy parity
+            (spot_r1_5.jsx L7124-7125). Without these the Detail sub-lines
+            (Press + Ink) don't reconcile to the Print header on 2-sided /
+            white-ink jobs. */}
+        {detail && (r.whiteCost || 0) > 0 && (
+          <SubRow
+            label={`White Ink ${fmtPct((r.matTotal + r.inkCost + r.pressCost) > 0 ? r.whiteCost / (r.matTotal + r.inkCost + r.pressCost) : 0, 0)} of mat+ink+press`}
+            value={fmtMoney(r.whiteCost)} />
+        )}
+        {detail && (r.side2Cost || 0) > 0 && (
+          <SubRow
+            label={`Side 2 print ${fmtPct((r.pressCost + r.inkCost + r.whiteCost) > 0 ? r.side2Cost / (r.pressCost + r.inkCost + r.whiteCost) : 0, 0)} of side 1`}
+            value={fmtMoney(r.side2Cost)} />
+        )}
         <Row label="Cutting" value={fmtMoney((r.cutterDirect || 0) + (r.saberCost || 0))} />
         {detail && (r.saberCost || 0) > 0 && (
           <SubRow label={`Saber @ ${fmtMoney(r.saberRate || 2)}/hr`} value={fmtMoney(r.saberCost)} />
