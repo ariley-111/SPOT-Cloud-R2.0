@@ -256,6 +256,16 @@ def active_grade_adders() -> Dict[str, Any]:
     return {**GRADE_ADDER_DEFAULTS, **f} if f else GRADE_ADDER_DEFAULTS
 
 
+def active_strip_defaults() -> Dict[str, Any]:
+    f = _freeze_cat("strip_complexity")
+    return {**STRIP_DEFAULTS, **f} if f else STRIP_DEFAULTS
+
+
+def active_glue_defaults() -> Dict[str, Any]:
+    f = _freeze_cat("glue_complexity")
+    return {**GLUE_DEFAULTS, **f} if f else GLUE_DEFAULTS
+
+
 def active_rate_defaults() -> Dict[str, Any]:
     f = _freeze_cat("rate")
     return {**RATE_DEFAULTS, **f} if f else RATE_DEFAULTS

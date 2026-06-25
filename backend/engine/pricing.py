@@ -14,6 +14,7 @@ from .core import (
     GM_DEFAULTS, SELL_DEFAULTS, FLUTE_CALIPERS, ECT_GRADE_FALLBACK,
     RATE_DEFAULTS, get_gm_msf_tier, pn, ceil_int, is_finite,
     active_cad_setup, active_cad_fallback, active_rate_defaults,
+    active_strip_defaults, active_glue_defaults,
 )
 
 
@@ -135,7 +136,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         spp = max(1, math.floor(sh_h / cal))
         perim_pallets = ceil_int(conv_sheets / spp) if prod.get("perimeterStripping") == "Yes" else 0
         perim_min = perim_pallets * asmp.get("perimeterStripMinPallet", 15)
-        int_min = conv_sheets * STRIP_DEFAULTS.get(prod.get("strippingComplexity"), 1)
+        int_min = conv_sheets * active_strip_defaults().get(prod.get("strippingComplexity"), 1)
         strip_cost = max(((perim_min + int_min) / 60) * asmp.get("handStrippingRate", 17),
                          asmp.get("handStrippingMinCharge", 0))
 
