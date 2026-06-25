@@ -124,6 +124,10 @@ export default function FilesSec() {
       });
       setParseResult(r);
       setReviewOpen(true);
+      // Parsed files are now persisted to the quote (server-side, before the
+      // Anthropic call) — they show in "Saved RFQ files". Clear the staging
+      // list so a later swap re-parses ONLY the new file, not old + new.
+      setFiles([]);
       parserBudget().then(setBudget).catch(() => {});
     } catch (e) {
       setParserError(e?.response?.data?.detail || e.message);
