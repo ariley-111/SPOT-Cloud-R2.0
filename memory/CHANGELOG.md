@@ -2,6 +2,21 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-25 — Duplicate est# across tabs FIXED + Cost Buildup parity ✅
+- **Duplicate estimate numbers (URGENT):** `generateEstNum` is second-precision (`INI-YYMMDD-HHMMSS`),
+  so tabs/drafts created in the same second collided (legacy had a `uniqueEstNum` dedup that the
+  cloud port dropped). Added `uniqueEstNum(initials, taken)` in `lib/format.js` (appends `-2`,`-3`…
+  like legacy) and applied it with running `taken` sets at every stamping site in `QuoteContext.jsx`:
+  newTab, duplicateTab, spin-off, duplicateFrozenAtCurrent, commitInitials, the est# backfill effect,
+  the initials re-stamp map, and the draft-load map. Verified in live preview: 4 same-second new tabs →
+  4 distinct est#s, 7/7 unique across open tabs.
+- **Cost Buildup — Side 2 Print / White Ink lines (legacy parity, spot_r1_5.jsx L7124-25):** added the
+  missing Side-2 (60% of side-1) and White-Ink sub-rows in `RightDashboard.jsx` so Press+Ink reconcile
+  to the Print header on 2-sided/white jobs.
+- **Cost Buildup — Material rollup (user request):** Material header now sums base board + MR/Spoil
+  (matches Cost Report modal `matTotal + matMakeready`), with both shown as sub-lines. No engine math changed.
+
+
 ### 2026-06-25 — Nested-email parser fix + teammate-quote hard read-only ✅ (iter58, 5/5 BE + 5/5 FE PASS)
 - **RFQ Parser — nested emails (P0 bug 3):** `utils/email_extract.py` rewritten so `extract_eml()`
   uses a manual `_iter()` that treats `message/rfc822` as a LEAF (Message.walk() was bleeding the

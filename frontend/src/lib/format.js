@@ -53,3 +53,18 @@ export const generateEstNum = (initials) => {
   const ss = String(now.getSeconds()).padStart(2, "0");
   return `${pre}-${yy}${mm}${dd}-${hh}${mn}${ss}`;
 };
+
+// Generate an est# guaranteed unique against `taken` (a Set or array of est#s
+// already in use across open tabs/drafts). Mirrors legacy uniqueEstNum: the
+// base is INITIALS-YYMMDD-HHMMSS (second-precision) so two estimates created in
+// the same second would collide — we append -2, -3 … until free.
+export const uniqueEstNum = (initials, taken) => {
+  const set = taken instanceof Set ? taken : new Set(taken || []);
+  const base = generateEstNum(initials);
+  if (!set.has(base)) return base;
+  for (let i = 2; i <= 99; i++) {
+    const candidate = `${base}-${i}`;
+    if (!set.has(candidate)) return candidate;
+  }
+  return `${base}-${Date.now() % 1000}`;
+};

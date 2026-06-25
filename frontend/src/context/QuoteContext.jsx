@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
 import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, takeOverQuote, createQuote, updateQuote, engineManifest } from "../api/spot";
 import { useAuth } from "./AuthContext";
-import { generateEstNum } from "../lib/format";
+import { generateEstNum, uniqueEstNum } from "../lib/format";
 import {
   gatherItemState, freshItemState, makeBomItem, applyItemStateTo,
 } from "../lib/mpSchema";
@@ -144,7 +144,7 @@ export function QuoteProvider({ children }) {
       const copy = await copyQuote(qid);
       // Give the duplicate a FRESH estimate # (don't keep the "-COPY" suffix) and
       // persist it back to the saved copy record so the DB matches the UI.
-      const freshEst = generateEstNum(initialsRef.current || "");
+      const freshEst = uniqueEstNum(initialsRef.current || "", new Set((tabsRef.current || []).map((t) => t.state?.estNum).filter(Boolean)));
       const newState = {
         ...(copy.state || {}),
         estNum: freshEst,
@@ -186,11 +186,18 @@ export function QuoteProvider({ children }) {
     }
     if (resolved) {
       setInitialsState(resolved);
-      // Backfill: any tab that has no est# yet gets one stamped with these initials.
-      setTabs((cur) => cur.map((t) => {
-        if (t.state.estNum) return t;
-        return { ...t, state: { ...t.state, estInitials: resolved, estNum: generateEstNum(resolved) } };
-      }));
+      // Backfill: any tab that has no est# yet gets one stamped with these
+      // initials. Use a running `taken` set so multiple est-less tabs stamped
+      // in this single pass don't collide on the same second.
+      setTabs((cur) => {
+        const taken = new Set(cur.map((t) => t.state?.estNum).filter(Boolean));
+        return cur.map((t) => {
+          if (t.state.estNum) return t;
+          const est = uniqueEstNum(resolved, taken);
+          taken.add(est);
+          return { ...t, state: { ...t.state, estInitials: resolved, estNum: est } };
+        });
+      });
     } else {
       setInitialsGateOpen(true);
     }
@@ -205,13 +212,16 @@ export function QuoteProvider({ children }) {
       try {
         const drafts = await listDrafts();
         if (drafts && drafts.length > 0) {
+          const taken = new Set();
           const remoteTabs = drafts.slice(0, 8).map((d) => {
             const st = applyState(d.state || {});
-            // Backfill: stamp est# on any draft missing one
+            // Backfill: stamp est# on any draft missing one (running `taken`
+            // set prevents same-second collisions across multiple drafts).
             if (!st.estNum && initialsNow) {
-              st.estNum = generateEstNum(initialsNow);
+              st.estNum = uniqueEstNum(initialsNow, taken);
               st.estInitials = initialsNow;
             }
+            if (st.estNum) taken.add(st.estNum);
             return {
               id: d.id, persisted: true,
               label: d.label || d.est_num || "Draft",
@@ -429,20 +439,24 @@ export function QuoteProvider({ children }) {
   /** Create a TRULY blank new tab — no state carryover from any other tab.
    *  Only the user's initials and a fresh est# are pre-stamped. */
   const newTab = useCallback(() => {
-    const fresh = {
-      id: "local-" + Math.random().toString(36).slice(2, 10),
-      persisted: false,
-      label: "New Quote",
-      state: {
-        ...DEFAULT_STATE,                                    // EXPLICIT blank — no merging
-        estInitials: initials || "",
-        estNum: initials ? generateEstNum(initials) : "",
-        estNumAuto: true,
-      },
-      updatedAt: Date.now(),
-    };
-    setTabs((cur) => [...cur, fresh]);
-    setActiveId(fresh.id);
+    const id = "local-" + Math.random().toString(36).slice(2, 10);
+    setTabs((cur) => {
+      const taken = new Set(cur.map((t) => t.state?.estNum).filter(Boolean));
+      const fresh = {
+        id,
+        persisted: false,
+        label: "New Quote",
+        state: {
+          ...DEFAULT_STATE,                                    // EXPLICIT blank — no merging
+          estInitials: initials || "",
+          estNum: initials ? uniqueEstNum(initials, taken) : "",
+          estNumAuto: true,
+        },
+        updatedAt: Date.now(),
+      };
+      return [...cur, fresh];
+    });
+    setActiveId(id);
   }, [initials]);
 
   const closeTab = useCallback(async (id) => {
@@ -486,10 +500,13 @@ export function QuoteProvider({ children }) {
   useEffect(() => {
     setTabs((cur) => {
       let changed = false;
+      const taken = new Set(cur.map((t) => t.state?.estNum).filter(Boolean));
       const next = cur.map((t) => {
         if (t.state?.estNum) return t;
         changed = true;
-        return { ...t, state: { ...t.state, estNum: generateEstNum(initials), estNumAuto: true } };
+        const est = uniqueEstNum(initials, taken);
+        taken.add(est);
+        return { ...t, state: { ...t.state, estNum: est, estNumAuto: true } };
       });
       return changed ? next : cur;
     });
@@ -497,15 +514,19 @@ export function QuoteProvider({ children }) {
 
   const duplicateTab = useCallback(() => {
     if (!active) return;
-    const tab = {
-      id: "local-" + Math.random().toString(36).slice(2, 10),
-      persisted: false,
-      label: `${active.label} (copy)`,
-      state: { ...active.state, estNum: initials ? generateEstNum(initials) : "" },
-      updatedAt: Date.now(),
-    };
-    setTabs((cur) => [...cur, tab]);
-    setActiveId(tab.id);
+    const id = "local-" + Math.random().toString(36).slice(2, 10);
+    setTabs((cur) => {
+      const taken = new Set(cur.map((t) => t.state?.estNum).filter(Boolean));
+      const tab = {
+        id,
+        persisted: false,
+        label: `${active.label} (copy)`,
+        state: { ...active.state, estNum: initials ? uniqueEstNum(initials, taken) : "" },
+        updatedAt: Date.now(),
+      };
+      return [...cur, tab];
+    });
+    setActiveId(id);
     pushToast("Duplicated", "ok");
   }, [active, initials, pushToast]);
 
@@ -915,7 +936,7 @@ export function QuoteProvider({ children }) {
     // estimator + customer identity from the parent quote.
     const newState = applyItemStateTo({ ...DEFAULT_STATE }, target.state || freshItemState());
     newState.estInitials = cur.state.estInitials || "";
-    newState.estNum = initials ? generateEstNum(initials) : "";
+    newState.estNum = initials ? uniqueEstNum(initials, new Set(tabs.map((t) => t.state?.estNum).filter(Boolean))) : "";
     newState.estNumAuto = true;
     newState.custName = cur.state.custName || "";
     newState.custCode = cur.state.custCode || "";
@@ -949,11 +970,14 @@ export function QuoteProvider({ children }) {
     localStorage.setItem(INITIALS_KEY, v);
     setInitialsGateOpen(false);
     // Push into active tab if it has no estNum
-    setTabs((cur) => cur.map((t) => {
-      const next = { ...t.state, estInitials: v };
-      if (!t.state.estNum) next.estNum = generateEstNum(v);
-      return { ...t, state: next, updatedAt: Date.now() };
-    }));
+    setTabs((cur) => {
+      const taken = new Set(cur.map((t) => t.state?.estNum).filter(Boolean));
+      return cur.map((t) => {
+        const next = { ...t.state, estInitials: v };
+        if (!t.state.estNum) { next.estNum = uniqueEstNum(v, taken); taken.add(next.estNum); }
+        return { ...t, state: next, updatedAt: Date.now() };
+      });
+    });
     return true;
   }, [pushToast]);
 
