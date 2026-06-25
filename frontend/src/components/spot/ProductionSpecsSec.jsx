@@ -154,7 +154,9 @@ export default function ProductionSpecsSec({ result }) {
             {ovr && <span style={{ fontSize: 11, fontWeight: 700, color: "#f472b6", alignSelf: "center", marginLeft: 2 }}>ALL {ovr.toUpperCase()}</span>}
           </div>
         </F>
-        {(() => {
+        {/* CAD-only inputs — hidden on the Crest route, which uses its own
+            Std/Adv complexity control below (these never affect Crest pricing). */}
+        {!isCrestRoute && (() => {
           // ── Legacy parity (spot_r1_5.jsx L6139-6140): CAD pricing basis is an
           // explicit user choice — "By Difficulty" (bucket) OR "By Inches of Rule"
           // (actual knife length). The rule-inches value (often parsed from the
