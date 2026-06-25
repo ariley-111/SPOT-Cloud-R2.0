@@ -2,6 +2,30 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-25 — Nested-email parser fix + teammate-quote hard read-only ✅ (iter58, 5/5 BE + 5/5 FE PASS)
+- **RFQ Parser — nested emails (P0 bug 3):** `utils/email_extract.py` rewritten so `extract_eml()`
+  uses a manual `_iter()` that treats `message/rfc822` as a LEAF (Message.walk() was bleeding the
+  inner tree into the outer body and dropping nested attachments). New
+  `extract_email_file(filename, raw, recursive=, _depth=)`: parser path (`recursive=True`, wired in
+  `routes/parser.py _prepare_content`) flattens a forwarded `.eml/.msg` — inner PDFs/attachments are
+  promoted and the inner subject/from/body are merged into the parent body under a
+  `──── FORWARDED EMAIL ────` marker; preview path (`recursive=False`) keeps the nested email as a
+  single clickable attachment. Whitelist now keeps `.eml/.msg` + `message/rfc822`. Depth-capped
+  (MAX_EMAIL_DEPTH=6). `.msg`-in-`.msg` handled via extract-msg attachment bytes.
+- **Parser stale data (bug 1):** deleting a SAVED RFQ file in `FilesSec.jsx` now also clears the
+  cached parse result + closes the Review modal (was already cleared on staged add/remove).
+- **File view/download confirmed:** `/api/parser/files`, `/files/{id}/preview`, `/files/{id}/download`
+  all return 200 for existing saved quotes; UI FilePreviewModal renders email/pdf/etc inline. The
+  user's "can't open older quote files" was pre-feature quotes that simply have no attached files
+  (blobs for current quotes are present and serve fine).
+- **Teammate quote = hard read-only (option a, NEW):** opening another user's SAVED quote sets
+  `state.viewOnly`+`ownerName` (LoadQuoteModal). SpotApp shows a sticky `view-only-banner` and wraps
+  all sections in a `quote-sections` div with `pointer-events:none/opacity .55`; Toolbar Save + status
+  dropdown disabled; autosave skipped (no silent draft fork). Banner offers **Take Over**
+  (`takeOverActive`) and **Copy to my drafts** (`copyActive`), both clear viewOnly to unlock.
+- Known minor: cosmetic React console warning (style shorthand/non-shorthand) in Toolbar/SpotApp — non-blocking.
+
+
 ### 2026-06-24 — Section-header pill refinements ✅ (iter53–56, all PASS)
 Reorganized + enriched the collapsed-section summary pills (verified live):
 - **Item Setup pill:** now shows the RUNNING (substituted) board grade instead of the spec'd
