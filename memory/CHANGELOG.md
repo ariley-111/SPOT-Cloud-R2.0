@@ -1036,3 +1036,11 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Board Engine collapsed → pricing version · order MSF (r.oMSF) · MSF tier (r.msfTier). BoardEngineSec now takes result prop (SpotApp passes primary).
 - Item Setup collapsed → board specs (grade · flute · outLiner/inLiner · medium); READY/ATTENTION kept when expanded.
 - Verified live: 200 E · KRAFT/KRAFT | SATIN 1S · AUTO→CAD · STRIP | INDIVIDUAL · GM% · PREP ITEM | 2026-06-15 · 3.25 MSF · 0-9 TIER | 1 FILE.
+
+## 2026-06-25 — Per-Quote Rate Freeze (Phase 2)
+- Admin RATE changes (CAD setup/per-sheet, machine rates, grade adders, markups/fees) now apply ONLY to drafts + new quotes. Saved quotes stamp a `rate_snapshot` at save and always recalc on those frozen rates; Duplicate re-prices at live rates. Mirrors the existing board/stock freeze. No user warning (warnings stay board/stock-only).
+- Engine: `_rate_freeze` ContextVar + `use_rate_freeze()` + `active_cad_setup/active_cad_fallback/active_grade_adders/active_rate_defaults` accessors (engine/core.py). pricing.py/routing.py/runner.py read rates via accessors.
+- `with_pricing` (engine_routes.py) resolves the snapshot by `quoteId` (drafts→live, legacy→baseline) and injects ASMP rateOverrides. quotes.py stamps snapshot on create/copy; startup backfills legacy quotes to in-code baseline (53 in preview, idempotent).
+- Frontend useEngine.js sends `quoteId` in both calc payloads.
+- Verified: 7/7 backend tests (iteration_57.json) — saved quote byte-identical after a live CAD rate change; draft reflects new rate; duplicate re-prices; no 500s.
+- NOTE: backfill assumes pre-existing saved quotes were priced at in-code baseline rates (true since prod rate edits were made recently). No save-time rate history exists for legacy quotes, so baseline is the best approximation.
