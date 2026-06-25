@@ -155,6 +155,8 @@ export const copyQuote = (id) =>
   api.post(`/quotes/${id}/copy`).then((r) => r.data);
 export const updateQuoteStatus = (id, status) =>
   api.patch(`/quotes/${id}/status`, { status }).then((r) => r.data);
+export const deleteQuote = (id) =>
+  api.delete(`/quotes/${id}`).then((r) => r.data);
 export const listQuoteAudit = (quoteId) =>
   api.get("/admin/audit/quotes", { params: quoteId ? { quote_id: quoteId } : {} }).then((r) => r.data);
 

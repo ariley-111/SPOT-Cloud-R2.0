@@ -2,6 +2,20 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-25 — Admin delete Saved Quotes + Crest/Difficulty investigation ✅
+- **Admin delete saved quotes (NEW):** `DELETE /api/quotes/{id}` — ADMIN ONLY (`role=="admin"`), hard-deletes
+  the quote, purges attached RFQ files via `purge_quote_files`, and writes an audit entry. Frontend: red
+  trash button (`load-action-delete-{id}`, lucide Trash2) on each Saved row in the Load modal, admin-only,
+  with a confirm dialog. Verified backend 200→404 + 404 on missing; UI button renders for admin (28 rows).
+- **Crest vs Difficulty (investigation, no bug):** Per legacy `spot_r1_5.jsx`, the "Difficulty"
+  (Simple/Std/Complex) toggle is `cadDifficulty` and feeds ONLY the CAD route (cut min/sheet + setup).
+  Crest has its OWN control `crestComplexity` (Std/Adv) — Advanced doubles setup (45→90 min) and slows the
+  press (×0.80). Both already exist in cloud (engine routing.py 382/502, UI tiles `tile-crest-std/-adv` shown
+  when route=Crest). Proof: Crest cut $83.85 (Std) → $96.38 (Adv). So Difficulty correctly does nothing on
+  Crest; the Crest Std/Adv tiles are the right control. NOTE: the CAD Difficulty tiles stay visible on the
+  Crest route (legacy-faithful but can confuse) — offered to gate them by route as an optional enhancement.
+
+
 ### 2026-06-25 — Duplicate est# across tabs FIXED + Cost Buildup parity ✅
 - **Duplicate estimate numbers (URGENT):** `generateEstNum` is second-precision (`INI-YYMMDD-HHMMSS`),
   so tabs/drafts created in the same second collided (legacy had a `uniqueEstNum` dedup that the

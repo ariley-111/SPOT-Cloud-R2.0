@@ -14,6 +14,7 @@ from models.schemas import (
 from routes.auth import get_current_user
 from services.pricing_versions import get_active_version_id
 from services.rate_overrides import effective_snapshot
+from services.parser_files import purge_quote_files
 
 
 def _now() -> str:
@@ -310,6 +311,23 @@ async def update_quote_status(quote_id: str, body: StatusUpdateRequest,
         await _log_audit(quote_id=quote_id, user_id=user.id, field="status",
                          old=prev, new=body.status, source="user")
     return Quote(**result)
+
+
+@quotes_router.delete("/{quote_id}")
+async def delete_quote(quote_id: str, user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Hard-delete a saved quote — ADMIN ONLY. Also purges any attached RFQ
+    files (blobs + metadata). The deletion is recorded in the audit log."""
+    if user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    doc = await db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
+    files_purged = await purge_quote_files(quote_id)
+    await db[COL_QUOTES].delete_one({"id": quote_id})
+    await _log_audit(quote_id=quote_id, user_id=user.id, field="deleted",
+                     old=doc.get("est_num"), new=None, source="admin-delete")
+    return {"ok": True, "deleted": quote_id, "files_purged": files_purged}
+
 
 
 # ─── AUDIT LOG (admin-only) ────────────────────────────────────────────────

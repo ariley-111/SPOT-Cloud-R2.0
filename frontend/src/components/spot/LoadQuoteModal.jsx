@@ -3,11 +3,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import {
   listDrafts, listQuotes, listQuoteOwners,
-  takeOverQuote, copyQuote, getQuote,
+  takeOverQuote, copyQuote, getQuote, deleteQuote,
 } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
 import { useAuth } from "../../context/AuthContext";
-import { Paperclip, AlertTriangle } from "lucide-react";
+import { Paperclip, AlertTriangle, Trash2 } from "lucide-react";
 
 // ─── Owner color dots — stable hash → tint ─────────────────────────────
 const OWNER_TINTS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#3b82f6","#84cc16"];
@@ -194,6 +194,23 @@ export default function LoadQuoteModal({ onClose }) {
     }
   };
 
+  const isAdmin = currentUser?.role === "admin";
+  const onDeleteQuoteAdmin = async (it, e) => {
+    e?.stopPropagation();
+    if (!window.confirm(
+      `Permanently DELETE saved quote "${it.est_num}"${it.customer_name ? ` (${it.customer_name})` : ""}?\n\n` +
+      `This also removes any attached RFQ files and cannot be undone.`
+    )) return;
+    try {
+      const res = await deleteQuote(it.id);
+      setItems((cur) => cur.filter((x) => x.id !== it.id));
+      pushToast(`Deleted ${it.est_num}${res?.files_purged ? ` + ${res.files_purged} file(s)` : ""}`, "ok");
+    } catch (err) {
+      pushToast(`Delete failed: ${err?.response?.data?.detail || err.message}`, "err");
+    }
+  };
+
+
   const onDeleteAllDrafts = async () => {
     if (!window.confirm(`Delete ALL ${filtered.length} draft(s)? This cannot be undone.`)) return;
     try {
@@ -362,6 +379,16 @@ export default function LoadQuoteModal({ onClose }) {
                         Take Over
                       </button>
                     </>
+                  )}
+                  {isAdmin && (
+                    <button className="sp-btn sp-btn-sm" onClick={(e) => onDeleteQuoteAdmin(it, e)}
+                      data-testid={`load-action-delete-${it.id}`}
+                      title="Admin: permanently delete this quote + its files"
+                      style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444",
+                               border: "1px solid rgba(239,68,68,0.4)",
+                               display: "flex", alignItems: "center", padding: "0 8px" }}>
+                      <Trash2 size={13} strokeWidth={2.2} />
+                    </button>
                   )}
                 </div>
               </div>
