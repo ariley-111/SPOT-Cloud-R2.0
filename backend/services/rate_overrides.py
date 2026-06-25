@@ -127,6 +127,43 @@ _LIVE = {
 # preserved even if the live dict is mutated later. "Reset" restores from here.
 _BASELINE = {cat: dict(d) for cat, d in _LIVE.items()}
 
+
+def effective_snapshot() -> Dict[str, Dict[str, Any]]:
+    """Current LIVE (post-override) values for ALL rate categories.
+    Stamped onto a quote at save/duplicate so it freezes those rates."""
+    return {cat: dict(d) for cat, d in _LIVE.items()}
+
+
+def baseline_snapshot() -> Dict[str, Dict[str, Any]]:
+    """The in-code baseline (pre-override) values — used to backfill quotes
+    saved before the rate-freeze existed, so they keep their original rates."""
+    return {cat: dict(d) for cat, d in _BASELINE.items()}
+
+
+def asmp_overrides_from_rate(rate_vals: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a frozen RATE-category dict → ASMP override dict (engine machine
+    rates), reusing the same key/coerce map the live engine uses. Returned
+    dict is merged into the calc payload's rateOverrides for saved quotes."""
+    out: Dict[str, Any] = {}
+    for rate_key, raw in (rate_vals or {}).items():
+        mapping = _RATE_TO_ASMP.get(rate_key)
+        if not mapping:
+            continue
+        asmp_key, coercer = mapping
+        try:
+            v = coercer(raw)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(asmp_key, tuple):
+            top, sub = asmp_key
+            if not isinstance(out.get(top), dict):
+                out[top] = {}
+            out[top][sub] = v
+        else:
+            out[asmp_key] = v
+    return out
+
+
 # ASMP_DEFAULTS baseline (deep copy because crestSetup is a nested dict)
 import copy
 _ASMP_BASELINE = copy.deepcopy(ASMP_DEFAULTS)

@@ -17,6 +17,7 @@ from .core import (
     BOBST_MAX_W, BOBST_MAX_L, CREST_MAX_W, CREST_MAX_L,
     CAD_SETUP, CAD_FALLBACK, PRINT_SPEEDS, GRADE_ADDER_DEFAULTS, MULLEN_UPGRADE,
     calc_board, compute_layout, get_grade_fallback, get_medium_fallback, pn,
+    active_cad_setup, active_cad_fallback, active_grade_adders,
 )
 
 
@@ -94,8 +95,8 @@ def select_override_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str
     sheets_req = math.ceil(total_qty / layout["pcsPerSheet"])
     bi = {**board_spec, "widthIn": override_w, "lengthIn": override_l}
     bc = calc_board(bi, sheets_req, is_stock=True)
-    cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
-    cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
+    cad_fb_min = (active_cad_fallback().get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
+    cad_hrs = ((active_cad_setup().get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
     # Preserve fractional precision in the id (matches the FE format
     # spot/SheetLibraryModal.jsx → `OVR-${Number(w)}x${Number(l)}` so that
     # round-tripping the id through MongoDB never silently truncates
@@ -155,8 +156,8 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
         if not bc["hasPrice"]:
             return None
         waste_pct = 1 - ((n_up * one_up_w * n_out * one_up_l) / (sh_w * sh_l))
-        cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 3)) * sheets_req
-        cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
+        cad_fb_min = (active_cad_fallback().get(assumptions.get("cadDifficulty", "Standard"), 3)) * sheets_req
+        cad_hrs = ((active_cad_setup().get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
         layout = {"numUp": n_up, "numOut": n_out, "pcsPerSheet": pcs_per_sheet,
                   "wastePct": waste_pct, "sheetW": sh_w, "sheetL": sh_l}
         sheet = {"id": f"CUSTOM-{n_up}x{n_out}", "g": board_spec["boardGrade"], "f": board_spec["flute"],
@@ -192,14 +193,14 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
             # of the RUNNING grade's base ($102.98 for 200) → ~$5.59/MSF understated
             # material cost (Lynk Pkg case 2026-06-01).
             if used_grade_fallback:
-                fb_adder = GRADE_ADDER_DEFAULTS.get(fb_grade, 0)
+                fb_adder = active_grade_adders().get(fb_grade, 0)
                 bi = {**board_spec, "boardGrade": fb_grade, "gradeAdder": fb_adder,
                       "medium": use_medium, "widthIn": sh["w"], "lengthIn": sh["l"]}
             else:
                 bi = {**board_spec, "medium": use_medium, "widthIn": sh["w"], "lengthIn": sh["l"]}
             bc = calc_board(bi, sheets_req, is_stock=True)
-            cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
-            cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
+            cad_fb_min = (active_cad_fallback().get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
+            cad_hrs = ((active_cad_setup().get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
             medium_fallback = {"medium": medium_override, "isHigher": is_higher_medium} if (medium_override and medium_override != board_spec["medium"]) else None
             if bc["pricable"]:
                 results.append({"sheet": sh, "layout": layout, "sheetsReq": sheets_req, "bc": bc,
@@ -277,7 +278,7 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
     # ─── D-059: Mullen grade upgrade chain ───
     upgrade_grade = MULLEN_UPGRADE.get(board_spec["boardGrade"])
     while upgrade_grade:
-        upgrade_adder = GRADE_ADDER_DEFAULTS.get(upgrade_grade, 0)
+        upgrade_adder = active_grade_adders().get(upgrade_grade, 0)
         upg_results = []
         for sh in APPROVED_SHEETS:
             if (sh["f"] != board_spec["flute"] or sh["g"] != upgrade_grade or
@@ -291,8 +292,8 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
             bi = {**board_spec, "boardGrade": upgrade_grade, "gradeAdder": upgrade_adder,
                   "medium": board_spec["medium"], "widthIn": sh["w"], "lengthIn": sh["l"]}
             bc = calc_board(bi, sheets_req, is_stock=True)
-            cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
-            cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
+            cad_fb_min = (active_cad_fallback().get(assumptions.get("cadDifficulty", "Standard"), 6)) * sheets_req
+            cad_hrs = ((active_cad_setup().get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
             if bc["pricable"]:
                 upg_results.append({"sheet": sh, "layout": layout, "sheetsReq": sheets_req, "bc": bc,
                                     "cadHrs": cad_hrs, "totalCost": bc["total"], "stockMode": True,
@@ -339,8 +340,8 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
         sheet = {"id": label, "g": board_spec["boardGrade"], "f": board_spec["flute"],
                  "ol": board_spec["outsideLiner"], "il": board_spec["insideLiner"], "md": board_spec["medium"],
                  "w": w, "l": l}
-        cad_fb_min = (CAD_FALLBACK.get(assumptions.get("cadDifficulty", "Standard"), 6)) * total_qty
-        cad_hrs = ((CAD_SETUP.get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
+        cad_fb_min = (active_cad_fallback().get(assumptions.get("cadDifficulty", "Standard"), 6)) * total_qty
+        cad_hrs = ((active_cad_setup().get(assumptions.get("cadDifficulty", "Standard"), 15)) + cad_fb_min) / 60
         meets_pair_rule = w <= pair_lim or l <= pair_lim
         return {"sheet": sheet, "layout": layout, "sheetsReq": total_qty, "bc": bc,
                 "cadHrs": cad_hrs, "totalCost": bc.get("total") or 0,

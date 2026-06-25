@@ -1,0 +1,29 @@
+{
+  "summary": "Backend-only validation of the new admin RATE FREEZE feature. Wrote /app/backend/tests/test_rate_freeze.py (7 pytest tests, all PASS). Verified: (1) GET /api/admin/rates lists cad_setup + cad_fallback categories; (2) draft calc (no quoteId) returns a non-zero cutterDirect; (3) POST /api/quotes stamps a rate_snapshot containing rate/grade_adder/cad_setup/cad_fallback and is retrievable via GET /api/quotes/{id}; (4) FREEZE CORE: after PUT /api/admin/rates/cad_fallback/Complex (+5 min/sheet), a calc with the SAVED quote's quoteId is byte-identical to the pre-change value while a draft calc moves with the new live rate; (5) Duplicate via POST /api/quotes/{id}/copy stamps a NEW rate_snapshot with the bumped cad_setup.Complex value and its recalc reflects the live rate while the ORIGINAL stays frozen; (6) /api/engine/calculate and /api/engine/calculate-multi-part both return 200 (no 500 from the new with_pricing wrapper). Admin override was reset after every test (verified override_count=0 post-run). The 2 TEST_RATE_FREEZE_001 quotes left over (no DELETE quote endpoint exists in the API) were cleaned up via direct MongoDB delete_many; pod is clean.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/quotes/{id}", "issue": "Endpoint does not exist — tests that create saved quotes cannot self-clean via the API. Not a blocker for this feature, but worth noting for future regression tests. Cleaned up via direct MongoDB delete_many."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_rate_freeze.py",
+    "/app/test_reports/pytest/rate_freeze.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/engine_routes.py: `_RATE_SNAP_CACHE` is an unbounded in-process dict keyed by quote_id. Saved-quote rate_snapshots are immutable so the logic is correct, but in a long-running worker / multi-worker (gunicorn) setup the cache will (a) grow without eviction and (b) be inconsistent across worker processes. Consider an LRU cap and/or relying on a fast Mongo single-doc lookup (already cheap with the {id:1} index).",
+    "routes/quotes.py: There is no DELETE /api/quotes/{id} route. Saved quotes can only be created, copied, status-patched — never deleted. Likely intentional (audit retention) but means test fixtures (and the UI?) cannot remove test data via the API.",
+    "services/rate_overrides.py: `_BASELINE` is captured at module import. If the engine's RATE_DEFAULTS were ever monkey-patched *before* this module is imported, baseline_snapshot() would be wrong for legacy backfill. Import order is currently correct (services imports engine.core directly), but worth a comment to lock it down."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_rate_freeze.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "n/a (frontend testing skipped per request)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Two TEST_RATE_FREEZE_001 quotes were created during test runs and immediately cleaned up via direct MongoDB delete_many (no DELETE quote endpoint). Admin rate overrides (cad_fallback.Complex, cad_setup.Complex) were applied during the freeze-core and duplicate tests and reset in finally blocks — verified post-run that override_count == 0 and values match baseline (cad_setup.Complex=22, cad_fallback.Complex=4).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Rate-freeze backend behavior validated end-to-end. test_rate_freeze.py is reusable for regression. If you re-run it and it leaves TEST_RATE_FREEZE_001 quotes behind, clean with: cd /app/backend && set -a && source .env && set +a && python -c \"import asyncio; from db import db, COL_QUOTES; asyncio.run(db[COL_QUOTES].delete_many({'est_num': {'\\$regex': '^TEST_RATE_FREEZE'}}))\". Frontend tests for the new useEngine.js quoteId send were NOT executed per request (backend-only)."
+}

@@ -116,6 +116,9 @@ class Quote(BaseModel):
     # Board Pricing Freeze (Phase 1): the pricing version this quote is pinned to.
     # Set at save time; preserved on update. Re-pricing is only via Duplicate.
     pricing_version_id: Optional[str] = None
+    # Rate Freeze (Phase 2): admin rate snapshot pinned at save/duplicate so the
+    # quote keeps its CAD/machine/grade/markup rates on recalc. Drafts have none.
+    rate_snapshot: Optional[Dict[str, Any]] = None
     created_at: str = Field(default_factory=_utc_now)
     updated_at: str = Field(default_factory=_utc_now)
 

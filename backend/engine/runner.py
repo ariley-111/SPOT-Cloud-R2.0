@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from .core import (
     RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, SPOT_SCHEMA_VERSION,
     GRADE_ADDER_DEFAULTS, calc_board, compute_layout, pn,
+    active_rate_defaults, active_grade_adders,
 )
 from .routing import auto_select_sheet, auto_route, select_override_sheet
 from .pricing import calc_wf, calc_shipment
@@ -86,8 +87,8 @@ def build_board_spec(json: Dict[str, Any]) -> Dict[str, Any]:
         "fscFee": pn(json.get("fscFee", "25")),
         "kemiTariff": pn(json.get("kemiTariff", "2.50")),
         "palletPrepFee": pn(json.get("palletPrepFee", "17.50")),
-        "under5MsfFee": pn(json["under5MsfFee"] if json.get("under5MsfFee") is not None else RATE_DEFAULTS["under5MsfFee"]),
-        "gradeAdder": pn(json["gradeAdder"]) if json.get("gradeAdder") is not None else (GRADE_ADDER_DEFAULTS.get(json.get("boardGrade", "200"), 0)),
+        "under5MsfFee": pn(json["under5MsfFee"] if json.get("under5MsfFee") is not None else active_rate_defaults()["under5MsfFee"]),
+        "gradeAdder": pn(json["gradeAdder"]) if json.get("gradeAdder") is not None else (active_grade_adders().get(json.get("boardGrade", "200"), 0)),
         "widthIn": 0,
         "lengthIn": 0,
     }
@@ -438,7 +439,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
     prod_inputs = build_prod_inputs({
         **json,
         "_slotIndex": slot_index,
-        "defaultPrepressCost": json.get("defaultPrepressCost") or RATE_DEFAULTS["defaultPrepressCost"],
+        "defaultPrepressCost": json.get("defaultPrepressCost") or active_rate_defaults()["defaultPrepressCost"],
     }, routing, layout, asmp)
 
     if saber_blank_layout:

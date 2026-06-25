@@ -13,6 +13,7 @@ from models.schemas import (
 )
 from routes.auth import get_current_user
 from services.pricing_versions import get_active_version_id
+from services.rate_overrides import effective_snapshot
 
 
 def _now() -> str:
@@ -179,6 +180,7 @@ async def create_quote(body: QuoteCreate, user: User = Depends(get_current_user)
         customer_code=body.customer_code, customer_name=body.customer_name,
         state=body.state, status=body.status, test_mode=body.test_mode,
         pricing_version_id=pinned,
+        rate_snapshot=effective_snapshot(),
     )
     await db[COL_QUOTES].insert_one(quote.model_dump())
     return quote
@@ -270,6 +272,8 @@ async def copy_quote(quote_id: str, user: User = Depends(get_current_user)) -> Q
         # Duplicate IS the re-price path: pin the clone to the ACTIVE version
         # so it picks up current board pricing (the original stays frozen).
         pricing_version_id=await get_active_version_id(),
+        # Re-price rates too — capture CURRENT live admin rates for the clone.
+        rate_snapshot=effective_snapshot(),
     )
     await db[COL_QUOTES].insert_one(clone.model_dump())
     await _log_audit(

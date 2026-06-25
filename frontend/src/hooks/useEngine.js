@@ -138,6 +138,9 @@ export function buildPayload(state) {
     // Board Pricing Freeze: pinned version (saved quotes recalc on their frozen
     // rates; drafts/new quotes send null → backend uses the ACTIVE version).
     pricingVersionId: state.pricingVersionId || undefined,
+    // Rate Freeze: a saved quote sends its id so the backend applies the rate
+    // snapshot pinned at save time. Drafts/new quotes omit it → live admin rates.
+    quoteId: state.quoteId || undefined,
   };
 }
 
@@ -233,5 +236,7 @@ export function buildMpPayload(state) {
     jobPrepressCost: state.jobPrepressCost, jobPrepressTreatment: state.jobPrepressTreatment,
     // Board Pricing Freeze: pinned version for the whole matched set.
     pricingVersionId: state.pricingVersionId || undefined,
+    // Rate Freeze: saved quote id → backend applies its pinned rate snapshot.
+    quoteId: state.quoteId || undefined,
   };
 }

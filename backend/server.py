@@ -82,6 +82,15 @@ async def on_startup():
     from services.pricing_versions import ensure_initialized
     active_pv = await ensure_initialized()
     logger.info(f"Pricing versions initialized; active={active_pv}")
+    # Rate Freeze (Phase 2): backfill quotes saved before the freeze existed with
+    # the in-code BASELINE rates so they keep their original CAD/machine/grade
+    # rates on recalc. Idempotent — only touches docs missing a snapshot.
+    from services.rate_overrides import baseline_snapshot
+    from db import db as _dbq, COL_QUOTES as _CQ
+    bf = await _dbq[_CQ].update_many(
+        {"rate_snapshot": {"$exists": False}},
+        {"$set": {"rate_snapshot": baseline_snapshot()}})
+    logger.info(f"Rate-freeze backfill: {bf.modified_count} legacy quotes pinned to baseline rates")
     # Async parse jobs — TTL index purges completed/abandoned jobs after 24h.
     from db import db as _dbj, COL_PARSER_JOBS
     try:

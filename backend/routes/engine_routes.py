@@ -10,28 +10,56 @@ from engine.routing import auto_select_sheet, auto_route, compare_routes
 from engine.core import RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, APPROVED_SHEETS, get_grade_fallback, ENGINE
 from engine.core import BOBST_FLUTES, BOBST_MIN_W, BOBST_MIN_L, BOBST_MAX_W, BOBST_MAX_L
 from engine.core import CREST_MAX_W, CREST_MAX_L, MULLEN_UPGRADE, FLUTE_CALIPERS
-from engine.core import use_pricing
+from engine.core import use_pricing, use_rate_freeze, active_rate_defaults, active_grade_adders
 from models.schemas import User
 from routes.auth import get_current_user
 from services.pricing_versions import resolve_config, get_active_config, get_active_version, get_version
+from services.rate_overrides import asmp_overrides_from_rate, baseline_snapshot
+from db import db as _db, COL_QUOTES
 
 router = APIRouter(prefix="/api/engine", tags=["engine"])
 
+# Per-quote rate snapshots are immutable once a quote is saved → cache by id.
+_RATE_SNAP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+async def _resolve_rate_snapshot(quote_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Return the frozen rate snapshot for a SAVED quote, else None (drafts/new
+    quotes → live admin rates). Legacy saved quotes missing a snapshot fall back
+    to the in-code baseline so they keep their original rates."""
+    if not quote_id:
+        return None
+    if quote_id in _RATE_SNAP_CACHE:
+        return _RATE_SNAP_CACHE[quote_id]
+    doc = await _db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0, "rate_snapshot": 1})
+    if not doc:
+        return None  # not a saved quote (e.g. unsaved draft id) → live rates
+    snap = doc.get("rate_snapshot") or baseline_snapshot()
+    _RATE_SNAP_CACHE[quote_id] = snap
+    return snap
+
 
 def with_pricing(fn):
-    """Resolve the pricing version for a calc request and apply it for the
-    duration of the handler. Reads `pricingVersionId` from the JSON body
-    (a saved quote's PINNED version); falls back to the ACTIVE version for
-    drafts. calc_board overlays the version's config via the ContextVar."""
+    """Resolve the pricing version AND per-quote rate snapshot for a calc request
+    and apply both for the duration of the handler. Reads `pricingVersionId` and
+    `quoteId` from the JSON body (a SAVED quote pins both); drafts send neither →
+    ACTIVE board version + LIVE admin rates. calc_board/engine overlay via ContextVars."""
     @functools.wraps(fn)
     async def wrapper(*args, **kwargs):
         payload = kwargs.get("payload")
-        vid = None
+        vid = qid = None
         if isinstance(payload, dict):
             vid = payload.get("pricingVersionId") or payload.get("pricing_version_id")
+            qid = payload.get("quoteId") or payload.get("quote_id")
         cfg = await resolve_config(vid)
+        snap = await _resolve_rate_snapshot(qid)
+        if snap and isinstance(payload, dict):
+            ro = dict(payload.get("rateOverrides") or {})
+            ro.update(asmp_overrides_from_rate(snap.get("rate") or {}))
+            payload["rateOverrides"] = ro
         with use_pricing(cfg):
-            return await fn(*args, **kwargs)
+            with use_rate_freeze(snap):
+                return await fn(*args, **kwargs)
     return wrapper
 
 
@@ -358,15 +386,14 @@ async def compare_routes_ep(
         "fscFee": float(payload.get("fscFee") or 25),
         "kemiTariff": float(payload.get("kemiTariff") or 2.50),
         "palletPrepFee": float(payload.get("palletPrepFee") or 17.50),
-        "under5MsfFee": float(payload.get("under5MsfFee") or RATE_DEFAULTS.get("under5MsfFee") or 0),
+        "under5MsfFee": float(payload.get("under5MsfFee") or active_rate_defaults().get("under5MsfFee") or 0),
         "gradeAdder": float(payload.get("gradeAdder") if payload.get("gradeAdder") is not None
-                            else (RATE_DEFAULTS.get("gradeAdder") if RATE_DEFAULTS.get("gradeAdder") is not None
+                            else (active_rate_defaults().get("gradeAdder") if active_rate_defaults().get("gradeAdder") is not None
                                   else 0) or (lambda g: 0)(payload.get("boardGrade"))),
     }
     # Compute gradeAdder default from GRADE_ADDER_DEFAULTS if caller didn't supply
     if not payload.get("gradeAdder"):
-        from engine.core import GRADE_ADDER_DEFAULTS
-        board_spec["gradeAdder"] = float(GRADE_ADDER_DEFAULTS.get(payload.get("boardGrade", "200"), 0) or 0)
+        board_spec["gradeAdder"] = float(active_grade_adders().get(payload.get("boardGrade", "200"), 0) or 0)
     asmp = {**ENGINE,
             "printReq": "Yes" if payload.get("printReq") in ("Yes", "On") else "No",
             "printMode": payload.get("printMode") or "Satin",
@@ -376,16 +403,16 @@ async def compare_routes_ep(
             "crestComplexity": payload.get("crestComplexity") or "Standard",
             "cadDifficulty": payload.get("cadDifficulty") or "Standard",
             "bobstFirstSizing": "true",
-            "incaRate": float(RATE_DEFAULTS.get("incaRate", 485) or 485),
-            "cadRate": float(RATE_DEFAULTS.get("cadRate", 138) or 138),
-            "crestRate": float(RATE_DEFAULTS.get("crestRate", 45) or 45),
-            "bobstRate": float(RATE_DEFAULTS.get("bobstRate", 350) or 350),
-            "crestSpeed": float(RATE_DEFAULTS.get("crestSpeed", 150) or 150),
-            "bobstSpeed": float(RATE_DEFAULTS.get("bobstSpeed", 3000) or 3000),
-            "incaMinCharge": float(RATE_DEFAULTS.get("incaMinCharge", 0) or 0),
-            "cadMinCharge": float(RATE_DEFAULTS.get("cadMinCharge", 0) or 0),
-            "crestMinCharge": float(RATE_DEFAULTS.get("crestMinCharge", 0) or 0),
-            "bobstMinCharge": float(RATE_DEFAULTS.get("bobstMinCharge", 0) or 0)}
+            "incaRate": float(active_rate_defaults().get("incaRate", 485) or 485),
+            "cadRate": float(active_rate_defaults().get("cadRate", 138) or 138),
+            "crestRate": float(active_rate_defaults().get("crestRate", 45) or 45),
+            "bobstRate": float(active_rate_defaults().get("bobstRate", 350) or 350),
+            "crestSpeed": float(active_rate_defaults().get("crestSpeed", 150) or 150),
+            "bobstSpeed": float(active_rate_defaults().get("bobstSpeed", 3000) or 3000),
+            "incaMinCharge": float(active_rate_defaults().get("incaMinCharge", 0) or 0),
+            "cadMinCharge": float(active_rate_defaults().get("cadMinCharge", 0) or 0),
+            "crestMinCharge": float(active_rate_defaults().get("crestMinCharge", 0) or 0),
+            "bobstMinCharge": float(active_rate_defaults().get("bobstMinCharge", 0) or 0)}
     opts = {
         "printReq": asmp["printReq"], "printMode": asmp["printMode"],
         "dieTreatment": asmp["dieTreatment"], "dieCost": asmp["dieCost"],

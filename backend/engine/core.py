@@ -208,6 +208,60 @@ def use_pricing(config: Optional[Dict[str, Any]]):
 
 
 # ═══════════════════════════════════════════════════════════════
+# PER-QUOTE RATE FREEZE (Phase 2 — Rate Freeze)
+# ───────────────────────────────────────────────────────────────
+# Mirrors the board-pricing freeze, but for the admin RATE OVERRIDES
+# (machine rates, CAD setup/per-sheet, grade adders, markups/fees).
+# A SAVED quote pins a `rate_snapshot` at save time; on recalc the engine
+# reads frozen rates via the accessors below. Drafts/new quotes set no
+# snapshot → accessors return the LIVE module dicts (current admin values).
+# Snapshot keys match services/rate_overrides categories: "rate",
+# "grade_adder", "cad_setup", "cad_fallback" (gm/sell tiers live in quote state).
+# ═══════════════════════════════════════════════════════════════
+_rate_freeze: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+    "spot_rate_freeze", default=None)
+
+
+@contextmanager
+def use_rate_freeze(snapshot: Optional[Dict[str, Any]]):
+    """Apply a per-quote rate snapshot for the duration of the block.
+    No-op when snapshot is falsy (→ drafts/new quotes use live admin rates)."""
+    if not snapshot:
+        yield
+        return
+    token = _rate_freeze.set(snapshot)
+    try:
+        yield
+    finally:
+        _rate_freeze.reset(token)
+
+
+def _freeze_cat(cat: str) -> Optional[Dict[str, Any]]:
+    ov = _rate_freeze.get()
+    return ov.get(cat) if ov else None
+
+
+def active_cad_setup() -> Dict[str, Any]:
+    f = _freeze_cat("cad_setup")
+    return {**CAD_SETUP, **f} if f else CAD_SETUP
+
+
+def active_cad_fallback() -> Dict[str, Any]:
+    f = _freeze_cat("cad_fallback")
+    return {**CAD_FALLBACK, **f} if f else CAD_FALLBACK
+
+
+def active_grade_adders() -> Dict[str, Any]:
+    f = _freeze_cat("grade_adder")
+    return {**GRADE_ADDER_DEFAULTS, **f} if f else GRADE_ADDER_DEFAULTS
+
+
+def active_rate_defaults() -> Dict[str, Any]:
+    f = _freeze_cat("rate")
+    return {**RATE_DEFAULTS, **f} if f else RATE_DEFAULTS
+
+
+# ═══════════════════════════════════════════════════════════════
 # APPROVED SHEET LIBRARY — 216 sheets, verbatim from spot_engine.js L78
 # ═══════════════════════════════════════════════════════════════
 SHEET_GROUPS: List[Dict[str, Any]] = [

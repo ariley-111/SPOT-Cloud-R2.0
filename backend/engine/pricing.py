@@ -13,6 +13,7 @@ from .core import (
     PRINT_SPEEDS, CAD_SETUP, CAD_FALLBACK, STRIP_DEFAULTS, GLUE_DEFAULTS,
     GM_DEFAULTS, SELL_DEFAULTS, FLUTE_CALIPERS, ECT_GRADE_FALLBACK,
     RATE_DEFAULTS, get_gm_msf_tier, pn, ceil_int, is_finite,
+    active_cad_setup, active_cad_fallback, active_rate_defaults,
 )
 
 
@@ -64,7 +65,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
     cad_hrs = 0
     if route == "CAD" or route == "Saber + D/C":
         diff = prod.get("cadDifficulty", "Standard")
-        setup_min = CAD_SETUP.get(diff, 15)
+        setup_min = active_cad_setup().get(diff, 15)
         rule_in = pn(prod.get("totalRuleInches"))
         perf_pct = pn(prod.get("perfPct"))
         override = pn(prod.get("cadSheetsPerHourOverride"))
@@ -83,13 +84,13 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
             runtime_min = (total_in * (1 - perf_pct) / cad_reg_speed) + (total_in * perf_pct / cad_perf_speed) if cad_reg_speed > 0 else 0
             if p_mats:
                 runtime_min += 2 * conv_sheets
-                setup_min = max(setup_min, CAD_SETUP["Standard"])
+                setup_min = max(setup_min, active_cad_setup()["Standard"])
             cutter_basis = f"{rule_in:.0f} in/pc x {effective_fpps} out{' /blank' if saber_on else ''} x 1.15 = {sheet_rule_in:.0f} in/{'blank' if saber_on else 'sh'}"
         else:
-            bm = CAD_FALLBACK.get(diff, 6)
+            bm = active_cad_fallback().get(diff, 6)
             if p_mats:
                 bm = max(bm, 5)
-                setup_min = max(setup_min, CAD_SETUP["Standard"])
+                setup_min = max(setup_min, active_cad_setup()["Standard"])
             runtime_min = conv_sheets * bm * ((1 - perf_pct) + (perf_pct / cad_perf_factor)) if cad_perf_factor > 0 else 0
             if p_mats:
                 runtime_min += 2 * conv_sheets
@@ -171,7 +172,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
     for mc in misc_items:
         if mc.get("treatment") == "None" or pn(mc.get("cost")) <= 0:
             continue
-        marked = pn(mc.get("cost")) * (1 + pn(prod.get("miscChargeMarkup") or RATE_DEFAULTS["miscChargeMarkup"]))
+        marked = pn(mc.get("cost")) * (1 + pn(prod.get("miscChargeMarkup") or active_rate_defaults()["miscChargeMarkup"]))
         if mc.get("treatment") == "Separate Line":
             misc_line_cost += marked
             misc_line_items.append({"name": mc.get("name"), "amt": marked})
