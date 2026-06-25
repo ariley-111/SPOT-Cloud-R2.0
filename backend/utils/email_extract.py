@@ -76,10 +76,38 @@ def extract_eml(raw: bytes) -> Dict[str, Any]:
     body_text, body_html = "", ""
     attachments: List[Dict[str, Any]] = []
 
-    for part in msg.walk():
-        cd = part.get("Content-Disposition") or ""
+    # Manual traversal that treats a nested email (message/rfc822) as a single
+    # leaf attachment instead of descending into it — Message.walk() is
+    # unreliable across nested message boundaries (get_payload(decode=True) is
+    # None for message/* parts and the inner tree leaks into the outer body).
+    def _iter(part):
+        if part.get_content_type() == "message/rfc822":
+            yield part
+            return
+        if part.is_multipart():
+            for sub in part.iter_parts():
+                yield from _iter(sub)
+        else:
+            yield part
+
+    for part in _iter(msg):
         ctype = (part.get_content_type() or "").lower()
+        cd = part.get("Content-Disposition") or ""
         filename = part.get_filename() or ""
+
+        # Nested email → grab its raw bytes so extract_email_file can recurse.
+        if ctype == "message/rfc822":
+            try:
+                inner = part.get_content()  # contained Message
+                sub_bytes = inner.as_bytes()
+            except Exception:
+                continue
+            attachments.append({
+                "filename": filename or f"forwarded-{len(attachments)+1}.eml",
+                "mime": "message/rfc822", "bytes": sub_bytes,
+            })
+            continue
+
         if "attachment" in cd.lower() or filename:
             payload = part.get_payload(decode=True)
             if not payload or not _is_parser_attachment(filename, ctype):
@@ -153,6 +181,7 @@ def extract_msg(raw: bytes) -> Dict[str, Any]:
             ".xls": "application/vnd.ms-excel",
             ".csv": "text/csv", ".tsv": "text/tab-separated-values",
             ".rtf": "application/rtf", ".txt": "text/plain",
+            ".eml": "message/rfc822", ".msg": "application/vnd.ms-outlook",
         }
         mime = mime_map.get(ext, "application/octet-stream")
         if not _is_parser_attachment(fname, mime):
@@ -178,9 +207,57 @@ def extract_msg(raw: bytes) -> Dict[str, Any]:
     }
 
 
-def extract_email_file(filename: str, raw: bytes) -> Dict[str, Any]:
-    """Dispatch on extension."""
+def _extract_one(filename: str, raw: bytes) -> Dict[str, Any]:
+    """Dispatch a single email blob on extension (no recursion)."""
     name_lower = (filename or "").lower()
     if name_lower.endswith(".msg"):
         return extract_msg(raw)
     return extract_eml(raw)  # .eml or unknown → MIME parser
+
+
+def extract_email_file(filename: str, raw: bytes, recursive: bool = False,
+                       _depth: int = 0) -> Dict[str, Any]:
+    """Extract an email file's body + attachments.
+
+    When `recursive=True` (parser path), any attachment that is itself an email
+    (.eml / .msg — e.g. a forwarded RFQ inside another email) is expanded in
+    place: its subject/from/body are appended to the parent body text, its
+    non-email attachments are flattened into the parent attachment list, and
+    the email wrapper itself is dropped (so the parser never receives raw MIME).
+    Depth-capped at MAX_EMAIL_DEPTH to guard against mail-bomb loops.
+
+    When `recursive=False` (preview path), attachments are returned as-is so
+    the UI can render a nested email as a clickable attachment.
+    """
+    ext = _extract_one(filename, raw)
+    if not recursive or _depth >= MAX_EMAIL_DEPTH:
+        return ext
+
+    flat_attachments: List[Dict[str, Any]] = []
+    body_parts: List[str] = [ext.get("body") or ""]
+    for att in ext.get("attachments", []):
+        a_name = att.get("filename") or ""
+        a_mime = att.get("mime") or ""
+        a_bytes = att.get("bytes") or b""
+        if _is_email_attachment(a_name, a_mime):
+            # Recurse into the nested email and merge its contents upward.
+            try:
+                nested = extract_email_file(a_name, a_bytes, recursive=True,
+                                            _depth=_depth + 1)
+            except Exception as e:  # don't let one bad nested email kill the parse
+                flat_attachments.append(att)  # keep the raw blob as a fallback
+                body_parts.append(f"\n[Could not expand nested email '{a_name}': {e}]")
+                continue
+            header = []
+            if nested.get("subject"): header.append(f"SUBJECT: {nested['subject']}")
+            if nested.get("from"):    header.append(f"FROM: {nested['from']}")
+            block = "\n".join(header + ([nested["body"]] if nested.get("body") else []))
+            body_parts.append(
+                f"\n\n──── FORWARDED EMAIL ({a_name}) ────\n{block}")
+            flat_attachments.extend(nested.get("attachments", []))
+        else:
+            flat_attachments.append(att)
+
+    ext["body"] = "\n".join(p for p in body_parts if p).strip()
+    ext["attachments"] = flat_attachments
+    return ext

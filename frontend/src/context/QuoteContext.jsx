@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, createQuote, updateQuote, engineManifest } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, takeOverQuote, createQuote, updateQuote, engineManifest } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum } from "../lib/format";
 import {
@@ -353,9 +353,52 @@ export function QuoteProvider({ children }) {
   }, [activeId]);
   replaceStateRef.current = replaceState;
 
+  // ─── View-only escape hatches ───────────────────────────────
+  //  Take Over (become owner of the same quote) or Copy (clone to a new draft
+  //  at current pricing). Both clear viewOnly so the form unlocks.
+  const takeOverActive = useCallback(async () => {
+    const st = (tabsRef.current || []).find((t) => t.id === activeIdRef.current)?.state || {};
+    if (!st.quoteId) return;
+    try {
+      const updated = await takeOverQuote(st.quoteId);
+      replaceStateRef.current({
+        ...(updated.state || {}),
+        quoteId: updated.id,
+        quoteStatus: updated.status || "draft",
+        pricingVersionId: updated.pricing_version_id || null,
+        viewOnly: false, ownerName: null,
+      });
+      pushToast(`Took over ${updated.est_num} — you are now the owner`, "ok");
+    } catch (e) {
+      pushToast(`Take Over failed: ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  }, [pushToast]);
+
+  const copyActive = useCallback(async () => {
+    const st = (tabsRef.current || []).find((t) => t.id === activeIdRef.current)?.state || {};
+    if (!st.quoteId) return;
+    try {
+      const copy = await copyQuote(st.quoteId);
+      replaceStateRef.current({
+        ...(copy.state || {}),
+        quoteId: copy.id,
+        quoteStatus: copy.status || "draft",
+        pricingVersionId: copy.pricing_version_id || null,
+        viewOnly: false, ownerName: null,
+      });
+      pushToast(`Copied to a new draft (${copy.est_num})`, "ok");
+    } catch (e) {
+      pushToast(`Copy failed: ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  }, [pushToast]);
+
+
   // ─── Auto-save (debounced 1.5s) ─────────────────────────────
   useEffect(() => {
     if (!active) return;
+    // View-only (teammate's) quotes never autosave — they must NOT silently
+    // fork a personal draft. The estimator clicks Take Over or Copy to edit.
+    if (active.state?.viewOnly) return;
     if (saveTimers.current[active.id]) clearTimeout(saveTimers.current[active.id]);
     saveTimers.current[active.id] = setTimeout(async () => {
       try {
@@ -948,6 +991,10 @@ export function QuoteProvider({ children }) {
     closePromptId, requestCloseTab, cancelClose, discardCloseTab, saveAndCloseTab,
     deleteDraftById, clearAllDrafts,
     setField, setManyFields, replaceState, setPricingMode,
+    // View-only (teammate quote) read-only lock + escape hatches
+    viewOnly: !!active?.state?.viewOnly,
+    viewOnlyOwner: active?.state?.ownerName || null,
+    takeOverActive, copyActive,
     // Multi-Part actions
     switchBomItem, addBomItem, duplicateBomItem, removeBomItem,
     reorderBomItem, updateBomItem, updateBomItemState, convertToMultiPart, convertToSimple,

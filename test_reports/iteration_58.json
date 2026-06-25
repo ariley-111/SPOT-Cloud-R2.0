@@ -1,0 +1,34 @@
+{
+  "summary": "End-to-end re-verification of nested-email fix + saved-RFQ file API + view-only teammate-quote feature. ALL TESTS PASS (5/5 backend pytest, 5/5 frontend Playwright). No live Anthropic parse calls were made.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_email_extract_nested.py",
+    "/app/test_reports/pytest/nested_email.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "utils/email_extract.py: extract_eml() correctly treats message/rfc822 as a leaf in _iter() to avoid Message.walk() bleeding inner-tree content into outer body. Recursion in extract_email_file() is depth-capped (MAX_EMAIL_DEPTH=6) — good guard against mail-bomb loops. No issues found.",
+    "routes/parser.py: /api/parser/files/{id}/preview returns 200 for an .eml file with a non-empty payload — verified. Both preview and download endpoints work for the admin's existing saved quote (5d32e0cd-...).",
+    "frontend/SpotApp.jsx view-only banner correctly wires Take Over / Copy to context.takeOverActive / copyActive. quote-sections wrapper applies pointer-events:none + opacity:0.55 + aria-disabled='true' when viewOnly — verified via computed style. Banner shows owner display name ('Riley, Ashley') correctly.",
+    "frontend/QuoteContext.jsx copyActive() correctly clears viewOnly and creates a NEW draft (toast 'Copied to a new draft (RA-...)') — verified non-destructive of ariley's original record.",
+    "Minor (non-blocking): Toolbar.jsx and possibly SpotApp.jsx produce React console warnings: 'Updating a style property during rerender ... mix shorthand and non-shorthand properties for the same value'. Cosmetic, but worth a future cleanup."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_email_extract_nested.py (new — 5 tests)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Frontend STEP 5 (Copy to my drafts) created a new RA-... draft owned by admin (intentional, expected). ariley's original quote a0d5afc6-8e4b-44a6-81b3-0c7ceee1b35d was NOT mutated (Take Over was deliberately avoided per request). No backend cleanup necessary — drafts auto-expire / can be deleted from Load > Drafts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_email_extract_nested.py is reusable for regression. Covers: (1) nested .eml recursion (recursive=True flattens + adds FORWARDED block; recursive=False keeps nested .eml whole) — UNIT, no LLM calls; (2) /api/parser/files list/preview/download for quote 5d32e0cd-... Frontend view-only feature, copy-unlock, and file-preview-modal verified working end-to-end against the live preview URL. The teammate quote id resolved to a0d5afc6-8e4b-44a6-81b3-0c7ceee1b35d.",
+  "rca of the issue": "N/A — all previously reported fixes verified working. Nested-email extraction in extract_eml() correctly uses a manual _iter() that yields message/rfc822 as a leaf rather than relying on Message.walk(), which is what fixed the original bug of nested .eml content being lost. extract_email_file()'s recursive=True path then flattens the leaf into the parser-bound representation. Preview path uses recursive=False so the UI sees the nested email as a single clickable attachment."
+}

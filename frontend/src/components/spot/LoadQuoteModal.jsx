@@ -138,6 +138,10 @@ export default function LoadQuoteModal({ onClose }) {
       ...(tab === "saved" ? {
         quoteId: it.id,
         quoteStatus: it.status || "draft",
+        // Hard read-only when the saved quote belongs to a teammate — the
+        // estimator must Take Over or Copy before they can edit (option a).
+        viewOnly: it.owner_id !== myUserId,
+        ownerName: it.owner_id !== myUserId ? (it.owner_name || "another user") : null,
         // Carry the quote's PINNED board-pricing version so recalcs stay FROZEN
         // on the version it was saved under (Board Pricing Freeze).
         pricingVersionId: it.pricing_version_id || null,

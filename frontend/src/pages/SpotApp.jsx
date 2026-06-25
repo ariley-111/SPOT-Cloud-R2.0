@@ -22,7 +22,7 @@ import { useQuote } from "../context/QuoteContext";
 import { useEngine } from "../hooks/useEngine";
 
 export default function SpotApp({ onOpenAdmin }) {
-  const { active, toasts } = useQuote();
+  const { active, toasts, viewOnly, viewOnlyOwner, takeOverActive, copyActive } = useQuote();
   const [modal, setModal] = useState(null);
 
   // ── Resizable right rail (#4) + responsive default (#3) ──
@@ -100,14 +100,36 @@ export default function SpotApp({ onOpenAdmin }) {
           flex: 1, minWidth: 0, overflowY: "auto",
           background: "var(--spot-bg)",
         }}>
-          <EstimateInfoSec />
-          <BomSec />
-          <ItemSetupSec result={primary} />
-          <ProductionSpecsSec result={primary} />
-          <QuoteTableSec results={results} componentPricing={componentPricing} jobTotals={jobTotals} meta={meta} />
-          <PricingStrategySec />
-          <BoardEngineSec result={primary} />
-          <FilesSec />
+          {viewOnly && (
+            <div data-testid="view-only-banner" style={{
+              position: "sticky", top: 0, zIndex: 20,
+              display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+              padding: "10px 16px", background: "#f59e0b18",
+              borderBottom: "1px solid #f59e0b66", color: "var(--spot-text)",
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#f59e0b",
+                textTransform: "uppercase", letterSpacing: ".08em" }}>View only</span>
+              <span style={{ fontSize: 13, flex: 1, minWidth: 180 }}>
+                This quote is owned by <b>{viewOnlyOwner}</b>. Take it over or make a copy to edit.
+              </span>
+              <button data-testid="view-only-takeover" onClick={takeOverActive}
+                className="sp-btn sp-btn-sm">Take Over</button>
+              <button data-testid="view-only-copy" onClick={copyActive}
+                className="sp-btn sp-btn-sm sp-btn-green">Copy to my drafts</button>
+            </div>
+          )}
+          <div data-testid="quote-sections" style={viewOnly ? {
+            pointerEvents: "none", opacity: 0.55, userSelect: "none",
+          } : undefined} aria-disabled={viewOnly || undefined}>
+            <EstimateInfoSec />
+            <BomSec />
+            <ItemSetupSec result={primary} />
+            <ProductionSpecsSec result={primary} />
+            <QuoteTableSec results={results} componentPricing={componentPricing} jobTotals={jobTotals} meta={meta} />
+            <PricingStrategySec />
+            <BoardEngineSec result={primary} />
+            <FilesSec />
+          </div>
         </div>
 
         <div

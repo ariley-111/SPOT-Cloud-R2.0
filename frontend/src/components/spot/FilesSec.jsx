@@ -287,6 +287,9 @@ export default function FilesSec() {
                     try {
                       await deleteParserFile(sf.id);
                       setSavedFiles((cur) => cur.filter((x) => x.id !== sf.id));
+                      // Invalidate any cached parse so the "Review Build" modal
+                      // can't show data extracted from a file that's now gone.
+                      setParseResult(null); setParserError(""); setReviewOpen(false);
                       pushToast("File deleted", "ok");
                     } catch (err) {
                       pushToast(err?.response?.data?.detail || err.message, "err");

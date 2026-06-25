@@ -17,6 +17,7 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const { user, logout } = useAuth();
   const { active, pushToast, convertToMultiPart, convertToSimple, setField } = useQuote();
   const s = active?.state || {};
+  const viewOnly = !!s.viewOnly;
   const isMP = s.quoteType === "Multi-Part";
   const itemCount = (s.bomItems || []).length;
   const [saving, setSaving] = React.useState(false);
@@ -174,11 +175,11 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
           <span style={{ width: 8, height: 8, borderRadius: 8, background: statusDot,
             position: "absolute", left: 9, pointerEvents: "none" }} />
           <select data-testid="toolbar-status" value={currentStatus}
-            onChange={(e) => onStatusChange(e.target.value)} disabled={statusSaving}
-            title={quoteId ? "Quote status — saved instantly" : "Quote status — saved when you Save"}
+            onChange={(e) => onStatusChange(e.target.value)} disabled={statusSaving || viewOnly}
+            title={viewOnly ? "View only — Take Over to change status" : (quoteId ? "Quote status — saved instantly" : "Quote status — saved when you Save")}
             style={{ ...outline, paddingLeft: 22, fontWeight: 700, textTransform: "uppercase",
-              letterSpacing: ".04em", fontSize: 10, cursor: statusSaving ? "wait" : "pointer",
-              appearance: "auto" }}>
+              letterSpacing: ".04em", fontSize: 10, cursor: (statusSaving || viewOnly) ? "not-allowed" : "pointer",
+              opacity: viewOnly ? 0.5 : 1, appearance: "auto" }}>
             <option value="draft">Draft</option>
             <option value="saved">Saved</option>
             <option value="sent">Sent</option>
@@ -188,8 +189,9 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
           </select>
         </div>
 
-        <button data-testid="toolbar-save" onClick={onSave} disabled={saving}
-          className="sp-tb-primary" style={{ ...primary, opacity: saving ? 0.65 : 1, cursor: saving ? "wait" : "pointer" }}>
+        <button data-testid="toolbar-save" onClick={onSave} disabled={saving || viewOnly}
+          className="sp-tb-primary" title={viewOnly ? "View only — Take Over or Copy to save" : "Save quote"}
+          style={{ ...primary, opacity: (saving || viewOnly) ? 0.5 : 1, cursor: viewOnly ? "not-allowed" : saving ? "wait" : "pointer" }}>
           <SaveIcon size={15} strokeWidth={2.2} />{saving ? "Saving…" : "Save"}
         </button>
       </div>

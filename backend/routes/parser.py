@@ -591,7 +591,7 @@ async def _prepare_content(
             try:
                 from utils.email_extract import extract_email_file
                 raw = await f.read()
-                ext = extract_email_file(f.filename, raw)
+                ext = extract_email_file(f.filename, raw, recursive=True)
                 # Append email body as a text block (subject + from + body)
                 body_chunks = []
                 if ext.get("subject"): body_chunks.append(f"SUBJECT: {ext['subject']}")
