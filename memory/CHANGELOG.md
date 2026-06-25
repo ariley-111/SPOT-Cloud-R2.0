@@ -2,6 +2,19 @@
 
 Append-only log of shipped features and fixes.
 
+### 2026-06-25 — Crest CAD-control gating + "Placeholder" rate badges ✅
+- **Gate CAD controls on Crest route:** in `ProductionSpecsSec.jsx`, the CAD "Difficulty" (Simple/Std/Complex)
+  + "CAD Price" + "Rule In/Pc" inputs are now hidden when the route is Crest (they only drive CAD, never
+  Crest). Crest shows its own Std/Adv complexity control. Verified: route→Crest hides difficulty tiles (3→0)
+  + cadPrice, shows crest control.
+- **"⚠ Placeholder" badges in Admin → Rates:** `AdminPage.jsx` RateRow flags every `crest*`/`bobst*` rate key
+  (excludes the `bobstFirstSizing` behavior toggle) with an amber "Placeholder — not yet calibrated to
+  actual/iQuote costs" badge. Verified 12 rate keys badged (crestRate, bobstRate, crestSpeedVal, bobstSpeed,
+  crestAdvSpeedFactor, crestSetupStd/Adv, bobstSetup, crestMinChg, bobstMinChg, crestDieCost, bobstDieCost).
+  Context: Crest/Bobst defaults are legacy spot_r1_5.jsx placeholders, not derived from iQuote — all
+  admin-editable, and rate-freeze keeps historical quotes unaffected when recalibrated.
+
+
 ### 2026-06-25 — Admin delete Saved Quotes + Crest/Difficulty investigation ✅
 - **Admin delete saved quotes (NEW):** `DELETE /api/quotes/{id}` — ADMIN ONLY (`role=="admin"`), hard-deletes
   the quote, purges attached RFQ files via `purge_quote_files`, and writes an audit entry. Frontend: red

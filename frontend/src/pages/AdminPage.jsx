@@ -287,10 +287,27 @@ function RateRow({ r, onSave, onReset, category }) {
 
   const isDirty = String(val) !== String(r.value);
   const isOverride = r.is_override;
+  // Crest + Bobst rates are legacy placeholder defaults, not yet calibrated to
+  // actual / iQuote costs. Flag them so estimators don't trust them blindly.
+  const isUncalibrated = /^(crest|bobst)/i.test(r.key) && r.key !== "bobstFirstSizing";
 
   return (
     <tr style={{ borderBottom: "1px solid var(--spot-line)" }} data-testid={`admin-row-${category}-${r.key}`}>
-      <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text2)" }}>{r.key}</td>
+      <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: "var(--spot-text2)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {r.key}
+          {isUncalibrated && (
+            <span data-testid={`admin-placeholder-${r.key}`}
+              title="Placeholder default — not yet calibrated to actual / iQuote costs"
+              style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
+                background: "#f59e0b1f", color: "#f59e0b", border: "1px solid #f59e0b66",
+                textTransform: "uppercase", letterSpacing: ".03em", fontFamily: "system-ui, sans-serif",
+                whiteSpace: "nowrap" }}>
+              ⚠ Placeholder
+            </span>
+          )}
+        </span>
+      </td>
       <td style={{ ...td, textAlign: "right" }}>
         <input value={val} onChange={(e) => { setVal(e.target.value); setEditing(true); }}
           data-testid={`admin-input-${category}-${r.key}`}
