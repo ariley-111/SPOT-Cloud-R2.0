@@ -28,11 +28,29 @@ PARSER_KEEP_MIME = {
     "application/vnd.ms-excel",  # .xls
     "text/csv", "text/tab-separated-values", "text/plain",
     "application/rtf", "text/rtf",
+    # Nested emails (forwarded RFQ chains) — kept so they can be recursively
+    # expanded; the wrapper is dropped after expansion (see extract_email_file).
+    "message/rfc822", "application/vnd.ms-outlook",
 }
 PARSER_KEEP_EXT = {
     ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif",
     ".docx", ".doc", ".xlsx", ".xls", ".csv", ".tsv", ".txt", ".rtf",
+    # Nested email files (see above).
+    ".eml", ".msg",
 }
+
+# Email file extensions — used to detect nested emails for recursive expansion.
+EMAIL_EXT = {".eml", ".msg"}
+EMAIL_MIME = {"message/rfc822", "application/vnd.ms-outlook"}
+# Cap recursion so a maliciously / accidentally deep mail chain can't loop.
+MAX_EMAIL_DEPTH = 6
+
+
+def _is_email_attachment(filename: str, mime: str) -> bool:
+    if (mime or "").lower() in EMAIL_MIME:
+        return True
+    name_lower = (filename or "").lower()
+    return any(name_lower.endswith(ext) for ext in EMAIL_EXT)
 
 
 def _is_parser_attachment(filename: str, mime: str) -> bool:
