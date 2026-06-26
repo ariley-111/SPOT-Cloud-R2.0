@@ -2,6 +2,19 @@
 
 Append-only log of shipped features and fixes.
 
+### BACKLOG (lowest priority) — Calibration / back-test harness as admin tool
+- Rebuild legacy `fleet_compare.js` as an in-app admin tool: upload a production-actuals export
+  (ERP transaction-table hours + costs), map rows to engine inputs, and report SPOT-vs-actual deltas
+  per cost bucket (material/ink/press/cut/strip/glue) and per complexity tier, with r²/median-delta
+  so rates can be re-fit against actuals (the method the original dev used on the 785-job dataset).
+- Calibration source of truth = ERP production actuals (NOT iQuote costing, NOT ERP work_center_rate
+  standard rates). Route $/hr rates (incaRate 485, cadRate 138, crestRate 45…) are FIT PARAMETERS
+  coupled with assumed speeds to reproduce actual cost — do NOT replace them 1:1 with ERP work-center rates.
+- User to provide refreshed exports: Crest (cutting-cost rows re-pointed to Crest WC), Hand Stripping
+  and Hand Gluing separated by work-center id.
+- Status: DEFERRED — lowest priority per user (2026-06-25).
+
+
 ### 2026-06-25 — Difficulty Calibration page (consolidated) + Strip/Glue calibratable ✅
 - **Strip & Glue complexity now calibratable:** added override categories `strip_complexity` (min/sheet)
   and `glue_complexity` (min/joint) to `rate_overrides.py` (CATEGORIES/_LIVE/coercers), `active_strip_defaults()`
