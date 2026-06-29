@@ -1,6 +1,7 @@
 /* eslint-disable */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { previewPdfBlob, calculateAll, calculateMultiPart } from "../../api/spot";
+import EmailQuoteModal from "./EmailQuoteModal";
 import { useQuote } from "../../context/QuoteContext";
 import { buildPayload, buildMpPayload } from "../../hooks/useEngine";
 import { fmtInt, fmtMoney, fmtNum, fmtDim } from "../../lib/format";
@@ -33,6 +34,7 @@ export default function PreviewPdfModal({ onClose }) {
   const [err, setErr] = useState("");
   const [chargeMode, setChargeMode] = useState("By Type");
   const [exporting, setExporting] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
   const bodyRef = useRef(null);
 
   useEffect(() => {
@@ -129,6 +131,15 @@ export default function PreviewPdfModal({ onClose }) {
     } finally { setExporting(false); }
   };
 
+  // PDF payload shared by Export + Email (same shape the backend expects)
+  const pdfPayload = useMemo(() => ({
+    quote: { est_num: s.estNum, customer_name: s.custName, state: s },
+    results: previewRows,
+    chargeMode,
+    componentPricing,
+    jobTotals: jobTotalsState,
+  }), [s, previewRows, chargeMode, componentPricing, jobTotalsState]);
+
   // Print only the quote body (uses an isolated iframe to avoid printing the surrounding app chrome)
   const onPrint = () => {
     if (!bodyRef.current) return;
@@ -178,6 +189,11 @@ export default function PreviewPdfModal({ onClose }) {
                 background: "#2563eb", color: "#fff", marginLeft: 8, opacity: exporting || busy ? 0.6 : 1 }}>
               {exporting ? "Exporting…" : "Export"}
             </button>
+            <button onClick={() => setEmailOpen(true)} disabled={busy}
+              data-testid="preview-pdf-email"
+              style={{ all: "unset", cursor: busy ? "wait" : "pointer", fontSize: 11, fontWeight: 600,
+                padding: "4px 12px", borderRadius: 4, background: "#0ea5e9", color: "#fff",
+                marginLeft: 4, opacity: busy ? 0.6 : 1 }}>✉ Email</button>
             <button onClick={onPrint} disabled={busy}
               data-testid="preview-pdf-print"
               style={{ all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600,
@@ -374,6 +390,15 @@ export default function PreviewPdfModal({ onClose }) {
           )}
         </div>
       </div>
+
+      {emailOpen && (
+        <EmailQuoteModal
+          state={s}
+          pdfPayload={pdfPayload}
+          pushToast={pushToast}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
     </div>
   );
 }

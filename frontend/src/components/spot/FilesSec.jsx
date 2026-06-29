@@ -482,6 +482,14 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
   const apply = () => {
     // Build a Simple-style patch from the top-level parsed fields
     const patch = {};
+    // Capture the RFQ sender email (external contact) for the Email Quote To: default.
+    const rfqEmail = (() => {
+      for (const f of (result.files || [])) {
+        const m = String(f.from || "").match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+        if (m && !/@standardprinting\.com$/i.test(m[0])) return m[0];
+      }
+      return "";
+    })();
     const has = (k) => picks[k] && p[k] !== null && p[k] !== undefined && p[k] !== "";
 
     // Collect inline ask-correction edits into job / per-item maps.
@@ -601,6 +609,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
       // Job-scope inline ask corrections override everything above (last word).
       Object.entries(jobEdits).forEach(([k, v]) => applyJobEditTo(next, k, v));
 
+      if (rfqEmail) next.rfqContactEmail = rfqEmail;
       onApplyMultiPart(next);
       return;
     }
@@ -608,6 +617,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     // Job-scope inline ask corrections override the picked top-level fields.
     Object.entries(jobEdits).forEach(([k, v]) => applyJobEditTo(patch, k, v));
 
+    if (rfqEmail) patch.rfqContactEmail = rfqEmail;
     onApplySimple(patch);
   };
 

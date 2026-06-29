@@ -325,3 +325,11 @@ export const previewPdfBlob = (quote, results, opts = {}) =>
   api
     .post("/pdf/preview-quote", { quote, results, ...opts }, { responseType: "blob" })
     .then((r) => r.data);
+
+// ─── Email Quote (Microsoft Graph 365) ──────────────────
+export const emailStatus = () =>
+  api.get("/email/status").then((r) => r.data);
+export const sendQuoteEmail = ({ to, cc, subject, bodyHtml, pdf }) =>
+  api.post("/email/send-quote",
+    { to, cc, subject, body_html: bodyHtml, pdf }).then((r) => r.data);
+

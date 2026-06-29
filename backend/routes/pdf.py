@@ -764,22 +764,27 @@ table{{page-break-inside:avoid}}
 </body></html>"""
 
 
-@router.post("/preview-quote")
-async def preview_quote(
-    body: Dict[str, Any] = Body(...),
-    _u: User = Depends(get_current_user),
-):
+def build_quote_pdf(body: Dict[str, Any]) -> tuple[bytes, str]:
+    """Render the customer quote PDF from a request body. Shared by preview + email."""
     from weasyprint import HTML  # lazy import
     quote = body.get("quote", {})
     results = body.get("results", [])
     charge_mode = body.get("chargeMode") or "By Type"
-    # MP-Individual: per-component sections render in place of the aggregate pricing table.
     component_pricing = body.get("componentPricing") or []
     job_totals = body.get("jobTotals") or {}
     html = _customer_pdf_html(quote, results, charge_mode,
                               component_pricing=component_pricing, job_totals=job_totals)
     pdf_bytes = HTML(string=html).write_pdf()
     est_num = quote.get("est_num") or quote.get("state", {}).get("estNum") or "draft"
+    return pdf_bytes, est_num
+
+
+@router.post("/preview-quote")
+async def preview_quote(
+    body: Dict[str, Any] = Body(...),
+    _u: User = Depends(get_current_user),
+):
+    pdf_bytes, est_num = build_quote_pdf(body)
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",

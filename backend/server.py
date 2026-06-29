@@ -19,6 +19,7 @@ from routes import quotes as quotes_routes
 from routes import freight as freight_routes
 from routes import parser as parser_routes
 from routes import pdf as pdf_routes
+from routes import email as email_routes
 from routes import admin_rates as admin_rates_routes
 from routes import admin_integrations as admin_integrations_routes
 from routes import admin_sheets as admin_sheets_routes
@@ -55,6 +56,7 @@ app.include_router(quotes_routes.audit_router)
 app.include_router(freight_routes.router)
 app.include_router(parser_routes.router)
 app.include_router(pdf_routes.router)
+app.include_router(email_routes.router)
 app.include_router(admin_rates_routes.router)
 app.include_router(admin_integrations_routes.router)
 app.include_router(admin_sheets_routes.router)

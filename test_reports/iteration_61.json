@@ -1,0 +1,61 @@
+{
+  "summary": "Tested Email Quote (Microsoft Graph 365) feature end-to-end. Backend gating works correctly (status returns configured=false, send-quote returns 503 not 500). Frontend Email Quote modal renders from Preview toolbar with all required testids, prefills subject/body with est#+customer, shows the 'not enabled yet' banner, and disables the Send button. All 5 backend tests and all frontend assertions PASSED.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "backend_pytest": {
+      "file": "/app/backend/tests/test_email_quote.py",
+      "results": "5/5 PASSED",
+      "cases": [
+        "TestEmailStatus.test_status_requires_auth — GET /api/email/status without token → 401/403",
+        "TestEmailStatus.test_status_configured_false_when_sender_unset — returns {configured: false, sender: null}",
+        "TestSendQuote.test_send_requires_auth — POST without token → 401/403",
+        "TestSendQuote.test_send_returns_503_when_not_configured — returns 503 with helpful detail (NOT 500)",
+        "TestSendQuote.test_send_validation_error_shape — missing fields → 422"
+      ]
+    },
+    "frontend_playwright": {
+      "results": "ALL PASSED",
+      "verified": [
+        "Login with admin@standardprinting.com works",
+        "toolbar-preview opens Preview modal; calculation completes",
+        "preview-pdf-email button visible in toolbar (next to Export/Print)",
+        "Clicking ✉ Email opens modal-email-quote",
+        "email-quote-to, email-quote-cc, email-quote-subject, email-quote-body all present and editable",
+        "Subject contains estNum (#RA-260615-082017) AND customer name (Jamestown Container Corp.)",
+        "Body contains quote # + customer + 'valid for 30 days' verbiage",
+        "email-quote-status banner shows: '⚠ Email sending isn't enabled yet — IT must grant Microsoft Graph Mail.Send consent...'",
+        "email-quote-send button is DISABLED (visually gray, disabled attr set)",
+        "Force-clicking Send does not close modal or trigger any API call",
+        "email-quote-cancel closes modal",
+        "email-quote-close-btn (×) closes modal",
+        "To field is editable (typed external_contact@customer.com successfully)"
+      ]
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_email_quote.py",
+    "/app/test_reports/pytest/email_quote_it61.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "graph._creds() is called directly from routes/email.py (`graph._creds().get('mail_sender')`) — underscore-prefixed function is a private helper; consider exposing a public accessor like graph.mail_sender() for cleaner API boundary. Non-blocking.",
+    "EmailQuoteModal: when emailStatus() rejects (e.g. 401 on token expiry), the catch falls back to {configured: false} which correctly disables Send — good defensive default.",
+    "Subject template generates '... — Standard Printing Company' even when project is empty (project replacement is a no-op). Cosmetic only; output still valid.",
+    "send-quote endpoint correctly returns 503 (not 500) when GRAPH_MAIL_SENDER unset; auth is enforced via Depends(get_current_user)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_email_quote.py (new)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used pre-existing quote RA-260615-082017 (Jamestown Container Corp.) already present in the admin's tabs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Email Quote feature is intentionally gated until IT grants Mail.Send consent and sets GRAPH_MAIL_SENDER. When that env var is configured, re-test (a) /api/email/status → configured=true with sender populated, (b) /api/email/send-quote with valid payload → 200 {status:'sent'}, (c) frontend Send button becomes enabled and banner switches to the 'Sending from <sender>' style. Existing test file /app/backend/tests/test_email_quote.py can be extended with those positive-path cases.",
+  "rca of the issue": "N/A — no defects found. Feature behaves exactly as designed for the not-yet-configured state."
+}

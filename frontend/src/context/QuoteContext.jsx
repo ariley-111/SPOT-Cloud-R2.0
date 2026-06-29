@@ -22,7 +22,7 @@ const ACTIVE_KEY = "spot_active_tab";
 const FROZEN_EXCLUDE = new Set([
   // identity / metadata
   "estNum", "estNumAuto", "estInitials", "custName", "custCode", "customerRecord",
-  "custRef", "custIdent", "quoteStatus", "quoteId", "pricingVersionId",
+  "custRef", "custIdent", "quoteStatus", "quoteId", "pricingVersionId", "rfqContactEmail",
   "pricingVersionLabel", "pricingIsCurrent", "spinOffOrigin", "label",
   // quote-header / address metadata
   "notes", "quoteNotes", "coverLetterNote", "quotePayment", "quoteFOB",

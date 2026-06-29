@@ -608,6 +608,7 @@ async def _prepare_content(
                         "content": att["bytes"],
                     })
                 file_summary.append({"name": f.filename, "type": "email",
+                                     "from": ext.get("from") or "",
                                      "attachments": len(ext.get("attachments", [])),
                                      "body_chars": len(ext.get("body") or "")})
             except Exception as e:
