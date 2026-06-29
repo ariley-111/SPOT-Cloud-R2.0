@@ -66,11 +66,27 @@ def _acquire_token() -> str:
 async def send_mail(to: list[str], cc: list[str], subject: str, body_html: str,
                     attachment_name: Optional[str] = None,
                     attachment_bytes: Optional[bytes] = None) -> None:
-    """Send mail app-only from GRAPH_MAIL_SENDER. PDF attached inline (<3MB)."""
+    """Send mail app-only from GRAPH_MAIL_SENDER. PDF attached inline (<3MB).
+
+    SAFE-TEST MODE: if EMAIL_TEST_RECIPIENT is set, ALL mail is redirected to
+    that single address (real To/CC ignored), the subject is tagged [TEST], and
+    the intended recipients are noted at the top of the body. This guarantees no
+    real customer is emailed while validating the live Graph send. Unset the
+    env var to go fully live.
+    """
     import base64
     c = _creds()
     if not c["mail_sender"]:
         raise RuntimeError("GRAPH_MAIL_SENDER not configured")
+
+    test_recipient = os.environ.get("EMAIL_TEST_RECIPIENT", "").strip()
+    if test_recipient:
+        intended = f"<b>[TEST MODE]</b> Intended To: {', '.join(to) or '—'} · CC: {', '.join(cc) or '—'}<br/><hr/>"
+        body_html = intended + body_html
+        subject = f"[TEST] {subject}"
+        to = [test_recipient]
+        cc = []
+
     token = _acquire_token()
     message: dict = {
         "subject": subject,
