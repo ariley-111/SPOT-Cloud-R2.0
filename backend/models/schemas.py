@@ -66,9 +66,17 @@ class Customer(BaseModel):
     po_required: Optional[str] = None
     on_credit_hold: Optional[str] = None
     credit_limit: Optional[str] = None
-    csr: Optional[str] = None            # Customer service rep / CAM (email CC)
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None              # customer contact (email To: default)
+    terms_code: Optional[str] = None
+    sales_tax_code: Optional[str] = None
+    active: Optional[str] = None
+    csr: Optional[str] = None                # Customer service rep / CAM (email CC)
+    csr_id: Optional[str] = None
     csr_email: Optional[str] = None
-    salesperson: Optional[str] = None    # Assigned salesperson (email CC)
+    salesperson: Optional[str] = None        # Assigned salesperson (email CC)
+    salesperson_id: Optional[str] = None
     salesperson_email: Optional[str] = None
 
 

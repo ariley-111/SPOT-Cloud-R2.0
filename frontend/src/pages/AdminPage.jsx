@@ -15,6 +15,7 @@ import {
   adminPricingVersions, adminPricingGetVersion, adminPricingImport,
   adminPricingActivate, adminPricingDeleteDraft,
   listQuoteAudit,
+  getCustomerSyncStatus,
 } from "../api/spot";
 
 const TAB_LABELS = {
@@ -30,13 +31,14 @@ const TAB_LABELS = {
   difficulty:   "Difficulty Calibration",
   board_pricing:"Board Pricing",
   sheets:       "Sheet Library",
+  customers:    "Customers",
   integrations: "Integrations",
   usage:        "Usage",
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
 const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "difficulty", "board_pricing",
-                   "sheets", "integrations", "usage", "audit", "calibration"];
+                   "sheets", "customers", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
   const { user } = useAuth();
@@ -177,6 +179,7 @@ export default function AdminPage({ onClose }) {
               />
             )}
             {tab === "sheets" && <SheetLibraryPanel />}
+            {tab === "customers" && <CustomerSyncPanel />}
             {tab === "board_pricing" && <BoardPricingPanel flash={flash} />}
             {tab === "integrations" && <IntegrationsPanel />}
             {tab === "usage" && <UsagePanel />}
@@ -1246,6 +1249,89 @@ function ModalShell({ title, children, onClose, testid }) {
     </div>
   );
 }
+
+// ─── Customer Sync panel (Ignition nightly push) ────────────────────────
+function CustomerSyncPanel() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState("");
+
+  const reload = React.useCallback(async () => {
+    setLoading(true); setErr("");
+    try { setData(await getCustomerSyncStatus()); }
+    catch (e) { setErr(e?.response?.data?.detail || e.message); }
+    finally { setLoading(false); }
+  }, []);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const ls = data?.last_sync;
+  const when = ls?.ts ? new Date(ls.ts) : null;
+  const ago = when ? Math.round((Date.now() - when.getTime()) / 36e5) : null;
+  const stale = ago != null && ago > 30;  // >30h since last push → warn
+
+  return (
+    <div data-testid="customer-sync-panel">
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--spot-text)", marginBottom: 4 }}>
+        Customer Sync (Ignition)
+      </div>
+      <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 16 }}>
+        Customers are pushed nightly from Ignition via a secured API key. SPOT does a
+        full refresh on each push (autopopulate, freight ZIP, and email CC all read this list).
+      </div>
+
+      {loading && <div style={{ color: "var(--spot-text3)" }}>Loading sync status…</div>}
+      {err && <div style={{ color: "#dc2626", fontSize: 12 }} data-testid="customer-sync-error">{err}</div>}
+
+      {!loading && !err && (
+        <>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+            <div data-testid="customer-sync-count" style={{
+              padding: "14px 18px", borderRadius: 8, background: "var(--spot-bg3)",
+              border: "1px solid var(--spot-border)", minWidth: 160,
+            }}>
+              <div style={{ fontSize: 11, color: "var(--spot-text3)", textTransform: "uppercase",
+                letterSpacing: ".06em", fontWeight: 700 }}>Customers Loaded</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: "var(--spot-text)", marginTop: 4 }}>
+                {(data.total ?? 0).toLocaleString()}
+              </div>
+            </div>
+            <div data-testid="customer-sync-last" style={{
+              padding: "14px 18px", borderRadius: 8,
+              background: stale ? "#fffbeb" : "var(--spot-bg3)",
+              border: `1px solid ${stale ? "#fde68a" : "var(--spot-border)"}`, minWidth: 220,
+            }}>
+              <div style={{ fontSize: 11, color: "var(--spot-text3)", textTransform: "uppercase",
+                letterSpacing: ".06em", fontWeight: 700 }}>Last Push</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: stale ? "#92400e" : "var(--spot-text)", marginTop: 6 }}>
+                {when ? when.toLocaleString() : "— never —"}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 2 }}>
+                {ls ? `${ls.rows} rows · source: ${ls.source}${ago != null ? ` · ${ago}h ago` : ""}` : "Awaiting first Ignition push"}
+                {stale && " ⚠ stale"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6 }}>
+            Ignition push endpoint
+          </div>
+          <div style={{ fontSize: 11, color: "var(--spot-text3)", lineHeight: 1.7,
+            background: "var(--spot-bg3)", border: "1px solid var(--spot-border)",
+            borderRadius: 6, padding: "10px 14px", fontFamily: "monospace" }}>
+            <div><b>POST</b> {window.location.origin}/api/customers/sync</div>
+            <div>Authorization: Bearer &lt;IGNITION_SYNC_KEY&gt;</div>
+            <div>Content-Type: application/json — body: JSON array of customer objects</div>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 8 }}>
+            Empty or keyless payloads are rejected, so a failed nightly job never wipes the live list.
+            Contact your admin to rotate the sync key.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 
 // ─── Integrations panel (Anthropic, UTS) ────────────────────────────────
 function IntegrationsPanel() {

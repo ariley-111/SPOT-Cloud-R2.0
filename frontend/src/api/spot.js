@@ -19,6 +19,9 @@ export const searchCustomers = (q, limit = 20) =>
 export const getCustomer = (code) =>
   api.get(`/customers/${encodeURIComponent(code)}`).then((r) => r.data);
 
+export const getCustomerSyncStatus = () =>
+  api.get("/customers/sync/status").then((r) => r.data);
+
 // ─── Engine ─────────────────────────────────────────────
 export const calculateSlot = (payload, slotIndex = 0) =>
   api

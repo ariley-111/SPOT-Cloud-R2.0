@@ -27,24 +27,44 @@ async def _load_csv_rows(rows: List[dict], source: str = "csv") -> int:
     """
     docs = []
     for r in rows:
-        code = (r.get("cust_code") or r.get("code") or "").strip()
+        code = str(r.get("cust_code") or r.get("code") or "").strip()
         if not code:
             continue
+
+        def _s(*keys):
+            for k in keys:
+                v = r.get(k)
+                if v not in (None, ""):
+                    return str(v).strip()
+            return None
+
+        a2 = _s("address_2", "address2")
+        a3 = _s("address_3", "address3")
         docs.append({
             "code": code,
-            "name": (r.get("cust_name") or r.get("name") or "").strip(),
-            "address_1": (r.get("address_1") or r.get("address1") or r.get("street") or "").strip() or None,
-            "address_2": (r.get("address_2") or r.get("address2") or "").strip() or None,
-            "city": (r.get("city") or "").strip() or None,
-            "state": (r.get("state") or "").strip() or None,
-            "zip": (r.get("zip") or "").strip() or None,
-            "po_required": (r.get("po_required") or "").strip() or None,
-            "on_credit_hold": (r.get("oncredithold") or r.get("on_credit_hold") or "").strip() or None,
-            "credit_limit": (r.get("credit_limit") or "").strip() or None,
-            "csr": (r.get("csr") or r.get("cam") or r.get("customer_service_rep") or "").strip() or None,
-            "csr_email": (r.get("csr_email") or r.get("cam_email") or "").strip() or None,
-            "salesperson": (r.get("salesperson") or r.get("sales_person") or r.get("sales") or "").strip() or None,
-            "salesperson_email": (r.get("salesperson_email") or r.get("sales_email") or "").strip() or None,
+            "name": _s("cust_name", "name") or "",
+            "address_1": _s("address_1", "address1", "street"),
+            "address_2": (", ".join([x for x in (a2, a3) if x]) or None),
+            "city": _s("city"),
+            "state": _s("state"),
+            "zip": _s("zip"),
+            "country": _s("country"),
+            "phone": _s("phone"),
+            "email": _s("e_mail_address", "email"),          # customer contact → email To: default
+            "po_required": _s("po_required"),
+            "on_credit_hold": _s("oncredithold", "on_credit_hold"),
+            "credit_limit": _s("credit_limit"),
+            "terms_code": _s("terms_code"),
+            "sales_tax_code": _s("sales_tax_code"),
+            "active": _s("active"),
+            # CSR (customer service rep / CAM) — email CC
+            "csr": _s("csr_name", "csr", "cam", "customer_service_rep"),
+            "csr_id": _s("csr_id"),
+            "csr_email": _s("csr_email_address", "csr_email", "cam_email"),
+            # Salesperson — email CC (House accounts often have none)
+            "salesperson": _s("sales_agent_name", "salesperson", "sales_person", "sales"),
+            "salesperson_id": _s("sales_agent_id"),
+            "salesperson_email": _s("sales_agent_email_address", "salesperson_email", "sales_email"),
         })
     if not docs:
         return 0
