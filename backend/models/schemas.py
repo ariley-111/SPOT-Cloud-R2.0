@@ -66,6 +66,10 @@ class Customer(BaseModel):
     po_required: Optional[str] = None
     on_credit_hold: Optional[str] = None
     credit_limit: Optional[str] = None
+    csr: Optional[str] = None            # Customer service rep / CAM (email CC)
+    csr_email: Optional[str] = None
+    salesperson: Optional[str] = None    # Assigned salesperson (email CC)
+    salesperson_email: Optional[str] = None
 
 
 # ─── QUOTE / DRAFT ────────────────────────────────────────────────────────

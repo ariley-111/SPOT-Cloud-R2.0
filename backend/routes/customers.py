@@ -37,6 +37,10 @@ async def _load_csv_rows(rows: List[dict]) -> int:
             "po_required": (r.get("po_required") or "").strip() or None,
             "on_credit_hold": (r.get("oncredithold") or r.get("on_credit_hold") or "").strip() or None,
             "credit_limit": (r.get("credit_limit") or "").strip() or None,
+            "csr": (r.get("csr") or r.get("cam") or r.get("customer_service_rep") or "").strip() or None,
+            "csr_email": (r.get("csr_email") or r.get("cam_email") or "").strip() or None,
+            "salesperson": (r.get("salesperson") or r.get("sales_person") or r.get("sales") or "").strip() or None,
+            "salesperson_email": (r.get("salesperson_email") or r.get("sales_email") or "").strip() or None,
         })
     if docs:
         await db[COL_CUSTOMERS].insert_many(docs)
