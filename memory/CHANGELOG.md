@@ -2,6 +2,47 @@
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-29 — Ignition customer sync, customer browser, board-pricing baseline diff fix
+
+### Customer master sync via Ignition nightly push (replaces SharePoint plan)
+- New `POST /api/customers/sync` — machine-to-machine, secured by long-lived bearer key
+  `IGNITION_SYNC_KEY` (env). Accepts a JSON array of customer objects; full-refresh replace.
+  Rejects empty/keyless payloads so a failed nightly job never wipes the live list.
+  Reads the key via integrations layer (UI-rotatable) with env fallback. Tested: 401/400/ok.
+- Field mapping locked to real Ignition schema: cust_code, cust_name, address_1/2/3, city,
+  state, zip, country, phone, e_mail_address→email, oncredithold, credit_limit, terms_code,
+  sales_tax_code, active, csr_id/csr_name→csr, csr_email_address→csr_email,
+  sales_agent_id/name→salesperson, sales_agent_email_address→salesperson_email.
+- Customer model (schemas.py) extended with csr/csr_email/salesperson/salesperson_email/email/
+  terms_code/sales_tax_code/active/country/phone/ids.
+- `GET /api/customers/sync/status` — total + last_sync {rows, source, ts}.
+- Admin → new **Customers** tab: sync-status cards (count, last push, staleness warn) +
+  searchable **customer browser** table (code/name/location/CSR/salesperson).
+- Ignition registered as a proper integration; push endpoint + rotatable key shown under
+  Admin → **Integrations** tab (provider 'ignition'). Verified by testing agent (iteration_59).
+- NOTE: bundled seed CSV (384 customers, source='bundled', no CSR/salesperson) remains until the
+  first real Ignition push replaces it with live data incl. CSR/salesperson for email CC.
+
+### Bug fix — Board Pricing baseline version showed bogus Old price / delta
+- `GET /api/admin/pricing/versions/{id}`: the original/baseline version (is_baseline=true,
+  '2025-04-14') was wrongly diffed against the CURRENT ACTIVE version (new pricing shown as "Old").
+  Fixed: baseline → diff=null/compared_to=null (Old + Δ blank); archived/active versions diff
+  against the version they REPLACED (next-older non-draft), not the active version.
+  Frontend already renders the baseline message when diff is null. Verified (iteration_60, 3/3 + UI).
+- Tidied a pre-existing React whitespace-in-`<colgroup>` console warning (AdminPage.jsx CategoryPanel).
+
+### Calibration analysis (Crest/Strip/Glue) — decisions captured, NO code changes yet (user holding)
+- Crest (clean 2-yr data, 187 runs): real run speed ~150 sh/hr median (keep crestSpeed=150;
+  iQuote's 225 is optimistic p75). Setup median 112 min / p75 171 / new-die 128 / repeat 90
+  (current placeholder 45 too low). crestRate $191/hr = ERP booked rate (confirmed from cost data).
+  iQuote builds setup per-operation (cut+score+perf, 1hr each = 3hr) + 225sph + ~$200/hr.
+  Decisions APPROVED by user: REMOVE Crest Std/Advanced complexity toggle; retire crestAdvSpeedFactor
+  (0.80, no data support); replace with New/Repeat die driver. RATE CHANGES ON HOLD pending estimator
+  regroup. crestSpeed stays 150.
+- Stripping (per-sheet) & Gluing (per-joint): validated against real booked costs — SPOT's tier
+  VALUES are fine (bracket reality); the lever is complexity SELECTION, not the rates. No changes.
+
+
 ### BACKLOG (lowest priority) — Calibration / back-test harness as admin tool
 - Rebuild legacy `fleet_compare.js` as an in-app admin tool: upload a production-actuals export
   (ERP transaction-table hours + costs), map rows to engine inputs, and report SPOT-vs-actual deltas

@@ -247,11 +247,11 @@ function CategoryPanel({ category, rows, meta, onSave, onReset, onResetAll }) {
             textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{g.label}</div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "32%" }} />     {/* Key */}
-              <col style={{ width: "20%" }} />     {/* Current value */}
-              <col style={{ width: "16%" }} />     {/* Baseline */}
-              <col style={{ width: "12%" }} />     {/* Status */}
-              <col style={{ width: "20%" }} />     {/* Actions */}
+              <col style={{ width: "32%" }} />
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "20%" }} />
             </colgroup>
             <thead><tr style={{ borderBottom: "1px solid var(--spot-border)", color: "var(--spot-text3)" }}>
               <th style={th}>Key</th>
