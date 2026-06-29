@@ -182,6 +182,7 @@ async def create_quote(body: QuoteCreate, user: User = Depends(get_current_user)
         state=body.state, status=body.status, test_mode=body.test_mode,
         pricing_version_id=pinned,
         rate_snapshot=effective_snapshot(),
+        sent_at=_now() if body.status == "sent" else None,
     )
     await db[COL_QUOTES].insert_one(quote.model_dump())
     return quote
@@ -210,6 +211,12 @@ async def update_quote(quote_id: str, body: QuoteCreate, user: User = Depends(ge
         "customer_name": body.customer_name,
         "test_mode": body.test_mode,
     }
+    # Stamp sent_at the first time a quote becomes "sent" (emailed). Preserve any
+    # existing sent_at so re-saves don't reset the original send time.
+    if body.status == "sent":
+        existing = await db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0, "sent_at": 1})
+        if not (existing or {}).get("sent_at"):
+            update["sent_at"] = _now()
     result = await db[COL_QUOTES].find_one_and_update(
         {"id": quote_id, "owner_id": user.id}, {"$set": update},
         return_document=True, projection={"_id": 0},
@@ -288,14 +295,13 @@ class StatusUpdateRequest(BaseModel):
     status: str  # draft | saved | sent | won | lost | hold
 
 
-_VALID_STATUSES = {"draft", "saved", "sent", "won", "lost", "hold"}
+_VALID_STATUSES = {"draft", "saved", "sent"}
 
 
 @quotes_router.patch("/{quote_id}/status", response_model=Quote)
 async def update_quote_status(quote_id: str, body: StatusUpdateRequest,
                               user: User = Depends(get_current_user)) -> Quote:
-    """Quick status change — anyone on the team can update status (won/lost are
-    common multi-person updates, e.g. a sales rep marking a quote 'won')."""
+    """Quick status change — anyone on the team can update status."""
     if body.status not in _VALID_STATUSES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Invalid status. Must be one of: {sorted(_VALID_STATUSES)}")
@@ -303,8 +309,11 @@ async def update_quote_status(quote_id: str, body: StatusUpdateRequest,
     if not doc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
     prev = doc.get("status", "draft")
+    set_fields = {"status": body.status, "updated_at": _now()}
+    if body.status == "sent" and not doc.get("sent_at"):
+        set_fields["sent_at"] = _now()
     result = await db[COL_QUOTES].find_one_and_update(
-        {"id": quote_id}, {"$set": {"status": body.status, "updated_at": _now()}},
+        {"id": quote_id}, {"$set": set_fields},
         return_document=True, projection={"_id": 0},
     )
     if prev != body.status:

@@ -1,6 +1,7 @@
 /* eslint-disable */
 import React, { useEffect, useMemo, useState } from "react";
-import { emailStatus, sendQuoteEmail, previewPdfBlob } from "../../api/spot";
+import { emailStatus, sendQuoteEmail, previewPdfBlob, createQuote, updateQuote } from "../../api/spot";
+import { useQuote } from "../../context/QuoteContext";
 
 /**
  * Email Quote — compose & send the customer quote PDF via Microsoft Graph 365.
@@ -9,6 +10,7 @@ import { emailStatus, sendQuoteEmail, previewPdfBlob } from "../../api/spot";
  * customer master email. CC: customer CSR + Salesperson (from synced record).
  */
 export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast }) {
+  const { setField } = useQuote();
   const s = state || {};
   const rec = s.customerRecord || {};
   const estNum = s.estNum || "draft";
@@ -82,7 +84,20 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
         to: toList, cc: parseList(cc), subject,
         bodyHtml, pdf: pdfPayload,
       });
-      pushToast(`Quote emailed to ${r.to.join(", ")}`, "ok");
+      // Auto-save the quote as "Sent" once it's been emailed successfully.
+      try {
+        const body = {
+          est_num: s.estNum || `DRAFT-${Date.now()}`,
+          label: s.custRef || s.itemDesc || s.custName || "Untitled",
+          state: { ...s, quoteStatus: "sent" }, status: "sent",
+          customer_code: s.custCode || null, customer_name: s.custName || null,
+        };
+        const saved = s.quoteId ? await updateQuote(s.quoteId, body) : await createQuote(body);
+        setField("quoteId", saved.id);
+        setField("quoteStatus", "sent");
+        if (saved.pricing_version_id) setField("pricingVersionId", saved.pricing_version_id);
+      } catch (_) { /* email sent; save is best-effort */ }
+      pushToast(`Quote emailed to ${r.to.join(", ")} · saved as Sent`, "ok");
       onClose();
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message || "Send failed";

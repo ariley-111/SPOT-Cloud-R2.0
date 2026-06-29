@@ -121,7 +121,7 @@ class Quote(BaseModel):
     customer_code: Optional[str] = None
     customer_name: Optional[str] = None
     schema_version: int = 3
-    status: str = "draft"  # draft | sent | won | lost | hold
+    status: str = "draft"  # draft | saved | sent
     state: Dict[str, Any] = Field(default_factory=dict)
     results: Optional[List[Dict[str, Any]]] = None
     test_mode: bool = False
@@ -133,6 +133,7 @@ class Quote(BaseModel):
     rate_snapshot: Optional[Dict[str, Any]] = None
     created_at: str = Field(default_factory=_utc_now)
     updated_at: str = Field(default_factory=_utc_now)
+    sent_at: Optional[str] = None  # set when status first becomes "sent" (emailed)
 
 
 class QuoteCreate(BaseModel):

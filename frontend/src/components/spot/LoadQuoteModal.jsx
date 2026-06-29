@@ -7,7 +7,7 @@ import {
 } from "../../api/spot";
 import { useQuote } from "../../context/QuoteContext";
 import { useAuth } from "../../context/AuthContext";
-import { Paperclip, AlertTriangle, Trash2 } from "lucide-react";
+import { Paperclip, AlertTriangle, Trash2, Pencil, Save, CheckCircle2 } from "lucide-react";
 
 // ─── Owner color dots — stable hash → tint ─────────────────────────────
 const OWNER_TINTS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#3b82f6","#84cc16"];
@@ -20,21 +20,39 @@ function ownerTint(id) {
 
 // ─── Status pill ───────────────────────────────────────────────────────
 const STATUS_STYLE = {
-  draft:  { bg: "#6b728022", fg: "#9ca3af", lbl: "Draft" },
-  saved:  { bg: "#3b82f622", fg: "#3b82f6", lbl: "Saved" },
-  sent:   { bg: "#f59e0b22", fg: "#f59e0b", lbl: "Sent" },
-  won:    { bg: "#22c55e22", fg: "#22c55e", lbl: "Won ✓" },
-  lost:   { bg: "#ef444422", fg: "#ef4444", lbl: "Lost" },
-  hold:   { bg: "#a855f722", fg: "#a855f7", lbl: "Hold" },
+  draft: { bg: "#6b728022", fg: "#9ca3af", lbl: "Draft", Icon: Pencil },
+  saved: { bg: "#f59e0b22", fg: "#d97706", lbl: "Saved", Icon: Save },
+  sent:  { bg: "#22c55e22", fg: "#16a34a", lbl: "Sent", Icon: CheckCircle2 },
 };
 function StatusPill({ status }) {
   const s = STATUS_STYLE[status] || STATUS_STYLE.draft;
+  const Icon = s.Icon;
   return (
     <span style={{
       fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10,
       background: s.bg, color: s.fg, textTransform: "uppercase", letterSpacing: ".04em",
-    }}>{s.lbl}</span>
+      display: "inline-flex", alignItems: "center", gap: 4,
+    }}><Icon size={11} strokeWidth={2.5} />{s.lbl}</span>
   );
+}
+
+// ─── Date/time + duration helpers ──────────────────────────────────────
+function fmtDT(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString([], { month: "numeric", day: "numeric", year: "2-digit",
+    hour: "numeric", minute: "2-digit" });
+}
+function fmtDur(a, b) {
+  if (!a || !b) return null;
+  const ms = new Date(b) - new Date(a);
+  if (isNaN(ms) || ms < 0) return null;
+  const mins = Math.round(ms / 60000);
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 // ─── Take Over confirm modal ───────────────────────────────────────────
@@ -223,7 +241,7 @@ export default function LoadQuoteModal({ onClose }) {
   };
 
   return (
-    <Modal title="Load Quote / Draft" onClose={onClose} width={920} data-testid="modal-load-quote">
+    <Modal title="Load Quote / Draft" onClose={onClose} width={1080} data-testid="modal-load-quote">
       {/* Top controls row */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 4 }}>
@@ -284,7 +302,7 @@ export default function LoadQuoteModal({ onClose }) {
           {/* Header row */}
           {tab === "saved" && (
             <div style={{
-              display: "grid", gridTemplateColumns: "1.3fr 1.5fr 1.1fr 0.85fr 1.05fr 0.75fr 210px",
+              display: "grid", gridTemplateColumns: "1fr 1.3fr 0.85fr 1fr 1fr 1fr 0.95fr 200px",
               gap: 8, padding: "6px 10px", borderBottom: "2px solid var(--spot-line)",
               fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
               textTransform: "uppercase", letterSpacing: ".06em",
@@ -292,6 +310,7 @@ export default function LoadQuoteModal({ onClose }) {
               <div>Est #</div>
               <div>Customer</div>
               <div>Owner</div>
+              <div>Created</div>
               <div>Updated</div>
               <div>Pricing Version</div>
               <div>Status</div>
@@ -304,16 +323,16 @@ export default function LoadQuoteModal({ onClose }) {
             return tab === "saved" ? (
               <div key={it.id} data-testid={`load-row-${it.id}`}
                 style={{
-                  display: "grid", gridTemplateColumns: "1.3fr 1.5fr 1.1fr 0.85fr 1.05fr 0.75fr 210px",
+                  display: "grid", gridTemplateColumns: "1fr 1.3fr 0.85fr 1fr 1fr 1fr 0.95fr 200px",
                   gap: 8, padding: "8px 10px",
                   borderBottom: "1px solid var(--spot-line)", alignItems: "center",
                   background: "transparent", transition: "background .12s",
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--spot-bg3)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                <div style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 13,
-                  display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 11,
+                  display: "flex", alignItems: "center", gap: 5, minWidth: 0, flexWrap: "wrap" }}>
+                  <span style={{ wordBreak: "break-all" }} title={it.est_num || ""}>
                     {it.est_num || "(no est#)"}
                   </span>
                   {it.file_count > 0 && (
@@ -328,7 +347,8 @@ export default function LoadQuoteModal({ onClose }) {
                   )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--spot-text2)", overflow: "hidden",
-                  textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={it.customer_name || (it.state || {}).custName || ""}>
                   {it.customer_name || (it.state || {}).custName || "—"}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, minWidth: 0 }}>
@@ -338,8 +358,11 @@ export default function LoadQuoteModal({ onClose }) {
                     {isMine ? "You" : (it.owner_name || it.owner_id)}
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--spot-text3)" }}>
-                  {it.updated_at ? new Date(it.updated_at).toLocaleDateString() : ""}
+                <div style={{ fontSize: 11, color: "var(--spot-text3)", whiteSpace: "nowrap" }}>
+                  {fmtDT(it.created_at)}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--spot-text3)", whiteSpace: "nowrap" }}>
+                  {fmtDT(it.updated_at)}
                 </div>
                 <div>
                   {it.pricing_version_label ? (
@@ -360,7 +383,16 @@ export default function LoadQuoteModal({ onClose }) {
                     <span style={{ fontSize: 11, color: "var(--spot-text3)" }}>—</span>
                   )}
                 </div>
-                <div><StatusPill status={it.status} /></div>
+                <div>
+                  <StatusPill status={it.status} />
+                  {it.status === "sent" && fmtDur(it.created_at, it.sent_at) && (
+                    <div data-testid={`load-time-to-send-${it.id}`}
+                      style={{ fontSize: 9, color: "var(--spot-text3)", marginTop: 3 }}
+                      title={`Created ${fmtDT(it.created_at)} → Sent ${fmtDT(it.sent_at)}`}>
+                      {fmtDur(it.created_at, it.sent_at)} to send
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                   <button className="sp-btn sp-btn-sm" onClick={() => openInPlace(it)}
                     data-testid={`load-action-open-${it.id}`}>

@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 63 — Verified Draft/Saved/Sent-only quote status workflow + new Load Quote modal layout. All 6 backend pytest tests passed and all 7 frontend Playwright assertions passed.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_quote_status_it63.py",
+    "/app/test_reports/pytest/quote_status_it63.xml"
+  ],
+  "tests_executed": {
+    "backend": [
+      "PATCH /api/quotes/{id}/status rejects won/lost/hold/foo → 400",
+      "PATCH /api/quotes/{id}/status accepts draft/saved/sent → 200",
+      "PATCH status=sent stamps sent_at; preserved on saved→sent re-transition",
+      "POST /api/quotes status=sent returns non-null sent_at + created_at",
+      "GET /api/quotes returns created_at and sent_at on rows",
+      "PUT /api/quotes/{id} preserves existing sent_at"
+    ],
+    "frontend": [
+      "Toolbar status dropdown lists EXACTLY: draft, saved, sent (no won/lost/hold)",
+      "Load Quote modal Saved-tab header shows: Est #, Customer, Owner, Created, Updated, Pricing Version, Status, Actions",
+      "Sent quote shows data-testid='load-time-to-send-{id}' sublabel (e.g. '0m to send')",
+      "StatusPill icons: Pencil (draft, grey rgb(156,163,175)), Save (saved, amber rgb(217,119,6)), CheckCircle (sent, green rgb(22,163,74))",
+      "Created and Updated cells show date + time (e.g. '6/29/26, 7:09 PM')",
+      "Est # cell uses 11px font (smaller) and shows full estimate number (no ellipsis truncation)",
+      "Toolbar status dot color updates: saved → rgb(245,158,11) amber, sent → rgb(16,185,129) green"
+    ]
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StatusUpdateRequest comment in routes/quotes.py still says 'draft | saved | sent | won | lost | hold' (line 295) although _VALID_STATUSES correctly drops won/lost/hold. Stale comment — cosmetic.",
+    "list_quotes docstring (line 142) still mentions 'status (draft/saved/sent/won/lost)' — stale; update to reflect the new 3-state set."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_quote_status_it63.py (new)"
+  ],
+  "success_rate": { "backend": "100% (6/6)", "frontend": "100% (7/7)" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created 3 test quotes (TEST_UI_DRAFT/SAVED/SENT) for Load modal verification — all cleaned up post-test via DELETE /api/quotes/{id}. Pytest tests use their own TEST_IT63_* quotes with module-scope teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Draft/Saved/Sent-only changes pass backend and frontend tests. EmailQuoteModal live-send-auto-save-as-Sent cannot be tested in preview (Entra creds are placeholders) — only verified the UI/status pieces. Seed data is cleaned up; no leftover TEST_ quotes.",
+  "rca of the issue": "N/A — no failures."
+}

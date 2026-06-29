@@ -42,8 +42,7 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
     } finally { setStatusSaving(false); }
   };
   const statusDot = {
-    draft: "#9CA3AF", saved: "#3B82F6", sent: "#F59E0B",
-    won: "#10B981", lost: "#EF4444", hold: "#8B5CF6",
+    draft: "#9CA3AF", saved: "#F59E0B", sent: "#10B981",
   }[currentStatus] || "#9CA3AF";
 
   const onToggleMP = () => {
@@ -183,9 +182,6 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
             <option value="draft">Draft</option>
             <option value="saved">Saved</option>
             <option value="sent">Sent</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
-            <option value="hold">Hold</option>
           </select>
         </div>
 
