@@ -1,0 +1,30 @@
+{
+  "summary": "Verified the baseline-pricing-diff bug fix end-to-end. Backend regression suite (3/3 passing) confirms GET /api/admin/pricing/versions/{baseline_id} returns diff=null and compared_to=null for the is_baseline=true '2025-04-14' version, while the active '2026-06-15' version still diffs against the version it replaced (compared_to == '2025-04-14', 172 cells changed, Uniform +6.5%). Frontend Playwright run confirms the Admin Console → Board Pricing tab renders no Old/New/Δ% table or 'cells changed' summary on the baseline (shows the 'Baseline version — the in-code rates all quotes started on.' message), and the active version still renders the full diff table referencing 'vs 2025-04-14'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin Console (any tab)", "issues": ["React hydration warning logged in console: whitespace text node inside <colgroup> at /pages/AdminPage.jsx:249 (CategoryPanel table). Pre-existing, unrelated to this fix, but worth tidying — replace whitespace between <col/> tags with no whitespace."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_baseline_diff.py",
+    "/app/test_reports/pytest/baseline_diff.xml"
+  ],
+  "action_items": [
+    "(optional) Clean up the <colgroup> whitespace in AdminPage.jsx CategoryPanel (~line 249) to silence the React hydration warning — independent of this bug fix."
+  ],
+  "critical_code_review_comments": [
+    "admin_pricing.py get_version() now correctly distinguishes draft (vs active), baseline (no comparison) and other versions (vs the version they replaced) — logic reads cleanly and matches the spec.",
+    "list_versions ordering assumption ('newest-first') is implicit; consider an explicit sort key inside the comparison-baseline picker for safety if future migrations reorder the collection."
+  ],
+  "updated_files": ["/app/backend/tests/test_baseline_diff.py"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (2/2 scenarios)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used the two pre-seeded versions (2026-06-15 active, 2025-04-14 baseline).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_baseline_diff.py is the regression guard for the pricing-version comparison-baseline logic. If anyone changes admin_pricing.get_version() or the seeded versions, rerun this file. Versions are listed newest-first; baseline must always be the original 2025-04-14 version with is_baseline=true.",
+  "rca of the issue": "Before the fix, get_version() always set the comparison baseline to the active version regardless of which version was being viewed. For the baseline (original) version this meant the system would compute Old = current active price, New = baseline price, producing a misleading negative Δ% on the original. Fix: branch on the version being inspected — draft → diff vs active; is_baseline=true → no diff at all (no prior version exists); any other → diff vs the next-older non-draft version (its own change history). UI then naturally falls into the existing 'Baseline version — the in-code rates...' branch for the baseline because diff is null."
+}

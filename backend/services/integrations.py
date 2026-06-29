@@ -52,6 +52,11 @@ INTEGRATIONS: List[Dict[str, str]] = [
      "env": "ORIGIN_ZIP", "label": "Origin ZIP",
      "hint": "Standard Printing — Canton, OH",
      "type": "text"},
+    # Ignition — nightly customer-list push (machine-to-machine bearer key)
+    {"provider": "ignition", "key": "IGNITION_SYNC_KEY",
+     "env": "IGNITION_SYNC_KEY", "label": "Ignition Sync Key (Bearer)",
+     "hint": "Long-lived key Ignition sends as 'Authorization: Bearer <key>'. Rotatable.",
+     "type": "secret"},
 ]
 
 # Provider metadata for the UI status pills
@@ -62,6 +67,8 @@ PROVIDER_META = {
                   "required_keys": ["UTS_USER", "UTS_KEY"]},
     "shipping":  {"label": "Shipping",      "color": "#94a3b8",
                   "required_keys": []},  # Info only
+    "ignition":  {"label": "Ignition Customer Sync", "color": "#f97316",
+                  "required_keys": ["IGNITION_SYNC_KEY"]},
 }
 
 # In-memory cache of effective values. Loaded once at startup + on every set.

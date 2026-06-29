@@ -38,13 +38,19 @@ async def get_version(version_id: str, _admin: User = Depends(require_admin)) ->
     active_id = (active or {}).get("id")
 
     # Choose a meaningful comparison baseline:
-    #  • a draft  → diff vs the ACTIVE version (what activating it would change)
-    #  • the active version → diff vs the version it REPLACED (its change history)
-    baseline = active
-    if version_id == active_id:
+    #  • a draft            → diff vs the ACTIVE version (what activating it changes)
+    #  • the original/baseline version → NO prior exists → no diff (old price + delta N/A)
+    #  • any other version (active or archived) → diff vs the version it REPLACED
+    #    (the next-older non-draft version), i.e. its own change history
+    baseline = None
+    if v.get("status") == "draft":
+        baseline = active
+    elif not v.get("is_baseline"):
         all_versions = await pv.list_versions()  # newest-first, no config
-        prev = next((x for x in all_versions
-                     if x["id"] != version_id and x.get("status") != "draft"), None)
+        older = [x for x in all_versions
+                 if x["id"] != version_id and x.get("status") != "draft"
+                 and (x.get("created_at") or "") < (v.get("created_at") or "")]
+        prev = older[0] if older else None  # most-recent version older than v
         baseline = await pv.get_version(prev["id"]) if prev else None
 
     diff = None

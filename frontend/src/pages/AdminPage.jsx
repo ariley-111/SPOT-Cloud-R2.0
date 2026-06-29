@@ -1313,19 +1313,12 @@ function CustomerSyncPanel() {
             </div>
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6 }}>
-            Ignition push endpoint
-          </div>
-          <div style={{ fontSize: 11, color: "var(--spot-text3)", lineHeight: 1.7,
+          <div style={{ fontSize: 11, color: "var(--spot-text3)",
             background: "var(--spot-bg3)", border: "1px solid var(--spot-border)",
-            borderRadius: 6, padding: "10px 14px", fontFamily: "monospace" }}>
-            <div><b>POST</b> {window.location.origin}/api/customers/sync</div>
-            <div>Authorization: Bearer &lt;IGNITION_SYNC_KEY&gt;</div>
-            <div>Content-Type: application/json — body: JSON array of customer objects</div>
-          </div>
-          <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 8 }}>
-            Empty or keyless payloads are rejected, so a failed nightly job never wipes the live list.
-            Contact your admin to rotate the sync key.
+            borderRadius: 6, padding: "10px 14px" }}>
+            The Ignition push endpoint &amp; sync key live under the{" "}
+            <b style={{ color: "var(--spot-text)" }}>Integrations</b> tab. Each push does a full
+            refresh; empty or keyless payloads are rejected so a failed nightly job never wipes the live list.
           </div>
 
           <CustomerBrowser total={data.total ?? 0} />
@@ -1499,6 +1492,37 @@ function IntegrationsPanel() {
           ))}
         </tbody>
       </table>
+
+      {/* Ignition Customer Sync — push endpoint reference */}
+      <div data-testid="ignition-endpoint-card" style={{
+        marginTop: 22, border: "1px solid #f9731655", borderRadius: 8,
+        background: "#f973160d", padding: "14px 16px",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f97316" }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)" }}>
+            Ignition Customer Sync — Push Endpoint
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 10 }}>
+          Point your Ignition nightly job at this endpoint. It POSTs the full customer list
+          (JSON array); SPOT does a full refresh. Set/rotate the bearer key in the
+          <b style={{ color: "var(--spot-text)" }}> Ignition Sync Key</b> row above.
+        </div>
+        <div style={{ fontSize: 12, color: "var(--spot-text)", lineHeight: 1.8,
+          background: "var(--spot-bg3)", border: "1px solid var(--spot-border)",
+          borderRadius: 6, padding: "10px 14px", fontFamily: "monospace", wordBreak: "break-all" }}>
+          <div><b>POST</b> {window.location.origin}/api/customers/sync</div>
+          <div>Authorization: Bearer &lt;Ignition Sync Key&gt;</div>
+          <div>Content-Type: application/json</div>
+          <div style={{ color: "var(--spot-text3)" }}>Body: JSON array of customer objects (cust_code, cust_name, csr_name, sales_agent_name, …)</div>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 8 }}>
+          Loaded customers are viewable under the <b style={{ color: "var(--spot-text)" }}>Customers</b> tab.
+          Empty or keyless payloads are rejected, so a failed push never wipes the live list.
+        </div>
+      </div>
+
 
       {toast && (
         <div data-testid="integ-toast" style={{

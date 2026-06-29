@@ -149,7 +149,14 @@ async def sync_from_ignition(
     Auth: Authorization: Bearer <IGNITION_SYNC_KEY>. Full-refresh; empty/bad
     payloads are rejected so a failed push never wipes the live list.
     """
-    expected = os.environ.get("IGNITION_SYNC_KEY", "").strip()
+    expected = ""
+    try:
+        from services import integrations as integ_svc
+        expected = (integ_svc.get_effective("IGNITION_SYNC_KEY") or "").strip()
+    except Exception:
+        expected = ""
+    if not expected:
+        expected = os.environ.get("IGNITION_SYNC_KEY", "").strip()
     if not expected:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Customer sync not configured")
     token = (authorization or "").removeprefix("Bearer ").strip()
