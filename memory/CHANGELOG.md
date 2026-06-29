@@ -2,6 +2,36 @@
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-29 (cont.) — Email Quote (Graph 365) + Draft/Saved/Sent workflow
+
+### Email Quote via Microsoft Graph 365 (from Preview Quote header)
+- New `POST /api/email/send-quote` + `GET /api/email/status`; app-only Graph send from
+  GRAPH_MAIL_SENDER (estimates@standardprinting.com), reusing existing Entra app (needs
+  admin-consented Mail.Send — IT). PDF via shared build_quote_pdf helper, attached.
+- `EMAIL_TEST_RECIPIENT` safe-test override: redirects ALL mail to one inbox, tags subject [TEST],
+  notes intended To/CC in body. (Set to ariley@ in preview .env for testing.)
+- EmailQuoteModal: To prefers RFQ-parsed external email (captured into state.rfqContactEmail at
+  parse time) over customer-master email; CC = customer CSR + Salesperson emails. Clickable 📎
+  attachment link opens the quote PDF in a new tab (reuses preview-quote).
+- Gracefully gated: status banner + disabled Send when not configured (503).
+- BUGFIX (prod gateway error on Send): offloaded blocking weasyprint render + msal token to
+  asyncio.to_thread so the single async worker isn't frozen (was causing Cloudflare 'invalid/
+  incomplete response'). Verified worker stays responsive (iteration_62). NOTE: live send only
+  works in PRODUCTION (preview has placeholder ENTRA creds) — user must redeploy to test send.
+
+### Quote status workflow → Draft / Saved / Sent only
+- Removed Won/Lost/Hold. PATCH /status validates {draft,saved,sent}. Quote.sent_at added; stamped
+  the first time status becomes 'sent' (create/update/patch), preserved on re-save.
+- Emailing a quote auto-saves it as status='sent' (EmailQuoteModal create/update on send success).
+- Status colors: Draft grey, Saved yellow (#F59E0B), Sent green (#10B981).
+
+### Load Quote/Draft modal redesign
+- Columns: Est# (smaller font, full number, keeps 📎 badge), full Customer, Owner, Created
+  (date+time), Updated (date+time), Pricing version badge, Status. Widened to 1080px.
+- StatusPill with icons: Draft=pencil/grey, Saved=save/yellow, Sent=check/green. Sent rows show
+  'Xd Yh to send' (created→sent elapsed). Verified iteration_63 (6 backend + 7 frontend pass).
+
+
 ## 2026-06-29 — Ignition customer sync, customer browser, board-pricing baseline diff fix
 
 ### Customer master sync via Ignition nightly push (replaces SharePoint plan)
