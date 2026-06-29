@@ -22,6 +22,9 @@ export const getCustomer = (code) =>
 export const getCustomerSyncStatus = () =>
   api.get("/customers/sync/status").then((r) => r.data);
 
+export const listCustomers = (limit = 1000) =>
+  api.get("/customers", { params: { limit } }).then((r) => r.data);
+
 // ─── Engine ─────────────────────────────────────────────
 export const calculateSlot = (payload, slotIndex = 0) =>
   api

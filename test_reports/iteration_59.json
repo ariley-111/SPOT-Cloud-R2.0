@@ -1,0 +1,36 @@
+{
+  "summary": "Ignition customer-sync (push + Admin Customers tab) feature — backend pytest 4/4 PASS; frontend Admin Customers tab fully functional. Bundled customer list (384) restored after testing.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin · Customers", "issues": ["Minor React console warning: 'In HTML, whitespace text nodes cannot be a child of <%s>...' — cosmetic, not blocking. Likely a stray whitespace between two table-related tags in CustomerBrowser/CustomerSyncPanel JSX."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_customer_sync.py",
+    "/app/test_reports/pytest/customer_sync_it59.xml"
+  ],
+  "action_items": [
+    "Optional: track down the small 'whitespace text node cannot be a child of <table/tbody>' React warning in AdminPage CustomerBrowser/CustomerSyncPanel — purely cosmetic."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/routes/customers.py is clean: _load_csv_rows deletes only docs without _meta sentinel (preserves sync meta), rejects empty payload BEFORE the delete, returns proper 401/400, full-refresh semantics correct.",
+    "Field mapping (cust_code→code, cust_name→name, csr_name→csr, csr_email_address→csr_email, sales_agent_name→salesperson, sales_agent_email_address→salesperson_email, oncredithold→on_credit_hold) verified end-to-end against GET /api/customers/{code}.",
+    "Static bearer key compare uses straight equality (not hmac.compare_digest); machine-to-machine static key, low risk, but could be hardened with constant-time compare.",
+    "/api/customers/sync/status correctly requires user JWT; /api/customers/sync correctly does not.",
+    "Frontend AdminPage.jsx is 1500+ lines — consider splitting CustomerSyncPanel + CustomerBrowser into their own files; outside scope of this run."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_customer_sync.py (new)"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (panel + count + last + table + search all verified)"},
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 ; Ignition Bearer: spot_ign_VBEY4wqvt4s-WfKfWFfKNHZ3ilpLb4CtJzKMcMMW3NhGs0oDTnyzGQ",
+  "seed_data_creation": "Pushed 3 TEST_IGN00x rows for sync verification; afterwards cleared 'customers' collection and restarted backend so it reloaded the bundled 384 customers. Verified /api/customers/sync/status returns total=384, source=bundled.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Customer sync (Ignition push) feature is complete and tested. Admin → Customers tab renders sync-status panel with customer-sync-panel/customer-sync-count/customer-sync-last testids and a customer-browser-table + customer-browser-search. Search filters by code, name, CSR name, salesperson name (NOT by city — that's intentional per the spec). Backend test lives at /app/backend/tests/test_customer_sync.py and is safe to re-run; it leaves the live customer list dirty (3 TEST_ rows) when it finishes — clear via 'python -c \"from pymongo import MongoClient; MongoClient(\\\"mongodb://localhost:27017\\\")[\\\"spot_preview\\\"].customers.delete_many({})\"' then 'sudo supervisorctl restart backend' to reload bundled 384.",
+  "rca of the issue": "N/A — no issues found. The first browser-automation run hit /api/auth/entra/login (500: ENTRA_TENANT_ID misconfigured 'spot-multi-user') because the script iterated buttons containing 'admin' before login. Workaround in subsequent run: login first, then click the 'AD' user avatar → 'Pricing Admin' menu item, which is the actual app entry point to AdminPage."
+}

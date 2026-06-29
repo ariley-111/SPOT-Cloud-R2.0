@@ -16,6 +16,7 @@ import {
   adminPricingActivate, adminPricingDeleteDraft,
   listQuoteAudit,
   getCustomerSyncStatus,
+  listCustomers,
 } from "../api/spot";
 
 const TAB_LABELS = {
@@ -1326,7 +1327,94 @@ function CustomerSyncPanel() {
             Empty or keyless payloads are rejected, so a failed nightly job never wipes the live list.
             Contact your admin to rotate the sync key.
           </div>
+
+          <CustomerBrowser total={data.total ?? 0} />
         </>
+      )}
+    </div>
+  );
+}
+
+// ─── Browsable / searchable customer list ───────────────────────────────
+function CustomerBrowser({ total }) {
+  const [all, setAll] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [q, setQ] = React.useState("");
+
+  React.useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try { const d = await listCustomers(5000); setAll(d.items || []); }
+      catch (e) { /* surfaced by parent */ }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    const term = q.trim().toLowerCase();
+    const rows = !term ? all : all.filter((c) =>
+      (c.code || "").toLowerCase().includes(term) ||
+      (c.name || "").toLowerCase().includes(term) ||
+      (c.csr || "").toLowerCase().includes(term) ||
+      (c.salesperson || "").toLowerCase().includes(term));
+    return rows.slice(0, 500);
+  }, [all, q]);
+
+  const th = { padding: "6px 8px", textAlign: "left", fontSize: 10, fontWeight: 700,
+    textTransform: "uppercase", letterSpacing: ".05em", color: "var(--spot-text3)",
+    position: "sticky", top: 0, background: "var(--spot-bg2)" };
+  const td = { padding: "5px 8px", fontSize: 12, color: "var(--spot-text)", borderTop: "1px solid var(--spot-border)" };
+  const dim = { ...td, color: "var(--spot-text3)" };
+
+  return (
+    <div style={{ marginTop: 26 }} data-testid="customer-browser">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)" }}>
+          Loaded Customers <span style={{ color: "var(--spot-text3)", fontWeight: 500 }}>({total.toLocaleString()})</span>
+        </div>
+        <input
+          data-testid="customer-browser-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search code, name, CSR, salesperson…"
+          style={{ width: 320, padding: "6px 10px", fontSize: 12, borderRadius: 6,
+            border: "1px solid var(--spot-border)", background: "var(--spot-bg3)", color: "var(--spot-text)" }}
+        />
+      </div>
+      {loading ? (
+        <div style={{ color: "var(--spot-text3)", fontSize: 12 }}>Loading customers…</div>
+      ) : (
+        <div style={{ maxHeight: 420, overflowY: "auto", border: "1px solid var(--spot-border)", borderRadius: 8 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }} data-testid="customer-browser-table">
+            <thead>
+              <tr>
+                <th style={th}>Code</th>
+                <th style={th}>Name</th>
+                <th style={th}>Location</th>
+                <th style={th}>CSR</th>
+                <th style={th}>Salesperson</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: "var(--spot-text3)", padding: 18 }}>
+                  No matching customers
+                </td></tr>
+              ) : filtered.map((c) => (
+                <tr key={c.code} data-testid={`customer-row-${c.code}`}>
+                  <td style={{ ...td, fontWeight: 700 }}>{c.code}</td>
+                  <td style={td}>{c.name || "—"}</td>
+                  <td style={dim}>{[c.city, c.state, c.zip].filter(Boolean).join(", ") || "—"}</td>
+                  <td style={dim}>{c.csr || <span style={{ color: "#d97706" }}>—</span>}</td>
+                  <td style={dim}>{c.salesperson || <span style={{ color: "#d97706" }}>—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!loading && q && filtered.length === 500 && (
+        <div style={{ fontSize: 11, color: "var(--spot-text3)", marginTop: 6 }}>Showing first 500 matches — refine your search.</div>
       )}
     </div>
   );
