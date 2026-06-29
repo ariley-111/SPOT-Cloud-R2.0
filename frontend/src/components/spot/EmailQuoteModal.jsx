@@ -1,6 +1,6 @@
 /* eslint-disable */
 import React, { useEffect, useMemo, useState } from "react";
-import { emailStatus, sendQuoteEmail } from "../../api/spot";
+import { emailStatus, sendQuoteEmail, previewPdfBlob } from "../../api/spot";
 
 /**
  * Email Quote — compose & send the customer quote PDF via Microsoft Graph 365.
@@ -42,6 +42,7 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
 
   const [status, setStatus] = useState(null); // {configured, sender}
   const [sending, setSending] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -53,6 +54,22 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
 
   const parseList = (str) =>
     String(str || "").split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+
+  const viewPdf = async () => {
+    setErr(""); setViewing(true);
+    const tab = window.open("", "_blank");  // open synchronously to avoid pop-up blockers
+    try {
+      const { quote, results, chargeMode, componentPricing, jobTotals } = pdfPayload || {};
+      const blob = await previewPdfBlob(quote, results, { chargeMode, componentPricing, jobTotals });
+      const url = URL.createObjectURL(blob);
+      if (tab) { tab.location = url; }
+      else { window.open(url, "_blank"); }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      if (tab) tab.close();
+      setErr("Could not open the quote PDF: " + (e?.response?.data?.detail || e.message));
+    } finally { setViewing(false); }
+  };
 
   const send = async () => {
     setErr("");
@@ -136,9 +153,16 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
               rows={9} style={{ ...inp, resize: "vertical", lineHeight: 1.5 }} />
           </div>
 
-          <div style={{ fontSize: 12, color: "#374151", display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 14 }}>📎</span> quote-{estNum}.pdf <span style={{ color: "#9ca3af" }}>(attached automatically)</span>
-          </div>
+          <button onClick={viewPdf} disabled={viewing} data-testid="email-quote-view-pdf"
+            style={{ all: "unset", cursor: viewing ? "wait" : "pointer", fontSize: 12,
+              color: "#2563eb", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}
+            title="Open the quote PDF in a new tab">
+            <span style={{ fontSize: 14 }}>📎</span>
+            <span style={{ textDecoration: "underline" }}>quote-{estNum}.pdf</span>
+            <span style={{ color: "#9ca3af", fontWeight: 400, textDecoration: "none" }}>
+              {viewing ? "(opening…)" : "(click to view · attached automatically)"}
+            </span>
+          </button>
 
           {err && <div style={{ color: "#dc2626", fontSize: 12 }} data-testid="email-quote-error">{err}</div>}
         </div>
