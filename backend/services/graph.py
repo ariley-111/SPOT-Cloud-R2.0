@@ -13,6 +13,7 @@ Config (env, set per environment like the ENTRA_* SSO vars):
   - SHAREPOINT_FILE_PATH       drive path to the customer file, e.g. /Customers/CustomerMaster.xlsx
 """
 from __future__ import annotations
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -87,7 +88,7 @@ async def send_mail(to: list[str], cc: list[str], subject: str, body_html: str,
         to = [test_recipient]
         cc = []
 
-    token = _acquire_token()
+    token = await asyncio.to_thread(_acquire_token)
     message: dict = {
         "subject": subject,
         "body": {"contentType": "HTML", "content": body_html},

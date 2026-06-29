@@ -4,6 +4,7 @@ Sender is the shared mailbox GRAPH_MAIL_SENDER (estimates@standardprinting.com).
 Requires the Entra app to have admin-consented Application permission Mail.Send.
 """
 from __future__ import annotations
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -46,7 +47,7 @@ async def send_quote(req: SendQuoteRequest, _u: User = Depends(get_current_user)
     if not to:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "At least one 'To' recipient is required")
 
-    pdf_bytes, est_num = build_quote_pdf(req.pdf)
+    pdf_bytes, est_num = await asyncio.to_thread(build_quote_pdf, req.pdf)
     try:
         await graph.send_mail(
             to=to, cc=cc, subject=req.subject, body_html=req.body_html,

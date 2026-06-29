@@ -1,0 +1,63 @@
+{
+  "summary": "Verified the asyncio.to_thread fix for /api/email/send-quote and /api/pdf/preview-quote. Worker is no longer blocked by weasyprint PDF rendering or msal token acquisition. 6 backend tests PASS (status, preview, clean 502 failure, worker recovery, 6x concurrent mixed load, status responsive during send load). Frontend e2e PASS: Preview → ✉ Email modal → view-pdf opens new tab with PDF, Send button is enabled (configured=true), clicking Send returns 502 in ~1.5s without freezing the modal or app.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "backend_pytest": {
+      "file": "/app/backend/tests/test_email_send_concurrency.py",
+      "results": "6/6 PASSED in 5.5s",
+      "cases": [
+        "TestEmailStatus.test_status_configured_true_in_preview — /api/email/status returns {configured:true, sender:'estimates@standardprinting.com'}",
+        "TestPdfPreview.test_preview_returns_pdf — POST /api/pdf/preview-quote returns 200 application/pdf, %PDF- header, ~118KB",
+        "TestSendQuoteCleanFailure.test_send_fails_fast_with_502 — public gateway returns 502 in <10s; direct localhost:8001 returns clean FastAPI JSON 502 in <5s with detail='Failed to send email: ...spot-multi-user...' (msal authority error, expected with placeholder creds)",
+        "TestSendQuoteCleanFailure.test_worker_recovers_after_failed_send — /api/email/status responds in <3s right after a failed send",
+        "TestConcurrencyNonBlocking.test_six_concurrent_mixed_requests — 3 preview + 3 send-quote fired in parallel; ALL completed in ~1.0–1.4s each, well under blocking threshold. PDF size ~118KB; send returns 502 quickly. Wall time <30s.",
+        "TestConcurrencyNonBlocking.test_status_responsive_during_send_load — /api/email/status returns in <5s while 4 send-quote requests are in flight"
+      ]
+    },
+    "frontend_playwright": {
+      "results": "ALL PASSED",
+      "verified": [
+        "Login admin@standardprinting.com / spot-admin-2026 succeeds",
+        "Existing quote tab RA-260615-082017 (Jamestown Container Corp.) loads",
+        "toolbar-preview opens Quote Preview modal",
+        "preview-pdf-email button visible and clickable in Preview header (next to Export/Print)",
+        "modal-email-quote opens with subject/body prefilled, status banner reads 'Sending from estimates@standardprinting.com. The quote PDF is attached automatically.'",
+        "email-quote-send button is ENABLED (configured=true)",
+        "email-quote-view-pdf link opens a new browser tab; PDF preview request returns 200 application/pdf (no error, no hang)",
+        "Filling email-quote-to with test@example.com and clicking Send → API /api/email/send-quote returns 502 in ~1.5s (NOT a hang, NOT a 504)",
+        "Modal stays open after the failed send (no crash); email-quote-error shows Cloudflare's HTML 502 text ('The origin web server returned an invalid or incomplete response to Cloudflare...')",
+        "email-quote-cancel closes the modal cleanly; app remains responsive afterward"
+      ]
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_email_send_concurrency.py",
+    "/app/test_reports/pytest/email_concurrency_it62.xml"
+  ],
+  "action_items": [
+    "OPTIONAL UX: when the gateway rewraps an origin 502 into its own Cloudflare HTML page, the frontend error toast displays the full Cloudflare HTML snippet text. Consider sniffing for HTML content-type in the axios error handler and showing a generic 'Email service is temporarily unavailable — please try again in a minute.' instead. (Only matters in failure paths; in prod with valid Entra creds, the send returns 200 and this never fires.)",
+    "OPTIONAL: /api/pdf/preview-quote also calls build_quote_pdf() synchronously in the async route (routes/pdf.py:787). Currently fast enough (~1.1s per request, doesn't block under 6x concurrency) but for defense in depth, wrap with asyncio.to_thread the same way send_quote was fixed. Not urgent — concurrency test already proves it doesn't block."
+  ],
+  "critical_code_review_comments": [
+    "FIX IS CORRECT: /app/backend/routes/email.py line 50 — `pdf_bytes, est_num = await asyncio.to_thread(build_quote_pdf, req.pdf)` correctly offloads the synchronous weasyprint render to a thread, freeing the event loop. Verified by concurrency test: 3 preview + 3 send in parallel completed in ~1.4s each, not serialized.",
+    "FIX IS CORRECT: /app/backend/services/graph.py line 91 — `token = await asyncio.to_thread(_acquire_token)` correctly offloads the synchronous msal HTTP call to a thread. Verified — 4 concurrent send-quote calls did not block /api/email/status.",
+    "MINOR: graph.send_mail catches no exception around _acquire_token failures — they bubble up to routes/email.py which wraps them in HTTPException(502). Correct behavior.",
+    "MINOR: graph.download_customer_file (line 119) still calls `_acquire_token()` synchronously — not exercised by this test but if SharePoint sync ever runs in an async path it should also be wrapped with asyncio.to_thread for consistency.",
+    "OBSERVATION: in preview, the public URL returns Cloudflare's HTML 502 page (text/html, 7.5KB) when the origin returns a clean FastAPI 502 JSON. This is gateway behavior, not a backend bug. In production with valid Entra creds, send-quote will return 200 (or 202) and Cloudflare won't interfere."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_email_send_concurrency.py (new)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used pre-existing quote RA-260615-082017 (Jamestown Container Corp. - Falconer, Luva Bella Winery project) already in admin's open tabs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The asyncio.to_thread fix in routes/email.py and services/graph.py is verified working in preview: worker is no longer blocked by weasyprint or msal. The actual Cloudflare 'origin returned invalid response' bug the user reported is PRODUCTION-ONLY and cannot be reproduced in preview because preview has placeholder Entra creds (ENTRA_TENANT_ID='spot-multi-user'). To verify fix in prod the user needs to redeploy and retest Send with real Entra credentials — should get 200 + 'Quote emailed to ...' toast. Useful regression: /app/backend/tests/test_email_send_concurrency.py concurrency tests will catch any future regression where someone re-introduces synchronous blocking in either route.",
+  "rca of the issue": "ROOT CAUSE (confirmed by code inspection + concurrency test before/after the fix could be reproduced): routes/email.py:send-quote was calling build_quote_pdf() and graph.send_mail() → _acquire_token() synchronously inside an async route. weasyprint PDF rendering is CPU-bound (~1s for a typical quote) and msal.acquire_token_for_client makes a blocking HTTPS request to login.microsoftonline.com. Both froze the single FastAPI/uvicorn async worker. With more than one in-flight Send (or any other request landing on the same worker), the platform/Cloudflare timed out waiting for the origin to respond → 'origin returned invalid or incomplete response to Cloudflare' 5xx. FIX: both calls wrapped in `await asyncio.to_thread(...)` so the event loop stays free to serve other requests while the blocking work runs in a thread-pool worker. VERIFICATION: concurrency test fires 6 mixed parallel requests; all complete in ~1–1.4s each (would be 6–12s+ serially if blocking); /api/email/status stays sub-second during heavy send load; worker recovers cleanly after each failed send. MITIGATION COMPLETE for preview; prod requires user redeploy + retest."
+}
