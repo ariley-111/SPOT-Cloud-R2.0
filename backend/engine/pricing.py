@@ -99,15 +99,13 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         cad_hrs = (setup_min + runtime_min) / 60
         cutter_direct = max(cad_hrs * asmp.get("cadRate", 138), asmp.get("cadMinCharge", 0))
     elif route == "Crest":
-        c_comp = prod.get("crestComplexity", "Standard")
         crest_setup = asmp.get("crestSetup", {})
-        setup_min = crest_setup.get(c_comp) or crest_setup.get("Standard") or 45
+        setup_min = (crest_setup.get("Standard") if isinstance(crest_setup, dict) else crest_setup) or 45
         crest_speed = asmp.get("crestSpeed", 150)
-        eff_speed = crest_speed * asmp.get("crestAdvSpeedFactor", 0.8) if c_comp == "Advanced" else crest_speed
-        runtime_hr = conv_sheets / eff_speed if conv_sheets > 0 and eff_speed > 0 else 0
+        runtime_hr = conv_sheets / crest_speed if conv_sheets > 0 and crest_speed > 0 else 0
         cad_hrs = setup_min / 60 + runtime_hr
         cutter_direct = max(cad_hrs * asmp.get("crestRate", 45), asmp.get("crestMinCharge", 0))
-        cutter_basis = f"Crest {c_comp}, {conv_sheets:.0f} {'blanks' if saber_on else 'sheets'}"
+        cutter_basis = f"Crest, {conv_sheets:.0f} {'blanks' if saber_on else 'sheets'}"
     elif route == "Bobst":
         setup_min = pn(asmp.get("bobstSetup")) or 45
         eff_speed = pn(asmp.get("bobstSpeed")) or 3000
