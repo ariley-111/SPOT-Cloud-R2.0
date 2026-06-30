@@ -2,6 +2,40 @@
 
 Append-only log of shipped features and fixes.
 
+## 2026-06-30 — Crest toggle removal, Load search, PDF print mode, LOQ re-submission, Sent-edit guard
+
+### Crest Std/Adv removed (P0)
+- Removed the Crest Standard/Advanced complexity toggle from the UI (`ProductionSpecsSec.jsx`)
+  and stripped its math from the engine: `evaluate_routes` now uses base `crest_speed`
+  (no `crestAdvSpeedFactor`) and always the single `crestSetup["Standard"]` value. Removed
+  `crestComplexity` plumbing from `routing.py`, `runner.py`, `engine_routes.py`, `useEngine.js`,
+  `defaults.js`. Admin Rates UI no longer shows `crestSetupAdv`/`crestAdvSpeedFactor`.
+- No rate changes — Crest setup/rate are admin-set in prod (`crestSetupStd` still feeds the
+  single setup value; existing prod overrides preserved).
+
+### Load Quote search expanded (P0)
+- `GET /api/quotes?q=` now searches est#, customer name/code, project (`state.custRef`),
+  item description (`state.itemDesc`), estimating initials (`state.estInitials`), and owner
+  name/email (via user lookup). `LoadQuoteModal` debounces the search box and filters client-side too.
+
+### PDF: print mode + sides on component summary
+- New `_print_short()` in `pdf.py` appends e.g. `Satin 1S` / `CMYK 2S` / `No Print` to the
+  single-piece spec line, the MP BOM bar, and MP-Individual per-component spec lines.
+
+### Letter-of-Quote re-submission detection
+- Parser now returns `spotQuoteNumber` (Claude-extracted, regex-fallback `AAA-YYMMDD-HHMMSS`)
+  and attaches `matchedQuote` (id/est#/status/owner/customer/pricing_is_current) when an RFQ
+  references one of our existing quotes. `FilesSec` shows `LoqMatchModal`: Open Original /
+  Duplicate as New Quote (fresh est#) / Dismiss.
+
+### Sent-quote re-open warning
+- Re-opening one's own `sent` quote from `LoadQuoteModal` shows `SentWarnConfirm`: warns it was
+  already sent (date + owner) and editing overwrites it; offers Make a Duplicate (fresh est#) or
+  Edit Original.
+
+- Verified: testing agent iteration_64 — 13/13 backend, 9/9 frontend assertions, 100%.
+
+
 ## 2026-06-29 (cont.) — Email Quote (Graph 365) + Draft/Saved/Sent workflow
 
 ### Email Quote via Microsoft Graph 365 (from Preview Quote header)

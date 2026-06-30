@@ -715,3 +715,21 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   (perf runs at 40% speed). Footnotes: difficulty still sets setup in rule mode; Product Mats
   forces setup ≥ Standard; manual sheets/hr override replaces run-time calc but setup still added.
   Goal: help NEW estimators understand the cutting math without asking. (Requested 2026-06-24.)
+
+
+### 2026-06-30 — Crest toggle removal, search, PDF print mode, LOQ, sent-edit guard ✅ (Iter 64)
+- **P0 Crest Std/Adv removed** — toggle gone from UI; engine uses base crest speed + single
+  `crestSetup["Standard"]` value (no `crestComplexity`/`crestAdvSpeedFactor`). No rate changes.
+- **P0 Load Quote search expanded** — `?q=` matches est#, customer (code/name), project (custRef),
+  item desc, estimating initials, owner name.
+- **PDF print mode + 1S/2S** added to component summary spec lines (`_print_short` in pdf.py).
+- **Letter-of-Quote re-submission** — parser returns `spotQuoteNumber` + `matchedQuote`; FilesSec
+  `LoqMatchModal` offers Open Original / Duplicate-as-new (fresh est#).
+- **Sent-quote re-open warning** — `SentWarnConfirm` in Load modal; duplicate w/ fresh est#.
+- Verified: 13/13 backend, 9/9 frontend (iteration_64), 100%.
+
+### DEFERRED (per user, "address later today")
+- **P0 Issue 1: Email Quote fails in PRODUCTION** — surface the exact MSAL/Graph error string to
+  the UI (services/graph.py raises full Graph JSON; email.py returns it in HTTPException detail)
+  so IT can pinpoint the Azure misconfig (ApplicationAccessPolicy / Mail.Send consent). NOT yet
+  done. Cannot send real mail in preview (dummy Entra creds).
