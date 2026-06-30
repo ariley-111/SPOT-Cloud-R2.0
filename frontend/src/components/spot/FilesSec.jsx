@@ -33,6 +33,7 @@ export default function FilesSec() {
   // instead of bouncing to a new browser tab. Legacy parity (R1.5+).
   const [previewFile, setPreviewFile] = useState(null);   // {id, filename} | null
   const [matchedQuote, setMatchedQuote] = useState(null);  // LOQ re-submission detected
+  const [sentConfirm, setSentConfirm] = useState(null);    // own sent quote pending open
   const inputRef = useRef(null);
   const folderName = s.estNum && s.custName ? `${s.custName}_${s.estNum}` : null;
 
@@ -159,16 +160,50 @@ export default function FilesSec() {
     try {
       const full = await getQuote(mq.id);
       const notMine = full.owner_id && full.owner_id !== currentUser?.id;
-      loadIntoTab({
-        ...(full.state || {}),
-        quoteId: full.id, quoteStatus: full.status || "draft",
-        viewOnly: notMine,
-        ownerName: notMine ? (full.owner_name || mq.owner_name || "another user") : null,
-        pricingVersionId: full.pricing_version_id || null,
-      }, {});
-      pushToast(`Opened original quote ${full.est_num}`, "ok");
+      // Re-opening your OWN already-sent estimate → warn before editing/overwriting.
+      if (!notMine && full.status === "sent") {
+        setSentConfirm(full);
+        return;
+      }
+      doOpenOriginal(full, notMine);
     } catch (e) {
       pushToast(`Couldn't open ${mq.est_num}: ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  };
+  const doOpenOriginal = (full, notMine) => {
+    loadIntoTab({
+      ...(full.state || {}),
+      quoteId: full.id, quoteStatus: full.status || "draft",
+      viewOnly: notMine,
+      ownerName: notMine ? (full.owner_name || "another user") : null,
+      pricingVersionId: full.pricing_version_id || null,
+    }, {});
+    pushToast(`Opened original quote ${full.est_num}`, "ok");
+  };
+  // Duplicate a saved quote (full doc) into a fresh tab with a brand-new est#.
+  const duplicateQuoteFresh = async (full) => {
+    try {
+      const copy = await copyQuote(full.id);
+      const initials = (s.estInitials || "SPC").toUpperCase();
+      const freshEst = generateEstNum(initials);
+      const newState = {
+        ...(copy.state || {}),
+        estNum: freshEst, estNumAuto: false,
+        quoteId: copy.id, quoteStatus: copy.status || "draft",
+        pricingVersionId: copy.pricing_version_id || null,
+        viewOnly: false, ownerName: null,
+      };
+      try {
+        await updateQuote(copy.id, {
+          est_num: freshEst, state: newState, status: copy.status || "draft",
+          customer_code: copy.customer_code || newState.custCode || null,
+          customer_name: copy.customer_name || newState.custName || null,
+        });
+      } catch (_) {}
+      loadIntoTab(newState, {});
+      pushToast(`Duplicated ${full.est_num} → new quote ${freshEst}`, "ok");
+    } catch (e) {
+      pushToast(`Duplicate failed: ${e?.response?.data?.detail || e.message}`, "err");
     }
   };
   const loqDuplicate = async () => {
@@ -419,6 +454,15 @@ export default function FilesSec() {
         />
       )}
 
+      {sentConfirm && (
+        <SentEditWarn
+          row={sentConfirm}
+          onCancel={() => setSentConfirm(null)}
+          onDuplicate={() => { const f = sentConfirm; setSentConfirm(null); duplicateQuoteFresh(f); }}
+          onEditAnyway={() => { const f = sentConfirm; setSentConfirm(null); doOpenOriginal(f, false); }}
+        />
+      )}
+
       {/* Inline file preview — legacy parity (R1.5+). Opens any allowed
           attachment (pdf/image/text/csv/docx/xlsx/email/zip) directly
           inside SPOT without bouncing to a new browser tab. */}
@@ -430,6 +474,47 @@ export default function FilesSec() {
         />
       )}
     </Sec>
+  );
+}
+
+// ─── Sent-quote edit warning (LOQ Open Original path) ─────────────────
+function SentEditWarn({ row, onCancel, onDuplicate, onEditAnyway }) {
+  if (!row) return null;
+  const fmt = (v) => {
+    if (!v) return "—";
+    const d = new Date(v);
+    return isNaN(d) ? "—" : d.toLocaleString([], { month: "numeric", day: "numeric",
+      year: "2-digit", hour: "numeric", minute: "2-digit" });
+  };
+  const when = fmt(row.sent_at || row.updated_at);
+  return (
+    <div data-testid="loq-sent-warn" onClick={onCancel}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1200,
+               display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
+                 borderRadius: 8, width: "min(480px, 96vw)", padding: 18 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, color: "#16a34a" }}>
+          Quote Already Sent
+        </div>
+        <div style={{ fontSize: 13, color: "var(--spot-text2)", lineHeight: 1.55 }}>
+          This estimate <b>{row.est_num}</b>{row.customer_name ? ` (${row.customer_name})` : ""} was
+          already sent to the customer on <b>{when}</b>. Any edits will <b>overwrite this estimate</b>
+          {" "}and the original sent version will be lost. Do you want to make a duplicate instead?
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button className="sp-btn" onClick={onCancel} data-testid="loq-sent-cancel">Cancel</button>
+          <button className="sp-btn" onClick={onEditAnyway} data-testid="loq-sent-edit"
+            style={{ background: "rgba(239,68,68,0.12)", color: "var(--spot-err)",
+                     border: "1px solid rgba(239,68,68,0.4)", fontWeight: 700 }}>
+            Edit Original (overwrite)
+          </button>
+          <button className="sp-btn sp-btn-primary" onClick={onDuplicate} data-testid="loq-sent-duplicate">
+            Make a Duplicate
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
