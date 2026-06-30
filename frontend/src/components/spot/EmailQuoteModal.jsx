@@ -39,7 +39,7 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
       `Please find attached our quote #${estNum} for ${custName}${project}. ` +
       `This quote is valid for ${validDays} days.\n\n` +
       `Please let us know if you have any questions.\n\n` +
-      `Thank you,\n${estName ? estName + " — " : ""}Standard Printing Company`
+      `Thank you,`
   );
 
   const [status, setStatus] = useState(null); // {configured, sender}
@@ -166,6 +166,11 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
             <label style={lbl}>Message</label>
             <textarea data-testid="email-quote-body" value={body} onChange={(e) => setBody(e.target.value)}
               rows={9} style={{ ...inp, resize: "vertical", lineHeight: 1.5 }} />
+            <div style={{ fontSize: 11, color: "var(--spot-text3, #888)", marginTop: 4 }}
+              data-testid="email-quote-signature-note">
+              Your signature — <b>The Estimating Team</b>, your name, and the Standard Printing
+              logo &amp; contact block — is added automatically below this message.
+            </div>
           </div>
 
           <button onClick={viewPdf} disabled={viewing} data-testid="email-quote-view-pdf"

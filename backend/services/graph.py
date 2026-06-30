@@ -66,8 +66,12 @@ def _acquire_token() -> str:
 
 async def send_mail(to: list[str], cc: list[str], subject: str, body_html: str,
                     attachment_name: Optional[str] = None,
-                    attachment_bytes: Optional[bytes] = None) -> None:
+                    attachment_bytes: Optional[bytes] = None,
+                    inline_images: Optional[list] = None) -> None:
     """Send mail app-only from GRAPH_MAIL_SENDER. PDF attached inline (<3MB).
+
+    inline_images: optional list of {name, content_type, content_bytes, content_id}
+    embedded in the HTML body via <img src="cid:content_id">.
 
     SAFE-TEST MODE: if EMAIL_TEST_RECIPIENT is set, ALL mail is redirected to
     that single address (real To/CC ignored), the subject is tagged [TEST], and
@@ -95,13 +99,25 @@ async def send_mail(to: list[str], cc: list[str], subject: str, body_html: str,
         "toRecipients": [{"emailAddress": {"address": a}} for a in to if a],
         "ccRecipients": [{"emailAddress": {"address": a}} for a in cc if a],
     }
+    attachments: list = []
     if attachment_bytes and attachment_name:
-        message["attachments"] = [{
+        attachments.append({
             "@odata.type": "#microsoft.graph.fileAttachment",
             "name": attachment_name,
             "contentType": "application/pdf",
             "contentBytes": base64.b64encode(attachment_bytes).decode("ascii"),
-        }]
+        })
+    for img in (inline_images or []):
+        attachments.append({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": img["name"],
+            "contentType": img.get("content_type", "image/png"),
+            "contentBytes": base64.b64encode(img["content_bytes"]).decode("ascii"),
+            "isInline": True,
+            "contentId": img["content_id"],
+        })
+    if attachments:
+        message["attachments"] = attachments
     url = f"{GRAPH}/users/{c['mail_sender']}/sendMail"
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(url, headers={"Authorization": f"Bearer {token}"},
