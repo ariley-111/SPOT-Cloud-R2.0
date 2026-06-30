@@ -6,6 +6,17 @@ import { useQuote } from "../../context/QuoteContext";
 import { buildPayload, buildMpPayload } from "../../hooks/useEngine";
 import { fmtInt, fmtMoney, fmtNum, fmtDim } from "../../lib/format";
 
+// Customer-facing print descriptor for spec lines: "Satin 1S" / "CMYK 2S" / "No Print".
+const printShort = (d) => {
+  if (!d) return "No Print";
+  const req = d.printReq || d.printRequired;
+  if (req !== "Yes") return "No Print";
+  const mode = d.printMode || "Print";
+  const sides = d.printSides === "2-Sided" ? " 2S" : d.printSides === "1-Sided" ? " 1S" : "";
+  return `${mode}${sides}`;
+};
+
+
 /**
  * Preview Quote modal — ported 1:1 from legacy spot_r1_5.jsx (line 7632+).
  *  - HTML-rendered modal (NOT a PDF iframe)
@@ -104,6 +115,7 @@ export default function PreviewPdfModal({ onClose }) {
   const w = Number(s.oneUpW || 0), l = Number(s.oneUpL || 0);
   if (w > 0 && l > 0) specBits.push(`${fmtDim(w)}×${fmtDim(l)}`);
   if (s.fscEnabled) specBits.push("FSC");
+  specBits.push(printShort(s));
 
   // Export to backend PDF
   const onExport = async () => {
@@ -306,6 +318,7 @@ export default function PreviewPdfModal({ onClose }) {
                           brd = `${gr}# ${fl} ${ol}/${il}`;
                           const iw = Number(ist.oneUpW || 0), il2 = Number(ist.oneUpL || 0);
                           if (iw > 0 && il2 > 0) dims = `${fmtDim(iw)}×${fmtDim(il2)}`;
+                          brd += ` · ${printShort(ist)}`;
                         } else {
                           brd = it.type === "Purchased" ? "Purchased" : "Fulfillment";
                         }
@@ -749,6 +762,7 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
           (bs.medium && bs.medium !== "None") ? String(bs.medium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "",
           (Number(bs.oneUpW) > 0 && Number(bs.oneUpL) > 0)
             ? `${fmtDim(bs.oneUpW)}×${fmtDim(bs.oneUpL)}` : "",
+          (c.type || "Manufactured") === "Manufactured" ? printShort(bs) : "",
           `${c.pcsPerSet || 1} pc/set`,
         ].filter(Boolean).join(" · ");
         const rows = (c.rows || []).filter((r) => !isExcl(c.itemId, r.slotIdx));
@@ -851,4 +865,3 @@ function PerComponentSections({ componentPricing, jobTotals, excludeMap, fmLnr }
     </div>
   );
 }
-

@@ -1,6 +1,7 @@
 /* eslint-disable */
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
+import { useAuth } from "../../context/AuthContext";
 import Sec from "./Sec";
 import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles, searchCustomers, getQuote, copyQuote, updateQuote } from "../../api/spot";
 import { fmtMoney, generateEstNum } from "../../lib/format";
@@ -10,6 +11,7 @@ import FilePreviewModal from "./FilePreviewModal";
 
 export default function FilesSec() {
   const { active, sec, toggleSec, setManyFields, replaceState, pushToast, loadIntoTab } = useQuote();
+  const { user: currentUser } = useAuth();
   const s = active?.state || {};
   // Stable file-ownership id — prefer the saved quote id (set after Save Quote)
   // so files survive save/reload, fall back to the active tab/draft id during
@@ -156,10 +158,12 @@ export default function FilesSec() {
     if (!mq) return;
     try {
       const full = await getQuote(mq.id);
+      const notMine = full.owner_id && full.owner_id !== currentUser?.id;
       loadIntoTab({
         ...(full.state || {}),
         quoteId: full.id, quoteStatus: full.status || "draft",
-        viewOnly: full.owner_id !== active?.state?.ownerId,  // informational only
+        viewOnly: notMine,
+        ownerName: notMine ? (full.owner_name || mq.owner_name || "another user") : null,
         pricingVersionId: full.pricing_version_id || null,
       }, {});
       pushToast(`Opened original quote ${full.est_num}`, "ok");

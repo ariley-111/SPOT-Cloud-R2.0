@@ -33,6 +33,17 @@ Append-only log of shipped features and fixes.
   already sent (date + owner) and editing overwrites it; offers Make a Duplicate (fresh est#) or
   Edit Original.
 
+### Follow-up fixes (same day)
+- **Print mode on the ON-SCREEN Quote Preview** — the backend export PDF already showed it, but the
+  on-screen `PreviewPdfModal` is client-rendered separately. Added `printShort()` there too, so the
+  single-piece spec line, MP BOM bar, and MP-Individual component lines now show e.g. `Satin 1S` /
+  `CMYK 2S` / `No Print`. (Verified on screen.)
+- **LOQ "owned by" blank name** — `FilesSec.loqOpenOriginal` opened the matched quote with a wrong
+  view-only comparison and no owner name. Now compares against the logged-in user's id (via useAuth)
+  and passes `ownerName` (falls back to "another user"), so the view-only banner shows the real owner.
+  When you own the quote, it opens editable with no banner.
+
+
 - Verified: testing agent iteration_64 — 13/13 backend, 9/9 frontend assertions, 100%.
 
 
