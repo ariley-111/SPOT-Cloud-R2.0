@@ -118,7 +118,8 @@ async def _run_send_job(job_id: str, req: SendQuoteRequest,
     stage = "starting"
     try:
         stage = "rendering PDF"
-        pdf_bytes, est_num = await asyncio.to_thread(build_quote_pdf, req.pdf)
+        pdf_body = {**req.pdf, "signerName": user_name}
+        pdf_bytes, est_num = await asyncio.to_thread(build_quote_pdf, pdf_body)
 
         body_html = req.body_html + _signature_html(user_name)
         inline_images = ([{

@@ -77,6 +77,18 @@ def _print_short(d: Dict[str, Any]) -> str:
     return f"{mode}{suffix}"
 
 
+def _first_name(full_name: str) -> str:
+    """First name from a directory name; handles 'First Last' and 'Last, First'
+    (e.g. 'Riley, Dean' → 'Dean')."""
+    n = (full_name or "").strip()
+    if not n:
+        return ""
+    if "," in n:
+        n = n.split(",", 1)[1].strip()
+    return n.split(" ")[0] if n else ""
+
+
+
 
 def _ship_to_addr(quote_ship_to: str, dest_zip: str) -> str:
     """Legacy line 4817/4862: strip 5-digit ZIP already in address, then append destZip."""
@@ -722,6 +734,9 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     notes_row = (f'<div style="margin-top:4px"><b>Notes:</b> {notes}</div>'
                  if notes else "")
     initials_display = "Standard Printing Estimating" if est_init == "SPC" else est_init
+    # Prefer the signed-in user's FIRST name (passed from the API) over initials.
+    signer_name = _g(quote, "signerName") or state.get("signerName")
+    signer_display = _first_name(signer_name) or initials_display
 
     terms_html = f"""
 <div style="margin-top:24px;padding-top:16px;border-top:2px solid #1e40af">
@@ -738,7 +753,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
   </div>
   <div style="margin-top:24px;font-size:12px;color:#374151">
     <div>Sincerely,</div>
-    <div style="margin-top:20px;font-weight:600">{initials_display}</div>
+    <div style="margin-top:20px;font-weight:600">{signer_display}</div>
   </div>
 </div>
 """
@@ -787,6 +802,10 @@ def build_quote_pdf(body: Dict[str, Any]) -> tuple[bytes, str]:
     """Render the customer quote PDF from a request body. Shared by preview + email."""
     from weasyprint import HTML  # lazy import
     quote = body.get("quote", {})
+    # Carry the signer's display name (set by the API from the authenticated user)
+    # into the quote so the 'Sincerely' block shows their first name, not initials.
+    if body.get("signerName"):
+        quote = {**quote, "signerName": body["signerName"]}
     results = body.get("results", [])
     charge_mode = body.get("chargeMode") or "By Type"
     component_pricing = body.get("componentPricing") or []
@@ -803,6 +822,7 @@ async def preview_quote(
     body: Dict[str, Any] = Body(...),
     _u: User = Depends(get_current_user),
 ):
+    body["signerName"] = _u.name or ""
     pdf_bytes, est_num = build_quote_pdf(body)
     return StreamingResponse(
         BytesIO(pdf_bytes),
