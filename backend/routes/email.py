@@ -35,10 +35,21 @@ _ADDR_1 = "1115 Cherry Ave NE"
 _ADDR_2 = "Canton, Ohio 44704"
 
 
+def _first_name(full_name: str) -> str:
+    """Extract the first name from a directory name, handling both
+    "First Last" and "Last, First" formats (e.g. 'Riley, Dean' → 'Dean')."""
+    n = (full_name or "").strip()
+    if not n:
+        return ""
+    if "," in n:                       # "Last, First" → take the part after the comma
+        n = n.split(",", 1)[1].strip()
+    return n.split(" ")[0] if n else ""
+
+
 def _signature_html(full_name: str) -> str:
     """Dynamic HTML signature: logo + 'The Estimating Team' + the estimator's
     first name (per logged-in user) + the company contact block."""
-    first = (full_name or "").strip().split(" ")[0] if full_name else ""
+    first = _first_name(full_name)
     name_line = f"The Estimating Team<br/>{first}" if first else "The Estimating Team"
     logo = (f'<img src="cid:splogo" alt="Standard Printing Company" height="46" '
             f'style="display:block;height:46px;width:auto;border:0;margin-bottom:10px;"/>'
