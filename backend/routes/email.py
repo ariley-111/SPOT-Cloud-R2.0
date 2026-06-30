@@ -7,12 +7,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from db import db, COL_EMAIL_JOBS
 from models.schemas import User
 from routes.auth import get_current_user
 from routes.pdf import build_quote_pdf
@@ -72,8 +75,12 @@ async def email_status(_u: User = Depends(get_current_user)) -> dict:
             "sender": graph._creds().get("mail_sender") or None}
 
 
-@router.post("/send-quote")
+@router.post("/send-quote", status_code=202)
 async def send_quote(req: SendQuoteRequest, user: User = Depends(get_current_user)) -> dict:
+    """Start an async email send. Returns a job_id immediately (HTTP 202) so the
+    request can't hit the Cloudflare/proxy gateway timeout while MSAL + Graph
+    network calls run. Poll GET /api/email/job/{job_id} for the outcome — on
+    failure the job carries the EXACT MSAL/Graph error string for diagnosis."""
     if not graph.is_mail_configured():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -84,21 +91,57 @@ async def send_quote(req: SendQuoteRequest, user: User = Depends(get_current_use
     if not to:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "At least one 'To' recipient is required")
 
-    # Append the dynamic HTML signature (logo + Estimating Team + first name).
-    body_html = req.body_html + _signature_html(user.name or "")
-    inline_images = ([{
-        "name": "spc_logo.png", "content_type": "image/png",
-        "content_bytes": _LOGO_BYTES, "content_id": "splogo",
-    }] if _LOGO_BYTES else None)
+    job_id = uuid.uuid4().hex
+    await db[COL_EMAIL_JOBS].insert_one({
+        "job_id": job_id, "status": "pending", "owner": user.email,
+        "created_at": datetime.now(timezone.utc),
+    })
+    asyncio.create_task(_run_send_job(job_id, req, to, cc, user.name or ""))
+    return {"job_id": job_id, "status": "pending"}
 
-    pdf_bytes, est_num = await asyncio.to_thread(build_quote_pdf, req.pdf)
+
+async def _run_send_job(job_id: str, req: SendQuoteRequest,
+                        to: List[str], cc: List[str], user_name: str) -> None:
+    """Background worker — renders the PDF, sends via Graph, and records the
+    outcome (incl. the full error string on failure). Never raises."""
+    stage = "starting"
     try:
+        stage = "rendering PDF"
+        pdf_bytes, est_num = await asyncio.to_thread(build_quote_pdf, req.pdf)
+
+        body_html = req.body_html + _signature_html(user_name)
+        inline_images = ([{
+            "name": "spc_logo.png", "content_type": "image/png",
+            "content_bytes": _LOGO_BYTES, "content_id": "splogo",
+        }] if _LOGO_BYTES else None)
+
+        stage = "acquiring Microsoft Graph token / sending mail"
         await graph.send_mail(
             to=to, cc=cc, subject=req.subject, body_html=body_html,
             attachment_name=f"quote-{est_num}.pdf", attachment_bytes=pdf_bytes,
             inline_images=inline_images,
         )
+        await db[COL_EMAIL_JOBS].update_one(
+            {"job_id": job_id},
+            {"$set": {"status": "done", "est_num": est_num, "to": to, "cc": cc,
+                      "finished_at": datetime.now(timezone.utc).isoformat()}},
+        )
     except Exception as e:
-        logger.exception("send-quote failed")
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to send email: {e}")
-    return {"status": "sent", "to": to, "cc": cc, "est_num": est_num}
+        logger.exception("send-quote job %s failed during %s", job_id, stage)
+        detail = f"Email failed while {stage}: {e}"
+        await db[COL_EMAIL_JOBS].update_one(
+            {"job_id": job_id},
+            {"$set": {"status": "error", "error": detail, "stage": stage,
+                      "finished_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+
+@router.get("/job/{job_id}")
+async def get_send_job(job_id: str, _u: User = Depends(get_current_user)) -> dict:
+    """Poll an async email-send job. Returns {status: pending|done|error, ...}.
+    On error, `error` carries the exact MSAL/Graph failure for IT to act on."""
+    doc = await db[COL_EMAIL_JOBS].find_one({"job_id": job_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Email job not found (may have expired)")
+    doc.pop("created_at", None)
+    return doc

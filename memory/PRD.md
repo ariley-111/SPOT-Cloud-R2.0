@@ -729,7 +729,7 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Verified: 13/13 backend, 9/9 frontend (iteration_64), 100%.
 
 ### DEFERRED (per user, "address later today")
-- **P0 Issue 1: Email Quote fails in PRODUCTION** — surface the exact MSAL/Graph error string to
-  the UI (services/graph.py raises full Graph JSON; email.py returns it in HTTPException detail)
-  so IT can pinpoint the Azure misconfig (ApplicationAccessPolicy / Mail.Send consent). NOT yet
-  done. Cannot send real mail in preview (dummy Entra creds).
+- **P0 Issue 1: Email Quote fails in PRODUCTION** — ✅ ADDRESSED 2026-06-30. Send is now async
+  (job + polling) so it no longer hits the Cloudflare 520 gateway timeout, and the exact MSAL/Graph
+  error string is surfaced in the email modal. Awaiting user's prod redeploy + retest to read the
+  real Azure error (likely tenant/secret, Mail.Send consent, or ApplicationAccessPolicy).

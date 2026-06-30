@@ -92,7 +92,13 @@ async def send_mail(to: list[str], cc: list[str], subject: str, body_html: str,
         to = [test_recipient]
         cc = []
 
-    token = await asyncio.to_thread(_acquire_token)
+    try:
+        token = await asyncio.wait_for(asyncio.to_thread(_acquire_token), timeout=35)
+    except asyncio.TimeoutError:
+        raise RuntimeError(
+            "Timed out (35s) acquiring a Microsoft Graph token from "
+            "login.microsoftonline.com — the server may be unable to reach "
+            "Microsoft, or ENTRA_TENANT_ID/CLIENT_ID/CLIENT_SECRET are wrong.")
     message: dict = {
         "subject": subject,
         "body": {"contentType": "HTML", "content": body_html},

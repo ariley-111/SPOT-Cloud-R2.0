@@ -94,12 +94,17 @@ async def on_startup():
         {"$set": {"rate_snapshot": baseline_snapshot()}})
     logger.info(f"Rate-freeze backfill: {bf.modified_count} legacy quotes pinned to baseline rates")
     # Async parse jobs — TTL index purges completed/abandoned jobs after 24h.
-    from db import db as _dbj, COL_PARSER_JOBS
+    from db import db as _dbj, COL_PARSER_JOBS, COL_EMAIL_JOBS
     try:
         await _dbj[COL_PARSER_JOBS].create_index("created_at", expireAfterSeconds=86400)
         await _dbj[COL_PARSER_JOBS].create_index("job_id", unique=True)
     except Exception as e:
         logger.warning(f"parser_jobs index create skipped: {e}")
+    try:
+        await _dbj[COL_EMAIL_JOBS].create_index("created_at", expireAfterSeconds=86400)
+        await _dbj[COL_EMAIL_JOBS].create_index("job_id", unique=True)
+    except Exception as e:
+        logger.warning(f"email_jobs index create skipped: {e}")
     # One-time admin role grants. Idempotent — only updates when role differs.
     from db import db as _db, COL_USERS
     admin_grants = ["rwalter@standardprinting.com"]

@@ -329,7 +329,40 @@ export const previewPdfBlob = (quote, results, opts = {}) =>
 // ─── Email Quote (Microsoft Graph 365) ──────────────────
 export const emailStatus = () =>
   api.get("/email/status").then((r) => r.data);
-export const sendQuoteEmail = ({ to, cc, subject, bodyHtml, pdf }) =>
-  api.post("/email/send-quote",
-    { to, cc, subject, body_html: bodyHtml, pdf }).then((r) => r.data);
+
+export const getEmailJob = (jobId) =>
+  api.get(`/email/job/${encodeURIComponent(jobId)}`).then((r) => r.data);
+
+// Submit the send as an async job, then poll until done/error. This avoids the
+// Cloudflare/proxy gateway timeout (520) on the slow MSAL+Graph network calls
+// and surfaces the EXACT failure string captured server-side.
+export const sendQuoteEmail = async ({ to, cc, subject, bodyHtml, pdf }) => {
+  const sub = await api
+    .post("/email/send-quote", { to, cc, subject, body_html: bodyHtml, pdf })
+    .then((r) => r.data);
+  const jobId = sub.job_id;
+  if (!jobId) return sub; // legacy/synchronous fallback
+  const POLL_MS = 2500;
+  const MAX_MS = 180000; // 3 min ceiling
+  const start = Date.now();
+  while (true) {
+    await new Promise((res) => setTimeout(res, POLL_MS));
+    let job;
+    try {
+      job = await getEmailJob(jobId);
+    } catch (e) {
+      if (Date.now() - start > MAX_MS) throw e;
+      continue; // transient proxy blip — keep polling
+    }
+    if (job.status === "done") return job;
+    if (job.status === "error") {
+      const err = new Error(job.error || "Email failed");
+      err.detail = job.error;
+      throw err;
+    }
+    if (Date.now() - start > MAX_MS) {
+      throw new Error("Email send timed out after 3 minutes — please check the Sent folder before retrying.");
+    }
+  }
+};
 

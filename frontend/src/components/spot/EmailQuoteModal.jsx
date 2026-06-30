@@ -100,7 +100,7 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
       pushToast(`Quote emailed to ${r.to.join(", ")} · saved as Sent`, "ok");
       onClose();
     } catch (e) {
-      const msg = e?.response?.data?.detail || e.message || "Send failed";
+      const msg = e?.detail || e?.response?.data?.detail || e.message || "Send failed";
       setErr(msg);
     } finally { setSending(false); }
   };
@@ -184,7 +184,10 @@ export default function EmailQuoteModal({ state, pdfPayload, onClose, pushToast 
             </span>
           </button>
 
-          {err && <div style={{ color: "#dc2626", fontSize: 12 }} data-testid="email-quote-error">{err}</div>}
+          {err && <div style={{ color: "#dc2626", fontSize: 12, whiteSpace: "pre-wrap",
+            wordBreak: "break-word", maxHeight: 180, overflowY: "auto",
+            background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "8px 10px" }}
+            data-testid="email-quote-error">{err}</div>}
         </div>
 
         <div style={{ padding: "12px 18px", borderTop: "1px solid #e5e7eb", display: "flex",

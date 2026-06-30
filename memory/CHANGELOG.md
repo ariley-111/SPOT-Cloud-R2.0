@@ -2,7 +2,40 @@
 
 Append-only log of shipped features and fixes.
 
-## 2026-06-30 — Crest toggle removal, Load search, PDF print mode, LOQ re-submission, Sent-edit guard
+## 2026-06-30 (cont.) — Email send: async + detailed error surfacing (P0 RESOLVED)
+
+**Root cause of the prod failure:** the send ran synchronously; the slow MSAL token + Graph
+network calls exceeded the Cloudflare/proxy gateway window → a **520 "origin returned an invalid
+response"** killed the request before the backend could return the real error. The user only ever
+saw a generic Cloudflare message.
+
+**Fix — async job + polling (mirrors the RFQ parser):**
+- `POST /api/email/send-quote` now creates an `email_jobs` record, fires the PDF render + Graph send
+  as a background task, and returns `{job_id}` immediately (HTTP 202). No more gateway timeout.
+- Background worker records the EXACT failure string (MSAL error / Graph response text) per stage
+  ("rendering PDF" vs "acquiring token / sending mail").
+- `GET /api/email/job/{job_id}` polls status (pending/done/error). Frontend `sendQuoteEmail` submits
+  then polls every 2.5s (3-min ceiling) and shows `job.error` in a scrollable red box in the modal.
+- Added a 35s hard timeout on MSAL token acquisition (`graph.py`) so a hang fails fast with a clear
+  "can't reach login.microsoftonline.com / check tenant" message instead of stalling.
+- Added `COL_EMAIL_JOBS` + TTL index (24h) in `db.py` / `server.py`.
+- Verified in preview: submit returns job_id instantly; poll surfaces the precise MSAL authority
+  error for the dummy tenant. Real Graph errors will surface identically in production.
+
+## 2026-06-30 (cont.) — Email signature (dynamic, option c)
+- Email body now closes with "Thank you," + bold **The Estimating Team** + the logged-in user's
+  **first name**, followed by an inline-embedded Standard Printing logo (Graph CID attachment) and
+  the company contact block (Office 330.453.8247 / website / address). Built in `routes/email.py`
+  `_signature_html()`; logo reused from `static_assets/spc_logo.png`. NOTE: if CodeTwo also stamps
+  the estimates@ mailbox, signatures may double up — pending user's prod test / toggle decision.
+
+## 2026-06-30 (cont.) — Parser review labels in plain English
+- `parserFieldRegistry.js`: registered Stripping/Gluing Complexity + Joints per Piece; added
+  `labelForKey()` + `humanizeFieldPath()` so the review modal shows "Customer Name", "Stripping
+  Complexity", "Component 1 · …" instead of raw `bomItems[0].state.x` code paths (asks + picked-up
+  fields list).
+
+
 
 ### Crest Std/Adv removed (P0)
 - Removed the Crest Standard/Advanced complexity toggle from the UI (`ProductionSpecsSec.jsx`)
