@@ -6,7 +6,7 @@ import Sec from "./Sec";
 import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles, searchCustomers, getQuote, copyQuote, updateQuote } from "../../api/spot";
 import { fmtMoney, generateEstNum } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
-import { parseAskField, metaFor, canonField, NUMERIC_KEYS } from "../../lib/parserFieldRegistry";
+import { parseAskField, metaFor, canonField, NUMERIC_KEYS, humanizeFieldPath, labelForKey } from "../../lib/parserFieldRegistry";
 import FilePreviewModal from "./FilePreviewModal";
 
 export default function FilesSec() {
@@ -971,8 +971,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                   if (!a.norm || !a.meta) {
                     return (
                       <div key={i} data-testid={`parse-ask-note-${i}`} style={{ fontSize: 12, color: "var(--spot-text2)" }}>
-                        {a.raw && <span style={{ fontFamily: "'JetBrains Mono', monospace",
-                          color: "var(--spot-warn)", fontWeight: 700 }}>{a.raw}</span>}
+                        {a.raw && <span style={{ fontWeight: 700, color: "var(--spot-warn)" }}>{humanizeFieldPath(a.raw)}</span>}
                         {a.raw && a.reason && " — "}{a.reason}
                       </div>
                     );
@@ -1105,7 +1104,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                         : null}</td>
                       <td style={{ padding: "4px 6px",
                         color: isNull ? "var(--spot-text3)" : "var(--spot-text2)",
-                        fontWeight: isNull ? 400 : 600 }}>{k}</td>
+                        fontWeight: isNull ? 400 : 600 }} title={k}>{labelForKey(k)}</td>
                       <td style={{ padding: "4px 6px",
                         color: isNull ? "var(--spot-warn)" : "var(--spot-text)",
                         fontStyle: isNull ? "italic" : "normal" }}>

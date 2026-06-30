@@ -5,7 +5,7 @@
 // so the Review modal can let them fix flagged fields without leaving the modal.
 import {
   BOX_STYLES, FLUTES, GRADES, LINERS, MEDIUMS,
-  PRINT_MODES, PRINT_SIDES, DIFFICULTY,
+  PRINT_MODES, PRINT_SIDES, DIFFICULTY, STRIP_COMP, GLUE_COMP,
 } from "./defaults";
 
 const YES_NO = ["Yes", "No"];
@@ -47,7 +47,10 @@ export const FIELD_META = {
   cadDifficulty:{ label: "CAD Difficulty",      section: "Production Specs",  control: "select", options: DIFFICULTY },
   totalRuleInches:{ label: "Rule Inches",       section: "Production Specs",  control: "number" },
   handStripping:{ label: "Hand Stripping",      section: "Production Specs",  control: "select", options: YES_NO },
+  strippingComplexity:{ label: "Stripping Complexity", section: "Production Specs", control: "select", options: STRIP_COMP },
   handGluing:  { label: "Hand Gluing",          section: "Production Specs",  control: "select", options: YES_NO },
+  gluingComplexity:{ label: "Gluing Complexity", section: "Production Specs",  control: "select", options: GLUE_COMP },
+  jointsPerPiece:{ label: "Joints per Piece",   section: "Production Specs",  control: "number" },
   tape:        { label: "Tape",                 section: "Production Specs",  control: "select", options: YES_NO },
   fscEnabled:  { label: "FSC / SFI Certified",  section: "Production Specs",  control: "select", options: YES_NO, bool: true },
 
@@ -76,8 +79,39 @@ export function canonField(key) {
 // Numeric fields stored as STRINGS in our state schema.
 export const NUMERIC_KEYS = new Set([
   "oneUpW", "oneUpL", "oneUpD", "colorsFront", "colorsBack",
-  "totalRuleInches", "setMarginPct", "pcsPerSet",
+  "totalRuleInches", "setMarginPct", "pcsPerSet", "jointsPerPiece",
 ]);
+
+// Humanize ANY field key into a plain-English label (best effort). Falls back
+// to splitting camelCase / snake_case and Title-casing — so even keys we don't
+// have an explicit entry for never show as raw code (e.g. "strippingComplexity"
+// → "Stripping Complexity"). A few common abbreviations are spelled out.
+const ABBR = {
+  cust: "Customer", qty: "Quantity", qtys: "Quantities", po: "PO", ref: "Reference",
+  fob: "FOB", fsc: "FSC", cad: "CAD", desc: "Description", num: "Number",
+  pcs: "Pieces", zip: "ZIP", sku: "SKU", id: "ID", w: "Width", l: "Length", d: "Depth",
+};
+export function labelForKey(key) {
+  const k = canonField(key);
+  if (FIELD_META[k]) return FIELD_META[k].label;
+  const words = String(k)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")  // camelCase → spaced
+    .replace(/[_\-.]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((w) => ABBR[w.toLowerCase()] || (w.charAt(0).toUpperCase() + w.slice(1)));
+  return words.join(" ") || k;
+}
+
+// Turn a full ask path into a friendly label, e.g.
+//   "bomItems[0].state.strippingComplexity" → "Component 1 · Stripping Complexity"
+//   "qtys (top-level)"                       → "Quantities"
+export function humanizeFieldPath(raw) {
+  const norm = parseAskField(raw);
+  if (!norm) return raw;
+  const base = labelForKey(norm.key);
+  return norm.scope === "item" ? `Component ${norm.itemIdx + 1} · ${base}` : base;
+}
 
 // Parse a raw ask field path into a normalized descriptor.
 //  "bomItems[0].state.printMode" → { scope:"item", itemIdx:0, key:"printMode" }
