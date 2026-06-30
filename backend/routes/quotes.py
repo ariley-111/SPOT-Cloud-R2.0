@@ -1,5 +1,6 @@
 """Quote drafts (the 'tabs') + saved quotes."""
 from __future__ import annotations
+import re
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
@@ -131,6 +132,7 @@ async def list_quotes(
     scope: str = Query("mine", regex="^(mine|team|all)$"),
     owner_id: Optional[str] = None,
     status_filter: Optional[str] = Query(None, alias="status"),
+    q: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List saved quotes.
 
@@ -140,6 +142,9 @@ async def list_quotes(
       • all  — alias for team (admin clarity)
     Optional `owner_id` filters to a single user (useful when team view is on).
     Optional `status` filters by current status (draft/saved/sent/won/lost).
+    Optional `q` full-text search across est#, customer (code/name), project
+      name (custRef), item description, estimating-team initials, and the
+      owner's name/email. Searches ALL matching quotes, not just the page.
     Response is a flat list with `owner_name` joined in for display.
     """
     query: Dict[str, Any] = {}
@@ -149,6 +154,21 @@ async def list_quotes(
         query["owner_id"] = owner_id
     if status_filter:
         query["status"] = status_filter
+    if q and q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        # Resolve owner ids whose name/email matches the term (first-name search).
+        name_ids = [
+            u["id"] async for u in db[COL_USERS].find(
+                {"$or": [{"name": rx}, {"email": rx}]}, {"_id": 0, "id": 1})
+        ]
+        or_clauses: List[Dict[str, Any]] = [
+            {"est_num": rx}, {"customer_name": rx}, {"customer_code": rx},
+            {"state.custName": rx}, {"state.custCode": rx},
+            {"state.custRef": rx}, {"state.itemDesc": rx}, {"state.estInitials": rx},
+        ]
+        if name_ids:
+            or_clauses.append({"owner_id": {"$in": name_ids}})
+        query["$or"] = or_clauses
     cursor = db[COL_QUOTES].find(query, {"_id": 0}).sort("updated_at", -1).limit(limit)
     docs = await cursor.to_list(length=limit)
     quotes = [Quote(**d) for d in docs]

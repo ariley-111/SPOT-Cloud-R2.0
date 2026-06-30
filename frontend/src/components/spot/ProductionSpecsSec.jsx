@@ -33,10 +33,7 @@ export default function ProductionSpecsSec({ result }) {
     ? `${s.printMode || "Print"}${sidesShort ? " " + sidesShort : ""}${s.whiteInk === "Yes" ? " +W" : ""}`
     : "No Print";
   const cadShort = s.cadDifficulty === "Standard" ? "Std" : s.cadDifficulty;
-  // When the route is Crest it carries its OWN difficulty (Std/Adv) — show that
-  // in place of the CAD difficulty.
   const isCrestRoute = route === "Crest" || ovr === "Crest";
-  const crestShort = s.crestComplexity === "Advanced" ? "Adv" : "Std";
   const perfNum = Number(s.perfPct) || 0;
   const saberPart = s.saber === "Yes"
     ? (result?.saberBlanksOutN && result?.saberBlankW
@@ -45,7 +42,7 @@ export default function ProductionSpecsSec({ result }) {
     : null;
   const preParts = [printPart, saberPart].filter(Boolean);
   const postParts = [
-    isCrestRoute ? `Crest ${crestShort}` : (s.cadDifficulty ? `Cut ${cadShort}` : null),
+    isCrestRoute ? `Crest` : (s.cadDifficulty ? `Cut ${cadShort}` : null),
     s.handStripping === "Yes" ? `Strip ${s.strippingComplexity || ""}`.trim() : null,
     s.handGluing === "Yes" ? `Glue ${s.jointsPerPiece || 1}j${s.gluingComplexity ? " " + s.gluingComplexity : ""}` : null,
     s.tape === "Yes" ? `Tape ${s.tapeType === "Reinforced" ? "Reinf" : (s.tapeType || "")}`.trim() : null,
@@ -247,14 +244,6 @@ export default function ProductionSpecsSec({ result }) {
             <Tile label="Yes" active={s.productMats === "Yes"} onClick={() => setField("productMats", "Yes")} small data-testid="tile-mats-yes" />
           </div>
         </F>
-        {(route === "Crest" || ovr === "Crest") && (
-          <F l="Crest" inline>
-            <div style={{ display: "flex", gap: 2 }}>
-              <Tile label="Std" active={s.crestComplexity === "Standard"} onClick={() => setField("crestComplexity", "Standard")} small tint="#22c55e" data-testid="tile-crest-std" />
-              <Tile label="Adv" active={s.crestComplexity === "Advanced"} onClick={() => setField("crestComplexity", "Advanced")} small tint="#22c55e" data-testid="tile-crest-adv" />
-            </div>
-          </F>
-        )}
       </div>
 
       {/* Row 3: Finishing */}

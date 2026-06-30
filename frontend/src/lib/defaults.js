@@ -70,7 +70,6 @@ export const DEFAULT_STATE = Object.freeze({
   routeOverride: null,         // null=Auto | "CAD"|"Crest"|"Bobst"
   cadDifficulty: "Standard",
   cadPricingMethod: "By Difficulty",   // By Difficulty | By Inches of Rule
-  crestComplexity: "Standard",         // Standard | Advanced
   totalRuleInches: "0",
   perfPct: "0",
   productMats: "No",

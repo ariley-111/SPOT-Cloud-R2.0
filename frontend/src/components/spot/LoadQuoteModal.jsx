@@ -3,11 +3,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import {
   listDrafts, listQuotes, listQuoteOwners,
-  takeOverQuote, copyQuote, getQuote, deleteQuote,
+  takeOverQuote, copyQuote, getQuote, deleteQuote, updateQuote,
 } from "../../api/spot";
+import { generateEstNum } from "../../lib/format";
 import { useQuote } from "../../context/QuoteContext";
 import { useAuth } from "../../context/AuthContext";
-import { Paperclip, AlertTriangle, Trash2, Pencil, Save, CheckCircle2 } from "lucide-react";
+import { Paperclip, AlertTriangle, Trash2, Pencil, Save, CheckCircle2, Send } from "lucide-react";
 
 // ─── Owner color dots — stable hash → tint ─────────────────────────────
 const OWNER_TINTS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#3b82f6","#84cc16"];
@@ -84,6 +85,52 @@ function TakeOverConfirm({ row, onCancel, onConfirm }) {
   );
 }
 
+// ─── Sent-quote edit warning ───────────────────────────────────────────
+function fmtDTLocal(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString([], { month: "numeric", day: "numeric", year: "2-digit",
+    hour: "numeric", minute: "2-digit" });
+}
+function SentWarnConfirm({ row, onCancel, onDuplicate, onEditAnyway }) {
+  if (!row) return null;
+  const when = fmtDTLocal(row.sent_at || row.updated_at);
+  const who = row.owner_name || "another user";
+  return (
+    <div data-testid="sent-warn-confirm" onClick={onCancel}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1100,
+               display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
+                 borderRadius: 8, width: "min(480px, 96vw)", padding: 18 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6,
+          display: "flex", alignItems: "center", gap: 8, color: "#16a34a" }}>
+          <CheckCircle2 size={18} /> Quote Already Sent
+        </div>
+        <div style={{ fontSize: 13, color: "var(--spot-text2)", lineHeight: 1.55 }}>
+          This estimate <b>{row.est_num}</b>{row.customer_name ? ` (${row.customer_name})` : ""} was
+          already sent to the customer on <b>{when}</b> by <b>{who}</b>.
+          <br /><br />
+          Any edits will <b>overwrite this estimate</b> and the original sent version will be lost.
+          Do you want to make a duplicate instead?
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button className="sp-btn" onClick={onCancel} data-testid="sent-warn-cancel">Cancel</button>
+          <button className="sp-btn" onClick={onEditAnyway} data-testid="sent-warn-edit"
+            style={{ background: "rgba(239,68,68,0.12)", color: "var(--spot-err)",
+                     border: "1px solid rgba(239,68,68,0.4)", fontWeight: 700 }}>
+            Edit Original (overwrite)
+          </button>
+          <button className="sp-btn sp-btn-primary" onClick={onDuplicate} data-testid="sent-warn-duplicate">
+            Make a Duplicate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main modal ────────────────────────────────────────────────────────
 export default function LoadQuoteModal({ onClose }) {
   const { loadIntoTab, pushToast, deleteDraftById, clearAllDrafts } = useQuote();
@@ -95,9 +142,17 @@ export default function LoadQuoteModal({ onClose }) {
   const [owners, setOwners] = useState([]);
   const [busy, setBusy] = useState(true);
   const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
   const [confirmRow, setConfirmRow] = useState(null);
+  const [sentRow, setSentRow] = useState(null);
 
-  // Load list whenever tab/scope/owner filter changes
+  // Debounce the search term so the backend query fires ~350ms after typing.
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q.trim()), 350);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  // Load list whenever tab/scope/owner filter / search term changes
   useEffect(() => {
     setBusy(true);
     let ignore = false;
@@ -108,6 +163,7 @@ export default function LoadQuoteModal({ onClose }) {
     } else {
       const params = { scope };
       if (ownerFilter) params.owner_id = ownerFilter;
+      if (qDebounced) params.q = qDebounced;
       promise = listQuotes(params);
     }
     // Ignore-flag guards against a stale in-flight fetch (e.g. the initial
@@ -118,7 +174,7 @@ export default function LoadQuoteModal({ onClose }) {
       .catch(() => { if (!ignore) setItems([]); })
       .finally(() => { if (!ignore) setBusy(false); });
     return () => { ignore = true; };
-  }, [tab, scope, ownerFilter]);
+  }, [tab, scope, ownerFilter, qDebounced]);
 
   // Owner dropdown options — only meaningful when in team scope
   useEffect(() => {
@@ -130,17 +186,29 @@ export default function LoadQuoteModal({ onClose }) {
   const filtered = useMemo(() => items.filter((it) => {
     if (!q.trim()) return true;
     const t = q.toLowerCase();
+    const st = it.state || {};
     return (
       (it.est_num || "").toLowerCase().includes(t) ||
       (it.label || "").toLowerCase().includes(t) ||
-      (it.customer_name || (it.state || {}).custName || "").toLowerCase().includes(t) ||
-      (it.owner_name || "").toLowerCase().includes(t)
+      (it.customer_name || st.custName || "").toLowerCase().includes(t) ||
+      (it.customer_code || st.custCode || "").toLowerCase().includes(t) ||
+      (st.custRef || "").toLowerCase().includes(t) ||             // project name
+      (st.itemDesc || "").toLowerCase().includes(t) ||            // item description
+      (st.estInitials || "").toLowerCase().includes(t) ||         // estimating team
+      (it.owner_name || "").toLowerCase().includes(t)             // owner first name
     );
   }), [items, q]);
 
   const myUserId = currentUser?.id;
 
-  const openInPlace = async (it) => {
+  const openInPlace = async (it, force = false) => {
+    // Sent-quote guard: re-opening one of YOUR OWN already-sent estimates warns
+    // before letting an edit overwrite the sent version (offers Duplicate).
+    if (tab === "saved" && (!it.owner_id || it.owner_id === myUserId)
+        && it.status === "sent" && !force) {
+      setSentRow(it);
+      return;
+    }
     // If it's a saved quote owned by someone else and we're in team view,
     // we still allow direct "View Only" load → puts their state into the active
     // tab as read-only context. (We just load state; no autosave-back to their record.)
@@ -197,6 +265,37 @@ export default function LoadQuoteModal({ onClose }) {
       onClose();
     } catch (e) {
       pushToast(`Copy failed: ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  };
+
+  // Duplicate a quote into a fresh tab WITH A BRAND-NEW estimate number (used by
+  // the sent-quote warning + LOQ re-submission flows). Re-prices at current.
+  const onDuplicateFresh = async (it) => {
+    try {
+      const copy = await copyQuote(it.id);
+      const initials = (it.state?.estInitials
+        || (currentUser?.name || "").split(/\s+/).map((w) => w[0]).join("").slice(0, 4)
+        || "SPC").toUpperCase();
+      const freshEst = generateEstNum(initials);
+      const newState = {
+        ...(copy.state || {}),
+        estNum: freshEst, estNumAuto: false,
+        quoteId: copy.id, quoteStatus: copy.status || "draft",
+        pricingVersionId: copy.pricing_version_id || null,
+        viewOnly: false, ownerName: null,
+      };
+      try {
+        await updateQuote(copy.id, {
+          est_num: freshEst, state: newState, status: copy.status || "draft",
+          customer_code: copy.customer_code || newState.custCode || null,
+          customer_name: copy.customer_name || newState.custName || null,
+        });
+      } catch (_) {}
+      loadIntoTab(newState, {});
+      pushToast(`Duplicated ${it.est_num} → new quote ${freshEst}`, "ok");
+      onClose();
+    } catch (e) {
+      pushToast(`Duplicate failed: ${e?.response?.data?.detail || e.message}`, "err");
     }
   };
 
@@ -274,7 +373,7 @@ export default function LoadQuoteModal({ onClose }) {
           </div>
         )}
 
-        <input className="sp-input" placeholder="Search est#, customer, owner…"
+        <input className="sp-input" placeholder="Search est#, customer, project, item, team, owner…"
           value={q} onChange={(e) => setQ(e.target.value)}
           data-testid="load-search-input" style={{ flex: 1, minWidth: 200 }} />
 
@@ -469,6 +568,12 @@ export default function LoadQuoteModal({ onClose }) {
           setConfirmRow(null);
           if (r) onTakeOver(r);
         }} />
+
+      <SentWarnConfirm
+        row={sentRow}
+        onCancel={() => setSentRow(null)}
+        onDuplicate={() => { const r = sentRow; setSentRow(null); if (r) onDuplicateFresh(r); }}
+        onEditAnyway={() => { const r = sentRow; setSentRow(null); if (r) openInPlace(r, true); }} />
     </Modal>
   );
 }

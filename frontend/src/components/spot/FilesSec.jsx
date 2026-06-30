@@ -2,14 +2,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuote } from "../../context/QuoteContext";
 import Sec from "./Sec";
-import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles, searchCustomers } from "../../api/spot";
-import { fmtMoney } from "../../lib/format";
+import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles, searchCustomers, getQuote, copyQuote, updateQuote } from "../../api/spot";
+import { fmtMoney, generateEstNum } from "../../lib/format";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
 import { parseAskField, metaFor, canonField, NUMERIC_KEYS } from "../../lib/parserFieldRegistry";
 import FilePreviewModal from "./FilePreviewModal";
 
 export default function FilesSec() {
-  const { active, sec, toggleSec, setManyFields, replaceState, pushToast } = useQuote();
+  const { active, sec, toggleSec, setManyFields, replaceState, pushToast, loadIntoTab } = useQuote();
   const s = active?.state || {};
   // Stable file-ownership id — prefer the saved quote id (set after Save Quote)
   // so files survive save/reload, fall back to the active tab/draft id during
@@ -30,6 +30,7 @@ export default function FilesSec() {
   // Inline preview modal — clicking the ↓ on a saved file opens it here
   // instead of bouncing to a new browser tab. Legacy parity (R1.5+).
   const [previewFile, setPreviewFile] = useState(null);   // {id, filename} | null
+  const [matchedQuote, setMatchedQuote] = useState(null);  // LOQ re-submission detected
   const inputRef = useRef(null);
   const folderName = s.estNum && s.custName ? `${s.custName}_${s.estNum}` : null;
 
@@ -124,6 +125,9 @@ export default function FilesSec() {
       });
       setParseResult(r);
       setReviewOpen(true);
+      // Letter-of-Quote re-submission: the parser recognized one of OUR quote
+      // numbers in the RFQ → surface a prompt to pull the original up + duplicate.
+      if (r.matchedQuote && r.matchedQuote.id) setMatchedQuote(r.matchedQuote);
       // Parsed files are now persisted to the quote (server-side, before the
       // Anthropic call) — they show in "Saved RFQ files". Clear the staging
       // list so a later swap re-parses ONLY the new file, not old + new.
@@ -142,6 +146,53 @@ export default function FilesSec() {
   const runParse = async () => {
     const onlyRfq = files.filter((f) => f.class === "rfq").map((f) => f.file);
     await runParseDirect(onlyRfq);
+  };
+
+  // ─── Letter-of-Quote re-submission handlers ───────────────────────────
+  // "Open original" loads the matched quote into a new tab (bound to its id);
+  // "Duplicate" clones it with a fresh estimate number and opens that.
+  const loqOpenOriginal = async () => {
+    const mq = matchedQuote; setMatchedQuote(null);
+    if (!mq) return;
+    try {
+      const full = await getQuote(mq.id);
+      loadIntoTab({
+        ...(full.state || {}),
+        quoteId: full.id, quoteStatus: full.status || "draft",
+        viewOnly: full.owner_id !== active?.state?.ownerId,  // informational only
+        pricingVersionId: full.pricing_version_id || null,
+      }, {});
+      pushToast(`Opened original quote ${full.est_num}`, "ok");
+    } catch (e) {
+      pushToast(`Couldn't open ${mq.est_num}: ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  };
+  const loqDuplicate = async () => {
+    const mq = matchedQuote; setMatchedQuote(null);
+    if (!mq) return;
+    try {
+      const copy = await copyQuote(mq.id);
+      const initials = (s.estInitials || "SPC").toUpperCase();
+      const freshEst = generateEstNum(initials);
+      const newState = {
+        ...(copy.state || {}),
+        estNum: freshEst, estNumAuto: false,
+        quoteId: copy.id, quoteStatus: copy.status || "draft",
+        pricingVersionId: copy.pricing_version_id || null,
+        viewOnly: false, ownerName: null,
+      };
+      try {
+        await updateQuote(copy.id, {
+          est_num: freshEst, state: newState, status: copy.status || "draft",
+          customer_code: copy.customer_code || newState.custCode || null,
+          customer_name: copy.customer_name || newState.custName || null,
+        });
+      } catch (_) {}
+      loadIntoTab(newState, {});
+      pushToast(`Duplicated ${mq.est_num} → new quote ${freshEst}`, "ok");
+    } catch (e) {
+      pushToast(`Duplicate failed: ${e?.response?.data?.detail || e.message}`, "err");
+    }
   };
 
   // Collapsed-section summary pill — total staged + saved file count.
@@ -352,6 +403,18 @@ export default function FilesSec() {
           Full-screen ProgressModal was removed 2026-06-12 per user feedback
           ("don't take up the entire screen"). */}
 
+      {/* Letter-of-Quote re-submission banner — the parser recognized one of
+          our own quote numbers in the RFQ. Offer to open the original and/or
+          duplicate it into a fresh quote number. */}
+      {matchedQuote && (
+        <LoqMatchModal
+          mq={matchedQuote}
+          onClose={() => setMatchedQuote(null)}
+          onOpen={loqOpenOriginal}
+          onDuplicate={loqDuplicate}
+        />
+      )}
+
       {/* Inline file preview — legacy parity (R1.5+). Opens any allowed
           attachment (pdf/image/text/csv/docx/xlsx/email/zip) directly
           inside SPOT without bouncing to a new browser tab. */}
@@ -363,6 +426,53 @@ export default function FilesSec() {
         />
       )}
     </Sec>
+  );
+}
+
+// ─── Letter-of-Quote match modal ──────────────────────────────────────
+function LoqMatchModal({ mq, onClose, onOpen, onDuplicate }) {
+  if (!mq) return null;
+  const fmt = (v) => {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d) ? null : d.toLocaleString([], { month: "numeric", day: "numeric",
+      year: "2-digit", hour: "numeric", minute: "2-digit" });
+  };
+  const sentLine = mq.status === "sent" && fmt(mq.sent_at)
+    ? `sent ${fmt(mq.sent_at)}${mq.owner_name ? ` by ${mq.owner_name}` : ""}`
+    : (mq.owner_name ? `owned by ${mq.owner_name}` : null);
+  const stale = mq.pricing_is_current === false;
+  return (
+    <div data-testid="loq-match-modal" onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1100,
+               display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--spot-bg2)", border: "1px solid var(--spot-line)",
+                 borderRadius: 8, width: "min(500px, 96vw)", padding: 18 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, color: "#a855f7" }}>
+          We recognize this RFQ
+        </div>
+        <div style={{ fontSize: 13, color: "var(--spot-text2)", lineHeight: 1.55 }}>
+          This RFQ references one of our existing quotes — <b>{mq.est_num}</b>
+          {mq.customer_name ? ` (${mq.customer_name})` : ""}{sentLine ? `, ${sentLine}` : ""}.
+          {stale && (
+            <><br /><br /><b style={{ color: "#b8860b" }}>Note:</b> this quote is on an
+            older board-pricing list. Duplicating re-prices it at current rates.</>
+          )}
+          <br /><br />
+          Open the original for reference, or duplicate it into a brand-new quote number?
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button className="sp-btn" onClick={onClose} data-testid="loq-dismiss">Dismiss</button>
+          <button className="sp-btn" onClick={onOpen} data-testid="loq-open-original">
+            Open Original
+          </button>
+          <button className="sp-btn sp-btn-primary" onClick={onDuplicate} data-testid="loq-duplicate">
+            Duplicate as New Quote
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

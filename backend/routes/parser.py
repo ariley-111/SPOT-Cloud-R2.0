@@ -29,14 +29,18 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS, COL_PARSER_JOBS
+from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS, COL_PARSER_JOBS, COL_QUOTES, COL_USERS
 from models.schemas import User
 from routes.auth import get_current_user
 from parser_knowledge import build_knowledge_prompt, EXTRACTION_INSTRUCTIONS
 from services import parser_files as _parser_files
 
 import logging
+import re as _re
 logger = logging.getLogger(__name__)
+
+# SPOT Letter-of-Quote estimate number, e.g. "RA-260615-082017" / "SPC-260612-143022".
+SPOT_QUOTE_RE = _re.compile(r"\b([A-Z]{2,4}-\d{6}-\d{6})\b")
 
 router = APIRouter(prefix="/api/parser", tags=["parser"])
 
@@ -413,8 +417,23 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
             if isinstance(st, dict):
                 _coerce_difficulty(st)
 
+    # ─── Letter-of-Quote detection ───────────────────────────────────
+    # If the RFQ IS (or quotes) one of our own Letters of Quote, surface the
+    # SPOT quote number so the client can pull the original quote up in a new
+    # tab and offer to duplicate it. Prefer Claude's explicit field; fall back
+    # to a regex scan of the raw model output text.
+    spot_qnum = None
+    raw_qnum = result_obj.get("spotQuoteNumber") if isinstance(result_obj, dict) else None
+    if isinstance(raw_qnum, str) and raw_qnum.strip():
+        m = SPOT_QUOTE_RE.search(raw_qnum.strip().upper())
+        spot_qnum = m.group(1) if m else None
+    if not spot_qnum:
+        m = SPOT_QUOTE_RE.search((text or "").upper())
+        spot_qnum = m.group(1) if m else None
+
     return {
         **normalized,
+        "spotQuoteNumber": spot_qnum,
         "model": data.get("model"),
         "usage": usage,
         "stop_reason": data.get("stop_reason"),
@@ -762,7 +781,50 @@ async def _run_parse_and_log(
     # Strip internal-only fields before returning to client
     result.pop("_call_cost_usd", None)
     result.pop("_resolved_model", None)
+
+    # ─── Attach the matched existing quote (Letter-of-Quote re-submission) ──
+    matched = await _lookup_matched_quote(result.get("spotQuoteNumber"))
+    if matched:
+        result["matchedQuote"] = matched
+
     return {**result, "files": file_summary, "persistedFiles": persisted_files}
+
+
+async def _lookup_matched_quote(qnum: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Resolve a detected SPOT quote number → a lightweight summary of the saved
+    quote so the client can open it in a new tab and offer to duplicate it.
+    Matches any team member's quote (case-insensitive)."""
+    if not qnum or not str(qnum).strip():
+        return None
+    rx = {"$regex": f"^{_re.escape(str(qnum).strip())}$", "$options": "i"}
+    doc = await db[COL_QUOTES].find_one({"est_num": rx}, {"_id": 0})
+    if not doc:
+        return None
+    owner_name = None
+    if doc.get("owner_id"):
+        u = await db[COL_USERS].find_one({"id": doc["owner_id"]},
+                                         {"_id": 0, "name": 1, "email": 1})
+        if u:
+            owner_name = u.get("name") or u.get("email")
+    pricing_is_current = None
+    try:
+        from services.pricing_versions import get_active_version_id
+        active_vid = await get_active_version_id()
+        if doc.get("pricing_version_id"):
+            pricing_is_current = doc["pricing_version_id"] == active_vid
+    except Exception:
+        pass
+    return {
+        "id": doc.get("id"),
+        "est_num": doc.get("est_num"),
+        "status": doc.get("status") or "draft",
+        "owner_id": doc.get("owner_id"),
+        "owner_name": owner_name,
+        "customer_name": doc.get("customer_name"),
+        "sent_at": doc.get("sent_at"),
+        "created_at": doc.get("created_at"),
+        "pricing_is_current": pricing_is_current,
+    }
 
 
 @router.post("/parse-rfq")

@@ -400,7 +400,6 @@ async def compare_routes_ep(
             "dieTreatment": payload.get("dieTreatment") or "None",
             "dieCost": payload.get("dieCost") or payload.get("cuttingDieCost") or 0,
             "totalRuleInches": payload.get("totalRuleInches") or 0,
-            "crestComplexity": payload.get("crestComplexity") or "Standard",
             "cadDifficulty": payload.get("cadDifficulty") or "Standard",
             "bobstFirstSizing": "true",
             "incaRate": float(active_rate_defaults().get("incaRate", 485) or 485),
@@ -416,7 +415,6 @@ async def compare_routes_ep(
     opts = {
         "printReq": asmp["printReq"], "printMode": asmp["printMode"],
         "dieTreatment": asmp["dieTreatment"], "dieCost": asmp["dieCost"],
-        "crestComplexity": asmp["crestComplexity"],
     }
     try:
         comp = compare_routes(one_w, one_l, board_spec, qty, asmp, opts)

@@ -379,7 +379,6 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
     opts = opts or {}
 
     print_speed = PRINT_SPEEDS.get(opts.get("printMode"), 100)
-    c_comp = opts.get("crestComplexity", "Standard")
     die_cost_in = pn(opts.get("dieCost"))
     die_has_input = opts.get("dieTreatment") != "None" and die_cost_in > 0
     print_on = opts.get("printReq") == "Yes" and print_speed > 0
@@ -420,7 +419,8 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
         crest_speed = assumptions.get("crestSpeed", 150)
         crest_min = assumptions.get("crestMinCharge", 0)
         crest_setup_map = assumptions.get("crestSetup") or {}
-        crest_setup_min = crest_setup_map.get(c_comp, 45)
+        crest_setup_min = (crest_setup_map.get("Standard", 45)
+                           if isinstance(crest_setup_map, dict) else (crest_setup_map or 45))
         _pr_sh = inca_rate / 100
         _cr_sh = crest_rate / (crest_speed or 150)
         candidates = []
@@ -500,7 +500,7 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
             cr_press_hrs = (cr_pick["sheetsReq"] / print_speed) if print_on else 0
             cr_press = max(cr_press_hrs * inca_rate, inca_min) if print_on else 0
             c_setup = crest_setup_min / 60
-            eff_speed = (crest_speed * (assumptions.get("crestAdvSpeedFactor", 0.8))) if c_comp == "Advanced" else crest_speed
+            eff_speed = crest_speed
             cr_cut_hrs = c_setup + (cr_pick["sheetsReq"] / eff_speed if eff_speed > 0 else 0)
             cr_cut = max(cr_cut_hrs * crest_rate, crest_min)
             rule_in = pn(assumptions.get("totalRuleInches"))
@@ -581,7 +581,6 @@ def auto_route(cad_hrs: float, selected_sheet: Dict[str, Any], one_up_w: float, 
         "printMode": assumptions.get("printMode", "Satin"),
         "dieTreatment": assumptions.get("dieTreatment", "None"),
         "dieCost": assumptions.get("dieCost"),
-        "crestComplexity": assumptions.get("crestComplexity", "Standard"),
         "cadSelectedSheet": selected_sheet,
         "cadHrs": cad_hrs,
     }

@@ -1098,7 +1098,7 @@ function RouteComparison({ s, primary }) {
         outsideLiner: s.outsideLiner, insideLiner: s.insideLiner, medium: s.medium,
         printReq: s.printReq, printMode: s.printMode,
         dieTreatment: s.dieTreatment, cuttingDieCost: s.cuttingDieCost,
-        totalRuleInches: s.totalRuleInches, crestComplexity: s.crestComplexity,
+        totalRuleInches: s.totalRuleInches,
         cadDifficulty: s.cadDifficulty,
       }).then((d) => { if (!cancel) setComp(d); })
         .catch(() => { if (!cancel) setComp(null); })
@@ -1107,7 +1107,7 @@ function RouteComparison({ s, primary }) {
     return () => { cancel = true; clearTimeout(t); };
   }, [s.oneUpW, s.oneUpL, qty, s.boardGrade, s.flute, s.outsideLiner, s.insideLiner, s.medium,
       s.printReq, s.printMode, s.dieTreatment, s.cuttingDieCost, s.totalRuleInches,
-      s.crestComplexity, s.cadDifficulty]);
+      s.cadDifficulty]);
 
   const winner = comp?.winner;  // auto cheapest route (legacy parity — header always shows auto winner)
   const forcedRoute = forced ? s.routeOverride : null;

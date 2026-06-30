@@ -63,6 +63,21 @@ def _liner_short(l: str) -> str:
     return s.replace("-Lite", "").replace("-White", "")
 
 
+def _print_short(d: Dict[str, Any]) -> str:
+    """Customer-facing print descriptor for the component/spec summary line.
+    Shows the print mode + sides (1S/2S), e.g. 'CMYK 2S', 'Satin 1S', or
+    'No Print' when printing is not required. Accepts a state-like dict using
+    either printReq or printRequired."""
+    req = d.get("printReq") or d.get("printRequired")
+    if req != "Yes":
+        return "No Print"
+    mode = d.get("printMode") or "Print"
+    sides = d.get("printSides")
+    suffix = " 2S" if sides == "2-Sided" else " 1S" if sides == "1-Sided" else ""
+    return f"{mode}{suffix}"
+
+
+
 def _ship_to_addr(quote_ship_to: str, dest_zip: str) -> str:
     """Legacy line 4817/4862: strip 5-digit ZIP already in address, then append destZip."""
     if not quote_ship_to and not dest_zip:
@@ -316,6 +331,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 if float(iw or 0) > 0 and float(il_ or 0) > 0:
                     sp.append(f"{_fn(iw, 4)}\u00D7{_fn(il_, 4)}")
             except (ValueError, TypeError): pass
+            if typ == "Manufactured": sp.append(_print_short(ist))
             line = " \u00B7 ".join([p for p in sp if p])
             type_color = ("#3b82f6" if typ == "Manufactured" else
                           "#06b6d4" if typ == "Purchased" else "#22c55e")
@@ -361,6 +377,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         except (ValueError, TypeError):
             pass
         if fsc: spec_parts.append("FSC/SFI Material")
+        spec_parts.append(_print_short(state))
         spec_line = " \u00B7 ".join([p for p in spec_parts if p])
         title = item_desc or box_style or "Item"
         item_bar = (
@@ -550,6 +567,8 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                     spec_parts_c.append(f'{_fn(bs["oneUpW"], 4)}\u00D7{_fn(bs["oneUpL"], 4)}')
             except (ValueError, TypeError):
                 pass
+            if str(c.get("type") or "Manufactured") == "Manufactured":
+                spec_parts_c.append(_print_short(bs))
             spec_parts_c.append(f'{c.get("pcsPerSet", 1)} pc/set')
             spec_line_c = " \u00B7 ".join([p for p in spec_parts_c if p])
 
