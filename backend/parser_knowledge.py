@@ -58,6 +58,7 @@ EMBEDDED_BOARD_LIBRARY = "\n".join([
     "",
     "**Outside liner options (canonical engine values):** None (=kraft), 42# Kla-White, 42# Kemi-Lite, 42# Bleached White, 33# Kla-White, 56# Kla-White. NEVER emit the string \"Kraft\" or \"42# Kraft\" — always emit \"None\" for kraft callouts (CAD says K, K/K, brown, kraft, plain → emit None).",
     "**Inside liner options:** same as outside, with None being the most common (= unbleached kraft, what most CADs spec as \"K\" or \"K/K\").",
+    "**LINER ASK WORDING:** When an ask concerns a liner field (outsideLiner / insideLiner), phrase the `reason` using ONLY the plain liner shorthand the estimators recognize — 'Kemi', 'Kla' (Kla-White), 'Kraft', 'Bleached White', 'MW'. Do NOT include the board grade (e.g. 200, ECT 32) or flute in a liner ask reason — estimators confirm the liner alone and grade+liner together is confusing. Example GOOD: \"Inside liner unclear — Kemi or Kraft?\"  Example BAD: \"Confirm inside liner for 200# B Kemi/Kraft\".",
     "**Medium options:** None, 26#, 33#, 35HPL#, 40#, 42# Bl",
     "**Medium MUST default to the literal string \"None\" — NEVER leave it blank/null/empty.** Only emit a non-None medium when the CAD explicitly calls out a doublewall medium weight (e.g. a 'DW' grade with a 26#/33#/40# medium spec). Single-wall boards (the vast majority) have NO medium → emit medium=\"None\". Leaving medium unset/empty breaks stock-sheet matching and forces a spurious Buy-Min / custom-order warning, so an unspecified medium is ALWAYS \"None\", not blank.",
     "",

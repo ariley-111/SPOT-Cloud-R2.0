@@ -682,10 +682,15 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     // Build a Simple-style patch from the top-level parsed fields
     const patch = {};
     // Capture the RFQ sender email (external contact) for the Email Quote To: default.
+    // IMPORTANT: we read ONLY the email's `from` (sender/buyer) — never its To/CC/BCC —
+    // so any blind-CC'd competitors or third parties on the original RFQ are NEVER
+    // carried into the outgoing quote. Returns a SINGLE address; skips our own domain
+    // and system/auto-forwarder senders (no-reply, mailer-daemon, postmaster).
     const rfqEmail = (() => {
+      const SKIP = /(@standardprinting\.com$|^(no-?reply|do-?not-?reply|noreply|mailer-daemon|postmaster|bounce)@)/i;
       for (const f of (result.files || [])) {
         const m = String(f.from || "").match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
-        if (m && !/@standardprinting\.com$/i.test(m[0])) return m[0];
+        if (m && !SKIP.test(m[0])) return m[0];
       }
       return "";
     })();
