@@ -45,7 +45,7 @@ SPOT_QUOTE_RE = _re.compile(r"\b([A-Z]{2,4}-\d{6}-\d{6})\b")
 router = APIRouter(prefix="/api/parser", tags=["parser"])
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-7")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
 ANTHROPIC_MONTHLY_CAP_USD = float(os.environ.get("ANTHROPIC_MONTHLY_CAP_USD", "500"))
 
 # ─── Effective key/model lookup ─── DB override > .env (loaded at startup)
