@@ -629,6 +629,26 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     return { raw: a.field, reason: a.reason || "", norm, meta: norm ? metaFor(norm.key) : null };
   });
 
+  // Matched-Set vs Individual toggle: only surface for Multi-Part when the parser
+  // is unsure (pricingMode missing or low overall confidence). Estimator-set value
+  // wins on apply.
+  const lowPricingConf = isMP && (p.pricingMode == null ||
+    (typeof overallConf === "number" && overallConf < 0.7));
+  const [pricingModeSel, setPricingModeSel] = React.useState(p.pricingMode || "Matched Set");
+
+  // Asks filtered to the CURRENT selection so estimators fix one scope at a time
+  // and never wonder which component a field belongs to.
+  //   • single (non-MP) quote → all asks (they're all job-scope)
+  //   • MP + "Job" tab        → job-scope asks only (Estimate Info, customer, etc.)
+  //   • MP + component tab     → only that component's asks
+  const visibleAsks = normAsks.filter((a) => {
+    if (!isMP) return true;
+    if (!a.norm) return mpTab === "job";                 // bare notes live under Job
+    if (mpTab === "job") return a.norm.scope === "job";
+    return a.norm.scope === "item" && a.norm.itemIdx === Number(mpTab);
+  });
+  const showQty = !isMP || mpTab !== "job";              // qty is per-component on MP
+
 
   // Only DEFAULT to checked when value is truthy (non-null, non-empty).
   const [picks, setPicks] = React.useState(() => {
@@ -803,7 +823,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
       next = { ...next, ...jobLevelPatch };
       // Always set MP markers (even if patch didn't include them)
       next.quoteType = "Multi-Part";
-      next.pricingMode = p.pricingMode || "Matched Set";
+      next.pricingMode = pricingModeSel || p.pricingMode || "Matched Set";
       if (p.setMarginPct != null) next.setMarginPct = String(p.setMarginPct);
       next.bomItems = items;
       next.activeItemIdx = 0;
@@ -910,14 +930,98 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
             </div>
           )}
 
-          {/* Always-on quantity verification — the parser often mis-assigns qtys */}
+          {/* Component / Job selector — pick a scope FIRST, then fix that scope's
+              fields, so estimators are never confused about which component a
+              field belongs to. */}
+          {isMP && (
+            <div data-testid="parse-mp-banner" style={{
+              marginBottom: 12, padding: "8px 10px",
+              background: "#f59e0b0c", border: "1px solid #f59e0b44", borderRadius: 4,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
+                  textTransform: "uppercase", letterSpacing: ".08em" }}>Multi-Part</span>
+                <span style={{ fontSize: 11, color: "var(--spot-text2)" }}>
+                  {pricingModeSel || "Matched Set"} · {bomItems.length} component{bomItems.length !== 1 ? "s" : ""}
+                  {p.setMarginPct != null && (<> · default GM {(parseFloat(p.setMarginPct) * 100).toFixed(1)}%</>)}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>· select a tab to fix that scope</span>
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }} data-testid="parse-mp-tabs">
+                {(() => {
+                  const jobAskCount = normAsks.filter((a) => !a.norm || a.norm.scope === "job").length;
+                  return (
+                    <button onClick={() => setMpTab("job")} data-testid="parse-mp-tab-job"
+                      style={{
+                        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                        padding: "3px 8px", borderRadius: 3, display: "flex", gap: 5, alignItems: "center",
+                        background: mpTab === "job" ? "var(--spot-accent)" : "var(--spot-bg3)",
+                        color: mpTab === "job" ? "#fff" : "var(--spot-text2)",
+                        border: `1px solid ${mpTab === "job" ? "var(--spot-accent)" : "var(--spot-border)"}`,
+                      }}>Job{jobAskCount > 0 && <span style={{ fontSize: 9, fontWeight: 800,
+                        background: "var(--spot-warn)", color: "#000", borderRadius: 8, padding: "0 5px" }}>{jobAskCount}</span>}</button>
+                  );
+                })()}
+                {bomItems.map((it, i) => {
+                  const conf = it.confidence;
+                  const lowConf = typeof conf === "number" && conf < 0.7;
+                  const askCount = normAsks.filter((a) => a.norm && a.norm.scope === "item" && a.norm.itemIdx === i).length;
+                  return (
+                    <button key={i} onClick={() => setMpTab(String(i))}
+                      data-testid={`parse-mp-tab-${i}`}
+                      style={{
+                        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600,
+                        padding: "3px 8px", borderRadius: 3, display: "flex", gap: 5, alignItems: "center",
+                        background: mpTab === String(i) ? "#f59e0b22" : "var(--spot-bg3)",
+                        color: mpTab === String(i) ? "#f59e0b" : "var(--spot-text2)",
+                        border: `1px solid ${mpTab === String(i) ? "#f59e0b88" : "var(--spot-border)"}`,
+                      }}>
+                      {lowConf && <span title={`Low confidence ${Math.round(conf*100)}%`} style={{ color: "var(--spot-warn)" }}>⚠</span>}
+                      {(it.desc || `Item ${i+1}`)} <span style={{ fontSize: 9, opacity: 0.6 }}>·{it.type?.[0] || "M"}·×{it.pcsPerSet || 1}</span>
+                      {askCount > 0 && <span style={{ fontSize: 9, fontWeight: 800,
+                        background: "var(--spot-warn)", color: "#000", borderRadius: 8, padding: "0 5px" }}>{askCount}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Job-level: Matched-Set vs Individual — only when parser is unsure */}
+          {isMP && mpTab === "job" && lowPricingConf && (
+            <div data-testid="parse-pricing-mode" style={{
+              marginBottom: 12, padding: "10px 12px",
+              background: "var(--spot-bg2)", border: "1px solid var(--spot-border)", borderRadius: 4,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6,
+                textTransform: "uppercase", letterSpacing: ".06em" }}>
+                Pricing mode
+                <span style={{ marginLeft: 8, fontWeight: 500, textTransform: "none", letterSpacing: 0,
+                  color: "var(--spot-text3)", fontSize: 10 }}>parser unsure — confirm how this multi-part prices</span>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["Matched Set", "Individual"].map((m) => (
+                  <button key={m} onClick={() => setPricingModeSel(m)}
+                    data-testid={`parse-pricing-${m.replace(/\s+/g, "-").toLowerCase()}`}
+                    style={{ all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                      padding: "5px 12px", borderRadius: 4,
+                      background: pricingModeSel === m ? "var(--spot-accent)" : "var(--spot-bg3)",
+                      color: pricingModeSel === m ? "#fff" : "var(--spot-text2)",
+                      border: `1px solid ${pricingModeSel === m ? "var(--spot-accent)" : "var(--spot-border)"}` }}>{m}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quantity verification — per selected component on Multi-Part */}
+          {showQty && (
           <div style={{
             marginBottom: 12, padding: "10px 12px",
             background: "var(--spot-accent-soft)", border: "1px solid var(--spot-accent)", borderRadius: 4,
           }} data-testid="parse-qty-verify">
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-accent)", marginBottom: 8,
               textTransform: "uppercase", letterSpacing: ".06em" }}>
-              Verify quantities
+              Verify quantities{isMP && bomItems[Number(mpTab)] ? ` · ${bomItems[Number(mpTab)].desc || `Item ${Number(mpTab) + 1}`}` : ""}
               <span style={{ marginLeft: 8, fontWeight: 500, textTransform: "none", letterSpacing: 0,
                 color: "var(--spot-text3)", fontSize: 10 }}>
                 comma-separated · always double-check — parser qtys are often wrong
@@ -936,43 +1040,40 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                 );
               })()
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {bomItems.map((b, i) => {
-                  const norm = { scope: "item", itemIdx: i, key: "qtys" };
-                  const k = ekey(norm);
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--spot-text2)",
-                        minWidth: 150, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis",
-                        whiteSpace: "nowrap" }}>{b.desc || `Item ${i + 1}`}</span>
-                      <input className="sp-input" data-testid={`parse-qty-input-item-${i}`}
-                        value={k in edits ? edits[k] : askCurrentValue(norm)}
-                        placeholder="e.g. 515, 1150, 2300"
-                        onChange={(e) => setEdit(k, e.target.value)}
-                        style={{ flex: 1, maxWidth: 320, borderColor: k in edits ? "var(--spot-green)" : undefined }} />
-                    </div>
-                  );
-                })}
-              </div>
+              (() => {
+                const i = Number(mpTab);
+                const norm = { scope: "item", itemIdx: i, key: "qtys" };
+                const k = ekey(norm);
+                return (
+                  <input className="sp-input" data-testid={`parse-qty-input-item-${i}`}
+                    value={k in edits ? edits[k] : askCurrentValue(norm)}
+                    placeholder="e.g. 515, 1150, 2300"
+                    onChange={(e) => setEdit(k, e.target.value)}
+                    style={{ maxWidth: 360, borderColor: k in edits ? "var(--spot-green)" : undefined }} />
+                );
+              })()
             )}
           </div>
+          )}
 
 
-          {normAsks.length > 0 && (
+          {visibleAsks.length > 0 && (
             <div style={{
               marginBottom: 12, padding: "10px 12px",
               background: "var(--spot-warn-bg)", border: "1px solid var(--spot-warn)", borderRadius: 4,
             }} data-testid="parse-asks">
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--spot-warn)", marginBottom: 8,
                 textTransform: "uppercase", letterSpacing: ".06em" }}>
-                Needs estimator input · {normAsks.length} item{normAsks.length === 1 ? "" : "s"}
+                {isMP && mpTab !== "job"
+                  ? `Fixes for ${bomItems[Number(mpTab)]?.desc || `Item ${Number(mpTab) + 1}`}`
+                  : (isMP ? "Job-level fixes" : "Needs estimator input")} · {visibleAsks.length} item{visibleAsks.length === 1 ? "" : "s"}
                 <span style={{ marginLeft: 8, fontWeight: 500, textTransform: "none",
                   letterSpacing: 0, color: "var(--spot-text3)", fontSize: 10 }}>
                   fix below — applies on {isMP ? "Apply Multi-Part" : "Apply Selected"}
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {normAsks.map((a, i) => {
+                {visibleAsks.map((a, i) => {
                   // Non-editable note (bare string ask or unrecognized field path).
                   if (!a.norm || !a.meta) {
                     return (
@@ -1018,51 +1119,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
             </div>
           )}
 
-          {/* MP-3: Multi-Part banner + tab strip */}
-          {isMP && (
-            <div data-testid="parse-mp-banner" style={{
-              marginBottom: 10, padding: "8px 10px",
-              background: "#f59e0b0c", border: "1px solid #f59e0b44", borderRadius: 4,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
-                  textTransform: "uppercase", letterSpacing: ".08em" }}>Multi-Part</span>
-                <span style={{ fontSize: 11, color: "var(--spot-text2)" }}>
-                  {p.pricingMode || "Matched Set"} · {bomItems.length} component{bomItems.length !== 1 ? "s" : ""}
-                  {p.setMarginPct != null && (<> · default GM {(parseFloat(p.setMarginPct) * 100).toFixed(1)}%</>)}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }} data-testid="parse-mp-tabs">
-                <button onClick={() => setMpTab("job")}
-                  data-testid="parse-mp-tab-job"
-                  style={{
-                    all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                    padding: "3px 8px", borderRadius: 3,
-                    background: mpTab === "job" ? "var(--spot-accent)" : "var(--spot-bg3)",
-                    color: mpTab === "job" ? "#fff" : "var(--spot-text2)",
-                    border: `1px solid ${mpTab === "job" ? "var(--spot-accent)" : "var(--spot-border)"}`,
-                  }}>Job</button>
-                {bomItems.map((it, i) => {
-                  const conf = it.confidence;
-                  const lowConf = typeof conf === "number" && conf < 0.7;
-                  return (
-                    <button key={i} onClick={() => setMpTab(String(i))}
-                      data-testid={`parse-mp-tab-${i}`}
-                      style={{
-                        all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 600,
-                        padding: "3px 8px", borderRadius: 3, display: "flex", gap: 5, alignItems: "center",
-                        background: mpTab === String(i) ? "#f59e0b22" : "var(--spot-bg3)",
-                        color: mpTab === String(i) ? "#f59e0b" : "var(--spot-text2)",
-                        border: `1px solid ${mpTab === String(i) ? "#f59e0b88" : "var(--spot-border)"}`,
-                      }}>
-                      {lowConf && <span title={`Low confidence ${Math.round(conf*100)}%`} style={{ color: "var(--spot-warn)" }}>⚠</span>}
-                      {(it.desc || `Item ${i+1}`)} <span style={{ fontSize: 9, opacity: 0.6 }}>·{it.type?.[0] || "M"}·×{it.pcsPerSet || 1}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* (Multi-Part selector moved above — see top of modal body) */}
 
           <table style={{ width: "100%", fontSize: 12 }}>
             <thead>
