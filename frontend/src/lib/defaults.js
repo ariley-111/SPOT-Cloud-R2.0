@@ -171,6 +171,16 @@ export const LINER_ENFORCE = {
 export const allowed_liners = (boardGrade) => LINERS.filter((l) =>
   !LINER_ENFORCE[l] || LINER_ENFORCE[l].includes(boardGrade)
 );
+// Friendly liner display label — keeps the canonical VALUE (e.g. "42# Kla-White")
+// but drops the standard 42# weight prefix for display so estimators see just the
+// liner name ("Kla-White", "Kemi-Lite", "Kraft"). Non-standard weights (33#, 56#)
+// keep their prefix so they stay distinguishable.
+export const linerLabel = (o) => {
+  if (!o) return o;
+  if (o === "None") return "Kraft";
+  if (o.startsWith("42# ")) return o.slice(4);
+  return o;
+};
 export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","40# Medium","42# Bleached Medium"];
 export const PRINT_MODES  = ["Satin","Gloss","OnQ Styrene","OnQ Lightbox"];
 export const PRINT_SIDES  = ["1-Sided","2-Sided"];

@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import Sec from "./Sec";
 import { parserBudget, parseRfqPolling, listParserFiles, deleteParserFile, uploadParserFiles, searchCustomers, getQuote, copyQuote, updateQuote } from "../../api/spot";
 import { fmtMoney, generateEstNum } from "../../lib/format";
+import { linerLabel } from "../../lib/defaults";
 import { makeBomItem, applyItemStateTo, freshItemState, JOB_LEVEL_KEYS } from "../../lib/mpSchema";
 import { parseAskField, metaFor, canonField, NUMERIC_KEYS, humanizeFieldPath, labelForKey } from "../../lib/parserFieldRegistry";
 import FilePreviewModal from "./FilePreviewModal";
@@ -1115,7 +1116,8 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                         fontStyle: isNull ? "italic" : "normal" }}>
                         {isNull ? "— null (needs estimator) —" : (
                           <pre style={{ margin: 0, fontFamily: "inherit", whiteSpace: "pre-wrap" }}>
-                            {typeof v === "object" ? JSON.stringify(v, null, 0) : String(v)}
+                            {(k === "outsideLiner" || k === "insideLiner") ? linerLabel(String(v))
+                              : (typeof v === "object" ? JSON.stringify(v, null, 0) : String(v))}
                           </pre>
                         )}
                       </td>
@@ -1154,11 +1156,13 @@ function AskEditor({ meta, field, value, onChange, onPickCustomer, testid }) {
     return <AskCustomerPicker value={value} onChange={onChange} onPick={onPickCustomer} testid={testid} />;
   }
   if (meta.control === "select") {
+    const isLiner = field === "outsideLiner" || field === "insideLiner";
+    const optLabel = isLiner ? linerLabel : (o) => o;
     return (
       <select className="sp-input" data-testid={testid} value={value || ""}
         onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 320 }}>
         <option value="">— choose —</option>
-        {(meta.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+        {(meta.options || []).map((o) => <option key={o} value={o}>{optLabel(o)}</option>)}
       </select>
     );
   }

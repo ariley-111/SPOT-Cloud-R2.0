@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 65 — Verified the liner-label display fix in the RFQ parser review modal. Uploaded /app/test_liner_rfq.txt to a fresh quote as admin, ran the Anthropic parser (cache-hit at 55% confidence, cost ~$0.24), and the review modal opened with the expected Outside Liner asks. All liner <option> texts render the friendly label while retaining the canonical option VALUE, and the insideLiner picked-up-fields row shows 'Kraft' for the canonical 'None'. Selection round-trip confirmed: choosing the option now labeled 'Kla-White' stores value='42# Kla-White'.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "frontend": [
+      "Login as admin@standardprinting.com → new draft SA quote loaded",
+      "Files section: uploaded /app/test_liner_rfq.txt (390 B, classified as RFQ)",
+      "Clicked data-testid=btn-build-estimate → parse-review-modal opened in ~25s (cache-hit, confidence 55%, 16,301 tok cached, model M4)",
+      "Parser produced 8-item Needs-Estimator-Input list including 3 Outside Liner asks (job scope + Mid Disk 4 item + Mid Disk 5 item)",
+      "For each of parse-ask-input-job-outsideLiner, parse-ask-input-item-0-outsideLiner, parse-ask-input-item-1-outsideLiner the 7 <option> texts were IDENTICAL and correct:",
+      "  '' → '— choose —'",
+      "  value='None' → text='Kraft'  (canonical mapped to Kraft)",
+      "  value='42# Kemi-Lite' → text='Kemi-Lite'  (42# prefix stripped)",
+      "  value='42# Kla-White' → text='Kla-White'  (42# prefix stripped)",
+      "  value='42# Bleached White' → text='Bleached White'  (42# prefix stripped)",
+      "  value='33# Kla-White' → text='33# Kla-White'  (non-standard weight prefix kept)",
+      "  value='56# Kla-White' → text='56# Kla-White'  (non-standard weight prefix kept)",
+      "Canonical-value round-trip: select_option(value='42# Kla-White') then read back el.value → '42# Kla-White' (canonical preserved) while displayed text is 'Kla-White' (friendly)",
+      "Picked-up-fields table row for insideLiner (source=CAD, value='None') renders VALUE cell as 'Kraft' — confirms linerLabel is applied at ~FilesSec.jsx:1119 for outsideLiner/insideLiner keys"
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FilesSec.jsx AskEditor (line ~1160): isLiner check is field-name based ('outsideLiner'||'insideLiner'). Solid, but if a future ask key like 'component.outsideLiner' is ever passed, the check would silently skip formatting. Consider using field.endsWith('outsideLiner') || field.endsWith('insideLiner') for future-proofing. Not a defect today.",
+    "defaults.js linerLabel: correct behavior for the current LINERS list. If a future 42#-prefixed liner is added (e.g., '42# Something / Other'), the '42# ' prefix strip is still safe. No changes needed."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped per request)", "frontend": "100% (all liner-label assertions passed)" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Uploaded /app/test_liner_rfq.txt to a fresh admin draft SA-260630-114401 (auto-created on login). The parser saved it under Saved RFQ files; no other DB writes. Cost incurred: ~$0.24 on Anthropic parser call 3 ($0.85 total spend / $500 cap remains). No cleanup required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The liner-label fix is fully verified end-to-end via a live Anthropic parse of /app/test_liner_rfq.txt. If retesting, note: after the first parse the .txt gets persisted into Saved RFQ files and the Build Estimate button flips to 'Build Estimate — no RFQ file' on refresh; you must re-upload the .txt (or another RFQ) into the staged files list to re-trigger runParse. The picked-up-fields row for insideLiner correctly displays 'Kraft' for canonical 'None'. The three Outside Liner ask cards (job scope + 2 item scopes) all render identical friendly labels while preserving canonical values.",
+  "rca of the issue": "N/A — fix works as designed."
+}
