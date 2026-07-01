@@ -32,7 +32,7 @@ INTEGRATIONS: List[Dict[str, str]] = [
      "type": "secret"},
     {"provider": "anthropic", "key": "ANTHROPIC_MODEL",
      "env": "ANTHROPIC_MODEL", "label": "Anthropic Model",
-     "hint": "e.g. claude-opus-4-7 (advanced)",
+     "hint": "e.g. claude-opus-4-8 (newest) or claude-opus-4-7",
      "type": "text"},
     # UTS Freight API
     {"provider": "uts", "key": "UTS_USER",
