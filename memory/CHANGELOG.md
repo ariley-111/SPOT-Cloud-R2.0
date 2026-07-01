@@ -2,7 +2,24 @@
 
 Append-only log of shipped features and fixes.
 
-## 2026-06-30 (cont.) — Email send: async + detailed error surfacing (P0 RESOLVED)
+## 2026-06-30 (cont.) — Parser review modal: liner labels + scope-first restructure
+
+### Liner display labels (Iter 65 ✅)
+- `defaults.js` `linerLabel()`: liner dropdowns/summary now DISPLAY the friendly name
+  ('42# Kla-White' → 'Kla-White', 'None' → 'Kraft') while the stored VALUE stays canonical
+  ('42# Kla-White') so the pricing engine still matches. 33#/56# keep their prefix. Parser prompt
+  also told to phrase liner asks with plain shorthand (no board grade).
+
+### Review-modal scope-first restructure (Iter 66 ✅)
+- Reordered `ReviewParseModal`: (1) Job/component SELECTOR tab strip moved to the TOP;
+  (2) Matched-Set vs Individual toggle (`parse-pricing-mode`) shown ONLY on the Job tab and ONLY
+  when the parser is unsure (pricingMode null or confidence < 0.7), estimator choice wins on apply;
+  (3) quantity box now FOLLOWS the selected component (hidden on Job tab); (4) asks list filtered
+  strictly to the selected scope (`visibleAsks`) — Job tab = job-level fixes only, component tab =
+  that component's fixes only. Tabs show ask-count badges. Single (non-MP) quotes keep the simple
+  qty→asks flow with no selector. Verified: 100%, all 5 acceptance criteria pass.
+
+
 
 **Root cause of the prod failure:** the send ran synchronously; the slow MSAL token + Graph
 network calls exceeded the Cloudflare/proxy gateway window → a **520 "origin returned an invalid
