@@ -47,6 +47,10 @@ router = APIRouter(prefix="/api/parser", tags=["parser"])
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
 ANTHROPIC_MONTHLY_CAP_USD = float(os.environ.get("ANTHROPIC_MONTHLY_CAP_USD", "500"))
+# Output token ceiling. Opus 4.8 supports up to 128K output tokens on the
+# standard Messages API (no beta header needed). 16K truncated large multi-item
+# RFQs (~50 components) → we default to 64K which comfortably covers 100+ items.
+ANTHROPIC_MAX_OUTPUT_TOKENS = int(os.environ.get("ANTHROPIC_MAX_OUTPUT_TOKENS", "64000"))
 
 # ─── Effective key/model lookup ─── DB override > .env (loaded at startup)
 from services.integrations import get_effective as _integ_get
@@ -258,10 +262,11 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
     }
     body = {
         "model": model,
-        # 16K output tokens — high enough for 40+ component multi-part RFQs.
-        # Claude Opus 4.1 supports up to 64K but we cap at 16K to keep per-parse
-        # cost predictable. If we hit truncation, we log + raise a clear error.
-        "max_tokens": 16384,
+        # Output ceiling — Opus 4.8 supports up to 128K output tokens on the
+        # standard Messages API. Default 64K (env-configurable) handles 100+
+        # component multi-part RFQs without truncation. If we still hit the cap
+        # on an extreme RFQ, we surface a clear error below.
+        "max_tokens": ANTHROPIC_MAX_OUTPUT_TOKENS,
         # Stream the response. This keeps the K8s ingress connection warm during
         # long parses (Anthropic emits ping events every ~15s). Without streaming,
         # large RFQs hit the ingress idle-timeout and return 502 even though the
@@ -284,7 +289,11 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
     text_chunks: List[str] = []
     stop_reason = None
     usage: Dict[str, Any] = {}
-    async with httpx.AsyncClient(timeout=300.0) as client:
+    # 10-minute timeout matches the frontend polling ceiling. Streaming a large
+    # (64K-token) multi-item response can take several minutes; the previous
+    # 300s cap could abort mid-stream on 50+ item RFQs → surfaced as a network
+    # error. Anthropic ping events keep the connection warm throughout.
+    async with httpx.AsyncClient(timeout=600.0) as client:
         async with client.stream("POST", ANTHROPIC_URL, headers=headers, json=body) as resp:
             if resp.status_code >= 400:
                 body_text = (await resp.aread()).decode("utf-8", errors="ignore")

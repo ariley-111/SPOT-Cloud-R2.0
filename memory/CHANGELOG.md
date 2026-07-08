@@ -1303,3 +1303,15 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Frontend useEngine.js sends `quoteId` in both calc payloads.
 - Verified: 7/7 backend tests (iteration_57.json) — saved quote byte-identical after a live CAD rate change; draft reflects new rate; duplicate re-prices; no 500s.
 - NOTE: backfill assumes pre-existing saved quotes were priced at in-code baseline rates (true since prod rate edits were made recently). No save-time rate history exists for legacy quotes, so baseline is the best approximation.
+
+## 2026-07-08 — P0 Large-RFQ Parser Fix (output truncation)
+- RFQ parser threw a "network error" on large multi-item RFQs (~50 components). Root cause: hard
+  `max_tokens: 16384` output ceiling → 50+ item JSON responses hit `stop_reason: max_tokens` and
+  truncated (surfaced as a generic failure).
+- Fix (routes/parser.py): raised output ceiling to env-configurable `ANTHROPIC_MAX_OUTPUT_TOKENS`
+  (default 64000). Opus 4.8 supports up to 128K output on the standard Messages API (no beta header).
+  Also raised the httpx streaming timeout 300s→600s to match the 10-min frontend polling ceiling
+  (64K-token streams can take several minutes).
+- Verified end-to-end (curl, real Anthropic key, preview): synthetic 50-item RFQ → job done,
+  stop_reason=end_turn, 50 bomItems returned, output_tokens=14,388 (would have truncated at the old
+  16K cap). No network error, no truncation.
