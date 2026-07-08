@@ -1315,3 +1315,19 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Verified end-to-end (curl, real Anthropic key, preview): synthetic 50-item RFQ → job done,
   stop_reason=end_turn, 50 bomItems returned, output_tokens=14,388 (would have truncated at the old
   16K cap). No network error, no truncation.
+
+## 2026-07-08 (cont.) — P0 Parser Cloudflare 520 on large CAD RFQs (PROD)
+- Symptom (production): clicking "Build Estimate" on a large RFQ returned Cloudflare Error 520
+  ("origin returned an empty response / malformed HTTP headers").
+- Root cause: the submit endpoint `/api/parser/parse-rfq-async` did all heavy work INSIDE the
+  request — disk persist, high-DPI PDF tiling (up to 20 tiles @ 220 DPI, PNG optimize=True), base64
+  — which for large CAD PDFs exceeded Cloudflare's ~100s origin timeout → 520 on the submit call
+  (not wrapped in the poll-retry loop, so it surfaced directly).
+- Fix (routes/parser.py): submit now reads ONLY the raw upload bytes inside the request (streams
+  must close there) and wraps them in a module-level `_BufferedUpload`; ALL expensive processing
+  (`_prepare_content` + Anthropic call) is deferred to the background task `_run_full_parse_job`.
+  New intermediate job status "parsing" (frontend poll loop already treats non-done/error as
+  keep-polling — no FE change needed). Removed the now-unused `_run_parse_job`.
+- Verified end-to-end (preview, real key): submit returns instantly (pending, files=[]); job
+  transitions pending→parsing→done; 50 bomItems returned, stop_reason=end_turn, files=1.
+- REQUIRES REDEPLOY to reach production.

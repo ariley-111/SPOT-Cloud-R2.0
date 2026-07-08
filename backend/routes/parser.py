@@ -453,6 +453,24 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
     }
 
 
+class _BufferedUpload:
+    """Module-level UploadFile shim holding already-read bytes.
+
+    The async submit endpoint consumes the multipart streams FAST (inside the
+    request, where UploadFile streams are still open) and wraps the bytes in
+    these shims, then defers the expensive processing (disk persist, high-DPI
+    PDF tiling, base64) to the background job. This keeps the submit response
+    instant so it never trips the Cloudflare/ingress ~100s origin timeout
+    (which surfaced as an Error 520 on large CAD RFQs)."""
+    def __init__(self, filename: str, content_type: str, content: bytes):
+        self.filename = filename
+        self.content_type = content_type
+        self._content = content
+
+    async def read(self):
+        return self._content
+
+
 async def _prepare_content(
     files: List[Any],
     email_body: Optional[str],
@@ -485,16 +503,6 @@ async def _prepare_content(
     persisted_files: List[Dict[str, Any]] = []
     buffered_files: List[Any] = []
     if persist_for:
-        # Local shim — same shape as the zip-member shim below so the rest of
-        # the pipeline reads `.filename / .content_type / await read()` uniformly.
-        class _BufferedUpload:
-            def __init__(self, filename: str, content_type: str, content: bytes):
-                self.filename = filename
-                self.content_type = content_type
-                self._content = content
-            async def read(self):
-                return self._content
-
         for f in files:
             try:
                 raw_bytes = await f.read()
@@ -873,28 +881,45 @@ async def parse_rfq(
     )
 
 
-# ─── Async parse job (2026-06-18) ──────────────────────────────────────
-# Large CAD PDFs make the Anthropic Opus call run ~120s — well past the 60s
-# K8s ingress idle-timeout, which returns a spurious 502/520 even though the
-# upstream parse eventually succeeds. Solution: submit reads + persists the
-# files INSIDE the request (fast), then runs the slow Anthropic call as an
-# asyncio background task, recording status in the parser_jobs collection.
-# The frontend polls GET /jobs/{id} every ~3s. Jobs TTL-purge after 24h.
+# ─── Async parse job (2026-06-18, refactored 2026-07-08) ───────────────
+# Large CAD PDFs make the parse pipeline (high-DPI PDF tiling + the Anthropic
+# Opus call) run well past the Cloudflare/ingress ~100s origin timeout, which
+# returned a spurious 520 even though the upstream parse eventually succeeded.
+# Solution: the submit endpoint reads ONLY the raw upload bytes inside the
+# request (fast — streams must close there), then defers ALL expensive work
+# (persist + tiling + base64 + Anthropic call) to an asyncio background task,
+# recording status in the parser_jobs collection. The frontend polls
+# GET /jobs/{id} every ~3s. Jobs TTL-purge after 24h.
 
-async def _run_parse_job(
+async def _run_full_parse_job(
     job_id: str,
-    content_parts: List[Dict[str, Any]],
-    file_summary: List[Dict[str, Any]],
-    persisted_files: List[Dict[str, Any]],
+    buffered_files: List[Any],
+    email_body: Optional[str],
+    notes: Optional[str],
+    persist_for: Optional[str],
     *,
     user_email: str,
     est_initials: Optional[str],
     customer_code: Optional[str],
     customer_name: Optional[str],
 ) -> None:
-    """Background worker — runs the Anthropic call and writes the outcome to
-    the parser_jobs collection. Never raises (errors are persisted)."""
+    """Background worker — does the EXPENSIVE prep (persist + PDF tiling +
+    base64) AND the Anthropic call, then writes the outcome to parser_jobs.
+
+    Prep is deferred here (instead of the submit request) so the submit
+    response returns instantly and never trips the Cloudflare/ingress ~100s
+    origin timeout on large CAD PDFs. Never raises (errors are persisted)."""
     try:
+        content_parts, file_summary, persisted_files = await _prepare_content(
+            buffered_files, email_body, notes, persist_for, user_email,
+        )
+        # Record what files were prepped as soon as prep finishes so the saved
+        # RFQ files panel + job doc reflect them even if the parse then fails.
+        await db[COL_PARSER_JOBS].update_one(
+            {"job_id": job_id},
+            {"$set": {"status": "parsing", "files": file_summary,
+                      "persistedFiles": persisted_files}},
+        )
         result = await _run_parse_and_log(
             content_parts, file_summary, persisted_files,
             user_email=user_email, est_initials=est_initials,
@@ -933,20 +958,27 @@ async def parse_rfq_async(
     quote_id: Optional[str] = Form(default=None),
     u: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Submit an RFQ parse as a background job. Reads + persists the uploads
-    inside the request (fast), then kicks off the slow Anthropic call as an
-    asyncio task and returns a job_id immediately (HTTP 202). Poll
-    GET /jobs/{job_id} for the result."""
+    """Submit an RFQ parse as a background job.
+
+    Reads ONLY the raw upload bytes inside the request (fast — the multipart
+    streams must be consumed before the response), then defers ALL expensive
+    processing (disk persist, high-DPI PDF tiling, base64, Anthropic call) to
+    an asyncio background task. This keeps the submit response instant so it
+    never trips the Cloudflare/ingress ~100s origin timeout (which previously
+    surfaced as an Error 520 on large CAD RFQs). Poll GET /jobs/{job_id}."""
     if not files and not email_body and not notes:
         raise HTTPException(400, "Must provide at least one file or email_body")
 
     persist_for = (quote_id or "").strip() or None
     user_email = getattr(u, "email", "") or getattr(u, "id", "") or ""
 
-    # Read + persist files + build content payload while the streams are open.
-    content_parts, file_summary, persisted_files = await _prepare_content(
-        files, email_body, notes, persist_for, user_email,
-    )
+    # Consume the multipart streams NOW (they close after the response) — but do
+    # only the cheap read; heavy prep runs in the background task.
+    buffered_files: List[Any] = []
+    for f in files:
+        raw = await f.read()
+        buffered_files.append(_BufferedUpload(f.filename or "upload",
+                                              f.content_type or "", raw))
 
     import uuid as _uuid
     job_id = _uuid.uuid4().hex
@@ -955,21 +987,20 @@ async def parse_rfq_async(
         "status": "pending",
         "owner": u.email,
         "quote_id": persist_for,
-        "files": file_summary,
-        "persistedFiles": persisted_files,
+        "files": [],
+        "persistedFiles": [],
         "created_at": datetime.now(timezone.utc),  # TTL anchor (BSON date)
     })
 
     # Fire-and-forget background task on the running event loop.
     import asyncio
-    asyncio.create_task(_run_parse_job(
-        job_id, content_parts, file_summary, persisted_files,
+    asyncio.create_task(_run_full_parse_job(
+        job_id, buffered_files, email_body, notes, persist_for,
         user_email=u.email, est_initials=est_initials,
         customer_code=customer_code, customer_name=customer_name,
     ))
 
-    return {"job_id": job_id, "status": "pending",
-            "files": file_summary, "persistedFiles": persisted_files}
+    return {"job_id": job_id, "status": "pending", "files": [], "persistedFiles": []}
 
 
 @router.get("/jobs/{job_id}")
