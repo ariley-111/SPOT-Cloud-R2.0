@@ -208,10 +208,26 @@ def extract_msg(raw: bytes) -> Dict[str, Any]:
 
 
 def _extract_one(filename: str, raw: bytes) -> Dict[str, Any]:
-    """Dispatch a single email blob on extension (no recursion)."""
+    """Dispatch a single email blob on extension (no recursion).
+
+    New Outlook / OWA / "Save as .msg" from the web frequently produce files
+    with a .msg extension that are actually MIME (RFC822), NOT OLE2 compound
+    files. extract-msg rejects those with "not an OLE2 structured storage
+    file". Detect that (and any .msg parse failure) and fall back to the MIME
+    parser so the RFQ still extracts instead of coming back empty.
+    """
     name_lower = (filename or "").lower()
     if name_lower.endswith(".msg"):
-        return extract_msg(raw)
+        # OLE2 compound files start with the magic bytes D0 CF 11 E0 A1 B1 1A E1.
+        # If the header doesn't match, don't even try extract-msg — parse as MIME.
+        is_ole2 = raw[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+        if is_ole2:
+            try:
+                return extract_msg(raw)
+            except Exception:
+                # Genuine OLE2 that extract-msg can't read — last-resort MIME try.
+                return extract_eml(raw)
+        return extract_eml(raw)
     return extract_eml(raw)  # .eml or unknown → MIME parser
 
 

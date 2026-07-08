@@ -1348,3 +1348,16 @@ Keeps cloud's compact layout but adds legacy functionality.
   components, split it" message. Already fixed by the 64K ceiling change (this session), not yet
   deployed to prod. Verified in preview: combined parse → 49 items, stop_reason=end_turn, no error.
 - REQUIRES REDEPLOY to reach production (covers both this qty fix AND the 64K/520 fixes).
+
+## 2026-07-08 (cont.) — Parser .msg "not an OLE2 structured storage file" fix
+- User report (new user, PROD): parse failed with "error: not an OLE2 structured storage file".
+- Root cause: new Outlook / OWA / web "Save as .msg" exports files with a .msg extension that are
+  actually MIME (RFC822), not OLE2 compound files. extract-msg (em.openMsg) rejects those, so the
+  email body + attachments were lost and the parse returned empty ("attach RFQ/CAD" asks).
+- Fix (utils/email_extract.py, _extract_one): check the OLE2 magic header (D0 CF 11 E0 A1 B1 1A E1);
+  if a .msg isn't OLE2, parse it with the MIME/.eml parser instead. Genuine OLE2 that extract-msg
+  still can't read also falls back to MIME as a last resort.
+- Verified: a MIME email named .msg → subject/body/PDF attachment all recovered (previously raised);
+  plain-text .msg no longer raises; end-to-end parse endpoint extracts email body + attachment
+  correctly (test only errored on a deliberately-fake PDF payload, not the .msg handling).
+- REQUIRES REDEPLOY to reach production.
