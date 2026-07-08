@@ -1331,3 +1331,20 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Verified end-to-end (preview, real key): submit returns instantly (pending, files=[]); job
   transitions pending→parsing→done; 50 bomItems returned, stop_reason=end_turn, files=1.
 - REQUIRES REDEPLOY to reach production.
+
+## 2026-07-08 (cont.) — Parser quantity-matrix fix + Crayola RFQ diagnosis
+- User report (Crayola Meijer 28ft POG RFQ): spreadsheet + CAD; parser missed per-item quantity
+  totals and (in prod) prompted "try a smaller RFQ".
+- Root cause A (quantity): the spreadsheet spreads qty across POG store-size columns
+  (28ft/32ft/36ft/40ft/44ft/48ft) with a "Totals" column per row. Parser wrongly treated the size
+  columns as qty price-break tiers (qtys=[18,22,22,31,25]) instead of using the Totals value.
+- Fix A (parser_knowledge.py, QUANTITY EXTRACTION): added QUANTITY MATRIX rule (use the
+  Total/Totals/Grand Total column as the item qty; size/region/wave columns are NOT tiers; sum +
+  CALC-tag if no totals col) and GROUPED DISPLAY ROWS rule (one bomItem per spreadsheet row, do NOT
+  merge rows sharing a design #; estimator groups afterward — user chose option c).
+- Verified (preview): spreadsheet-only → 49 items, each qtys=[row Totals] (125/18/107/22/63/32/7).
+- Root cause B ("smaller RFQ" in PROD): combined spreadsheet+BOM.pdf parse emits 19,056 output
+  tokens — exceeded the OLD 16K max_tokens cap in production → truncation → the 413 "too many
+  components, split it" message. Already fixed by the 64K ceiling change (this session), not yet
+  deployed to prod. Verified in preview: combined parse → 49 items, stop_reason=end_turn, no error.
+- REQUIRES REDEPLOY to reach production (covers both this qty fix AND the 64K/520 fixes).

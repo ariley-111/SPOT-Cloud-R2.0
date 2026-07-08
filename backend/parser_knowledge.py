@@ -614,6 +614,8 @@ EXTRACTION_INSTRUCTIONS = "\n".join([
     "  • Sample Request form has 4 qty rows (Blank assembled / Blank flat / Printed assembled / Printed flat) — pick the populated row.",
     "  • CAD title block \"Run Qty\" or \"Annual Vol\" — use only if no email/form qty available.",
     "  • Per-unit: \"24 sets of 6\" → 144 (CALC tag).",
+    "  • QUANTITY MATRIX (spreadsheets): when quantity is spread across MULTIPLE columns — e.g. store/POG sizes (28ft/32ft/36ft/40ft/44ft/48ft), regions, waves, or ship windows — those columns are NOT quantity price-break tiers. Use the row's \"Total\"/\"Totals\"/\"Grand Total\" column value as that item's quantity → qtys=[\"<total>\"] (single element). If there is NO totals column, SUM the numeric per-column values across the row and tag qtys with CALC. NEVER copy the individual size-split columns into qtys as if they were tiers.",
+    "  • GROUPED DISPLAY ROWS: when a spreadsheet groups component rows under display/program headings (e.g. \"Scribble Scrubbie Purple\", \"Gifts & Kits #1\") and the SAME component design # repeats under several groups with DIFFERENT totals, emit ONE bomItem PER spreadsheet row — do NOT merge or dedupe rows that share a design #. Each row's qty = its OWN Totals value. The estimator will group them afterward. (This means bomItems[] can be long — that is correct; keep every priced row.)",
     "  • Email body vs form conflict: EMAIL WINS, add ask noting the conflict.",
     "  • NO quantity anywhere → qtys: null + ASK \"What quantities should we quote?\"",
     "",
