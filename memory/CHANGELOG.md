@@ -1396,3 +1396,26 @@ Keeps cloud's compact layout but adds legacy functionality.
   download byte-identical to original, delete removes blob (subsequent access 404). Frontend
   compiles; attach button gone.
 - REQUIRES REDEPLOY to reach production. Old (pre-fix) attachments are unrecoverable.
+
+## 2026-07-13 (cont.) — Parser: artwork VERSIONS split + prepress-per-item
+- User RFQ (Elvive floorstand, prod quote RW-260709-132147): "SHELVES CAD 379-8675-05, 3 VERSIONS,
+  each 525 qty" (3 artworks sharing ONE common die). Parser collapsed the 3 versions into a single
+  shelf line, so only 1 prep charge instead of 3 and shelf volume under-represented.
+- Q&A findings: (Q1) "N-out" is auto-computed by compute_layout (core.py:556) from one-up dims vs
+  sheet size — 2-out/3-out adjusts automatically by size; caveat = single orientation, no rotation
+  (the P2 Bobst/Saber grain item). (Q2) prepress is applied PER line item (pricing.py:160), so 3
+  separate version items = 3 prep charges.
+- Parser tuning (parser_knowledge.py): ARTWORK VERSIONS rule — when an RFQ says a component has
+  N artwork versions sharing one CAD/die, emit ONE bomItem PER version (overrides "same Design # =
+  one component"), each at the stated per-version qty, IDENTICAL dims/board/die, desc labeled
+  "<name> — Version k of N", shared die charged once (V1 default, V2..N dieTreatment="None") + an ask.
+  Also rule 7d: printed components must not carry prepressTreatment="None"; rule 7c reinforced to set
+  colorsFront per component in Multi-Part.
+- Deterministic backstop (routes/parser.py normalization): the model kept emitting
+  prepressTreatment="None" on printed items (zeroes the prep charge). Now flip printed items
+  None→"Auto" post-parse so the standard per-item/per-artwork prep applies (~$50 each; estimator can
+  still turn prep off in the UI). NOTE: this makes prep appear by default on ALL printed items.
+- Verified (preview, real key): Elvive RFQ → 9 bomItems = Shelves V1/V2/V3 (525 each) + 6 components
+  (525 each); all colorsFront correct (4; Product Box 1); all prepress=Auto (9 prep charges);
+  shared-die ask present.
+- REQUIRES REDEPLOY to reach production.

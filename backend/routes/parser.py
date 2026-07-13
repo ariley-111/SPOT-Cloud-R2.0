@@ -427,6 +427,25 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
             if isinstance(st, dict):
                 _coerce_difficulty(st)
 
+    # Prepress default: the model tends to emit prepressTreatment="None" on
+    # printed components, which zeroes the standard per-item prep/art charge.
+    # SPC quotes generally DO carry a prep charge per printed line item (and one
+    # per distinct artwork version). Deterministically flip printed items from
+    # "None" → "Auto" so the charge applies; the estimator can still turn prep
+    # off manually in the UI for a specific no-prep job.
+    def _default_prepress(state: Dict[str, Any]) -> None:
+        try:
+            pr = str(state.get("printReq") or state.get("printRequired") or "").strip()
+            if pr == "Yes" and state.get("prepressTreatment") == "None":
+                state["prepressTreatment"] = "Auto"
+        except Exception:
+            pass
+
+    _default_prepress(parsed_root)
+    for bi in (parsed_root.get("bomItems") or []):
+        if isinstance(bi, dict) and isinstance(bi.get("state"), dict):
+            _default_prepress(bi["state"])
+
     # ─── Letter-of-Quote detection ───────────────────────────────────
     # If the RFQ IS (or quotes) one of our own Letters of Quote, surface the
     # SPOT quote number so the client can pull the original quote up in a new
