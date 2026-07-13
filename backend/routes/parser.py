@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from db import db, COL_PARSER_BUDGET, COL_CUSTOMERS, COL_PARSER_JOBS, COL_QUOTES, COL_USERS
@@ -1089,17 +1089,18 @@ async def upload_reference_files(
 
 @router.get("/files/{file_id}/download")
 async def download_file(file_id: str, _u: User = Depends(get_current_user)):
-    """Stream the original bytes back to the user."""
+    """Stream the original bytes back to the user (from GridFS)."""
     doc = await _parser_files.get_parser_file(file_id)
     if not doc:
         raise HTTPException(404, "File not found")
-    path = doc.get("disk_path")
-    if not path or not os.path.exists(path):
+    raw = await _parser_files.read_parser_file_bytes(doc)
+    if raw is None:
         raise HTTPException(410, "File blob missing on disk")
-    return FileResponse(
-        path,
+    filename = doc.get("filename") or f"file-{file_id[:8]}"
+    return Response(
+        content=raw,
         media_type=doc.get("mime") or "application/octet-stream",
-        filename=doc.get("filename") or f"file-{file_id[:8]}",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -1257,13 +1258,11 @@ async def preview_file(file_id: str, _u: User = Depends(get_current_user)):
     doc = await _parser_files.get_parser_file(file_id)
     if not doc:
         raise HTTPException(404, "File not found")
-    path = doc.get("disk_path")
-    if not path or not os.path.exists(path):
+    raw = await _parser_files.read_parser_file_bytes(doc)
+    if raw is None:
         raise HTTPException(410, "File blob missing on disk")
     filename = doc.get("filename") or f"file-{file_id[:8]}"
     mime = doc.get("mime") or ""
-    with open(path, "rb") as f:
-        raw = f.read()
     return _build_preview_payload(filename, mime, raw)
 
 
@@ -1280,15 +1279,13 @@ async def preview_email_attachment(file_id: str, idx: int,
     doc = await _parser_files.get_parser_file(file_id)
     if not doc:
         raise HTTPException(404, "File not found")
-    path = doc.get("disk_path")
-    if not path or not os.path.exists(path):
-        raise HTTPException(410, "File blob missing on disk")
     filename = doc.get("filename") or ""
     ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
     if ext not in {".eml", ".msg"}:
         raise HTTPException(400, "Attachment preview only supported for .eml/.msg files")
-    with open(path, "rb") as f:
-        raw = f.read()
+    raw = await _parser_files.read_parser_file_bytes(doc)
+    if raw is None:
+        raise HTTPException(410, "File blob missing on disk")
     try:
         from utils.email_extract import extract_email_file
         extracted = extract_email_file(filename, raw)

@@ -1,15 +1,17 @@
 """Parser file storage — saves raw uploads so estimators can retrieve / re-open
 the source documents that were parsed into a quote.
 
-Storage strategy: filesystem under /app/backend/uploads/<quote_or_draft_id>/<file_id>.<ext>
-Metadata in Mongo collection `parser_files`:
+Storage strategy (2026-07-13): file BYTES live in MongoDB GridFS (persistent —
+survives redeploys, unlike the old ephemeral container disk which caused
+"File blob missing on disk"). Metadata in Mongo collection `parser_files`:
   {
     id:              uuid (str),
     quote_id:        str (draft_id or quote_id — whichever owns this RFQ today),
     filename:        str (original name),
     mime:            str,
-    bytes:           int (size on disk),
+    bytes:           int (size),
     hash_sha256:     str (cheap dedupe + integrity),
+    gridfs_id:       ObjectId (GridFS blob handle),
     uploaded_at:     iso datetime str,
     uploaded_by:     user email,
     source:          "upload" | "zip_member" | "email_attachment",
@@ -19,41 +21,20 @@ Metadata in Mongo collection `parser_files`:
 
 Lifecycle (per user direction, 2026-06-12): files persist for the lifetime of
 their owning quote/draft. When a quote/draft is deleted, all associated
-parser_files are soft-deleted and their on-disk blobs purged.
+parser_files are soft-deleted and their GridFS blobs purged.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from db import db, COL_PARSER_FILES
+from db import db, gridfs_bucket, COL_PARSER_FILES
 
 logger = logging.getLogger(__name__)
-
-UPLOAD_ROOT = Path(os.environ.get("PARSER_UPLOAD_DIR") or "/app/backend/uploads")
-UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-
-
-def _safe_dir(quote_id: str) -> Path:
-    """Map a quote/draft id to a directory. Avoid path traversal."""
-    safe = re.sub(r"[^A-Za-z0-9_\-]", "_", str(quote_id or "orphan"))[:64] or "orphan"
-    d = UPLOAD_ROOT / safe
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _safe_ext(filename: str) -> str:
-    """Keep alphanumeric extension; cap at 6 chars."""
-    if not filename or "." not in filename:
-        return ""
-    ext = filename.rsplit(".", 1)[-1].lower()
-    return "." + re.sub(r"[^a-z0-9]", "", ext)[:6] if ext else ""
 
 
 async def save_parser_file(
@@ -66,21 +47,24 @@ async def save_parser_file(
     source: str = "upload",
     parent_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Persist a single file + metadata. Returns the saved metadata doc."""
+    """Persist a single file (bytes → GridFS) + metadata. Returns the saved doc."""
     file_id = uuid.uuid4().hex
-    dirpath = _safe_dir(quote_id)
-    diskpath = dirpath / f"{file_id}{_safe_ext(filename)}"
-    diskpath.write_bytes(content)
+    safe_name = filename or f"file-{file_id[:8]}"
+    gridfs_id = await gridfs_bucket.upload_from_stream(
+        safe_name, content,
+        metadata={"parser_file_id": file_id, "quote_id": str(quote_id or "orphan"),
+                  "mime": mime or "application/octet-stream"},
+    )
 
     sha = hashlib.sha256(content).hexdigest()
     doc = {
         "id": file_id,
         "quote_id": str(quote_id or "orphan"),
-        "filename": filename or f"file-{file_id[:8]}",
+        "filename": safe_name,
         "mime": mime or "application/octet-stream",
         "bytes": len(content),
         "hash_sha256": sha,
-        "disk_path": str(diskpath),
+        "gridfs_id": gridfs_id,
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "uploaded_by": uploaded_by or "",
         "source": source,
@@ -89,14 +73,29 @@ async def save_parser_file(
     }
     await db[COL_PARSER_FILES].insert_one(doc)
     doc.pop("_id", None)
+    doc.pop("gridfs_id", None)  # internal handle — never leak to callers
     return doc
+
+
+async def read_parser_file_bytes(doc: Dict[str, Any]) -> Optional[bytes]:
+    """Return the raw bytes for a parser_file metadata doc, or None if the blob
+    is missing (legacy disk-stored files whose blob was lost, or a bad handle)."""
+    gid = doc.get("gridfs_id")
+    if gid is None:
+        return None
+    try:
+        stream = await gridfs_bucket.open_download_stream(gid)
+        return await stream.read()
+    except Exception as e:
+        logger.warning(f"gridfs read failed for {doc.get('id')}: {e}")
+        return None
 
 
 async def list_parser_files(quote_id: str) -> List[Dict[str, Any]]:
     """List non-deleted files for a quote."""
     cur = db[COL_PARSER_FILES].find(
         {"quote_id": str(quote_id), "deleted_at": None},
-        {"_id": 0, "disk_path": 0},  # hide internal path
+        {"_id": 0, "disk_path": 0, "gridfs_id": 0},  # hide internal handles
     ).sort("uploaded_at", 1)
     return [d async for d in cur]
 
@@ -114,7 +113,7 @@ async def count_files_by_quote(quote_ids: List[str]) -> Dict[str, int]:
 
 
 async def get_parser_file(file_id: str) -> Optional[Dict[str, Any]]:
-    """Fetch one file's metadata (including disk_path, for download handler)."""
+    """Fetch one file's metadata (including gridfs_id, for download/preview)."""
     doc = await db[COL_PARSER_FILES].find_one(
         {"id": file_id, "deleted_at": None}, {"_id": 0}
     )
@@ -122,7 +121,7 @@ async def get_parser_file(file_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def soft_delete_file(file_id: str) -> bool:
-    """Mark file deleted + remove the blob from disk."""
+    """Mark file deleted + remove the blob from GridFS."""
     doc = await db[COL_PARSER_FILES].find_one_and_update(
         {"id": file_id, "deleted_at": None},
         {"$set": {"deleted_at": datetime.now(timezone.utc).isoformat()}},
@@ -130,12 +129,12 @@ async def soft_delete_file(file_id: str) -> bool:
     )
     if not doc:
         return False
-    try:
-        p = Path(doc.get("disk_path") or "")
-        if p.exists():
-            p.unlink()
-    except OSError as e:
-        logger.warning(f"failed to unlink parser file {file_id}: {e}")
+    gid = doc.get("gridfs_id")
+    if gid is not None:
+        try:
+            await gridfs_bucket.delete(gid)
+        except Exception as e:
+            logger.warning(f"failed to delete gridfs blob for {file_id}: {e}")
     return True
 
 
@@ -145,12 +144,8 @@ async def reassign_quote_files(from_quote_id: str, to_quote_id: str) -> int:
     Used by the frontend autosave + save-as-quote flows so files uploaded
     against a transient local tab id (e.g. `local-abc123`) follow the quote
     through to its persisted draft id and later its saved quote id. Returns
-    the number of records updated.
-
-    Disk paths are NOT moved — they're absolute and tracked per-doc, so the
-    download/preview handlers still resolve correctly. The orphaned dir
-    will be cleaned up by `purge_quote_files` when the quote is deleted.
-    """
+    the number of records updated. Blobs stay in GridFS untouched (only the
+    owning quote_id key changes)."""
     if not from_quote_id or not to_quote_id or from_quote_id == to_quote_id:
         return 0
     res = await db[COL_PARSER_FILES].update_many(
@@ -165,12 +160,12 @@ async def purge_quote_files(quote_id: str) -> int:
     Returns number of files purged."""
     purged = 0
     async for doc in db[COL_PARSER_FILES].find({"quote_id": str(quote_id)}):
-        try:
-            p = Path(doc.get("disk_path") or "")
-            if p.exists():
-                p.unlink()
-        except OSError:
-            pass
+        gid = doc.get("gridfs_id")
+        if gid is not None:
+            try:
+                await gridfs_bucket.delete(gid)
+            except Exception:
+                pass
         purged += 1
     await db[COL_PARSER_FILES].delete_many({"quote_id": str(quote_id)})
     return purged

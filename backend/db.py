@@ -3,13 +3,17 @@
 Singleton connection that all routes share. Uses MONGO_URL and DB_NAME from .env.
 """
 import os
-from motor.motor_asyncio import AsyncIOMotorClient
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
 
 _mongo_url = os.environ['MONGO_URL']
 _db_name = os.environ['DB_NAME']
 
 client = AsyncIOMotorClient(_mongo_url)
 db = client[_db_name]
+
+# GridFS bucket — persistent blob storage for RFQ/reference files. Lives in
+# MongoDB (survives redeploys), unlike the old ephemeral container disk.
+gridfs_bucket = AsyncIOMotorGridFSBucket(db)
 
 
 # Collection names (single source of truth)

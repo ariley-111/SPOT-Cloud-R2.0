@@ -1377,3 +1377,22 @@ Keeps cloud's compact layout but adds legacy functionality.
   as a fraction and display correctly (0.5 → 50). Verified via UI: entered 25 → field shows 25 →
   stored 0.25 (round-trip confirmed).
 - REQUIRES REDEPLOY to reach production.
+
+## 2026-07-13 (cont.) — File storage → GridFS (fix "File blob missing on disk")
+- Problem (PROD): files attached to saved quotes showed "File blob missing on disk". Root cause:
+  blobs were written to the container's local disk (/app/backend/uploads), which is EPHEMERAL —
+  every redeploy/restart wiped the disk while the parser_files Mongo metadata survived.
+- Fix (persistent storage): file BYTES now live in MongoDB GridFS (db.py gridfs_bucket).
+  * services/parser_files.py: save→upload_from_stream; added read_parser_file_bytes; get/list hide
+    internal handles; soft_delete + purge delete from GridFS; reassign unchanged.
+  * routes/parser.py: download/preview/email-attachment-preview read bytes from GridFS
+    (download returns Response(bytes) with Content-Disposition; no more disk paths).
+  * Legacy disk-stored records (no gridfs_id) return a clean 410 — those old blobs are gone.
+- Workflow change (per user): removed the manual "Attach to quote" button (btn-attach-files) +
+  attachFiles/attaching. Files auto-save on parse (existing persist_for path); runParseDirect also
+  persists any non-RFQ staged files so nothing attached is lost. Delete kept with a stronger
+  "permanent, cannot be undone" confirm.
+- Verified end-to-end (preview): upload→GridFS, list (no leaked handles), preview PDF+CSV,
+  download byte-identical to original, delete removes blob (subsequent access 404). Frontend
+  compiles; attach button gone.
+- REQUIRES REDEPLOY to reach production. Old (pre-fix) attachments are unrecoverable.

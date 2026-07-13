@@ -22,7 +22,6 @@ export default function FilesSec() {
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState([]);              // {filename, size, mime, class, file}
   const [busy, setBusy] = useState(false);
-  const [attaching, setAttaching] = useState(false);
   const [parseResult, setParseResult] = useState(null);
   const [parserError, setParserError] = useState("");
   const [budget, setBudget] = useState(null);
@@ -91,27 +90,10 @@ export default function FilesSec() {
     setParseResult(null); setParserError("");
   };
 
-  // Attach staged files to the quote for reference WITHOUT parsing. Persists
-  // them as saved RFQ files (survive save/reload via the same draft→quote
-  // reassign migration the parser uses), then clears the staging list.
-  const attachFiles = async () => {
-    if (!files.length || attaching) return;
-    if (!filesQuoteId) { pushToast("Could not determine quote — try again.", "err"); return; }
-    setAttaching(true);
-    try {
-      const raw = files.map((f) => f.file);
-      const res = await uploadParserFiles(raw, filesQuoteId);
-      setFiles([]);
-      const arr = await listParserFiles(filesQuoteId);
-      setSavedFiles(arr);
-      const n = res?.count ?? raw.length;
-      pushToast(`${n} file${n === 1 ? "" : "s"} saved to quote`, "ok");
-    } catch (e) {
-      pushToast(e?.response?.data?.detail || e.message, "err");
-    } finally {
-      setAttaching(false);
-    }
-  };
+  // Auto-save on parse: the parser persists every attached RFQ file to the
+  // quote (GridFS) as part of the parse. Any non-RFQ staged files are saved
+  // too (see runParseDirect) so nothing attached is ever lost. There is no
+  // separate manual "attach" step.
 
   const hasRfq = files.some((f) => f.class === "rfq");
   const hasCached = !!parseResult;
@@ -132,6 +114,12 @@ export default function FilesSec() {
       // Letter-of-Quote re-submission: the parser recognized one of OUR quote
       // numbers in the RFQ → surface a prompt to pull the original up + duplicate.
       if (r.matchedQuote && r.matchedQuote.id) setMatchedQuote(r.matchedQuote);
+      // Auto-save any non-RFQ staged files too, so nothing attached is lost
+      // when the staging list is cleared below.
+      const extras = files.filter((f) => f.class !== "rfq").map((f) => f.file);
+      if (extras.length && filesQuoteId) {
+        try { await uploadParserFiles(extras, filesQuoteId); } catch (_) {}
+      }
       // Parsed files are now persisted to the quote (server-side, before the
       // Anthropic call) — they show in "Saved RFQ files". Clear the staging
       // list so a later swap re-parses ONLY the new file, not old + new.
@@ -315,23 +303,6 @@ export default function FilesSec() {
         </div>
       )}
 
-      {/* Attach-to-quote (no parse) — save staged files for reference */}
-      {files.length > 0 && (
-        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={attachFiles} disabled={attaching}
-            data-testid="btn-attach-files"
-            title="Save these files with the quote for reference (no parsing)"
-            style={{
-              all: "unset", cursor: attaching ? "not-allowed" : "pointer",
-              fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 4,
-              background: "#06b6d418", color: "#06b6d4",
-              border: "1px solid #06b6d455", opacity: attaching ? 0.7 : 1,
-            }}>
-            {attaching ? "↻ Saving…" : "⤓ Attach to quote"}
-          </button>
-        </div>
-      )}
-
       {/* Folder status */}
       {folderName && (
         <div style={{ fontSize: 10, color: "var(--spot-text3)", marginTop: 6 }} data-testid="files-folder-name">
@@ -374,7 +345,7 @@ export default function FilesSec() {
                     color: "var(--spot-accent)", padding: "2px 6px" }}>↓</button>
                 <button onClick={async (e) => {
                     e.stopPropagation();
-                    if (!window.confirm(`Delete saved file "${sf.filename}"?`)) return;
+                    if (!window.confirm(`Permanently delete "${sf.filename}" from this quote? This cannot be undone.`)) return;
                     try {
                       await deleteParserFile(sf.id);
                       setSavedFiles((cur) => cur.filter((x) => x.id !== sf.id));
