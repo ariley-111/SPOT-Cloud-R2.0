@@ -446,6 +446,35 @@ async def _call_anthropic(content_parts: List[Dict[str, Any]]) -> Dict[str, Any]
         if isinstance(bi, dict) and isinstance(bi.get("state"), dict):
             _default_prepress(bi["state"])
 
+    # One CAD = one die. Artwork versions share a single physical die, but the
+    # engine's auto-die ($1200 Crest / $1800 Bobst, runner.py:178) fires PER item
+    # on die routes and OVERRIDES an input dieTreatment of "None" — which would
+    # charge the shared die once per version (3 versions → 3× die). Suppress the
+    # die on every version EXCEPT the first: dieTreatment="Amortize" + cost 0
+    # blocks both auto-die (condition excludes "Amortize") and any accidental
+    # manual die (die_base=0), so the version group carries exactly ONE die.
+    import re as _re
+    _ver_groups: Dict[str, list] = {}
+    for bi in (parsed_root.get("bomItems") or []):
+        if not isinstance(bi, dict):
+            continue
+        st = bi.get("state") if isinstance(bi.get("state"), dict) else {}
+        desc = str(bi.get("desc") or st.get("itemDesc") or "")
+        m = _re.search(r"Version\s+(\d+)\s+of\s+(\d+)", desc, _re.I)
+        if not m:
+            continue
+        base = desc[:m.start()].rstrip(" —-").strip().lower()
+        _ver_groups.setdefault(base, []).append((int(m.group(1)), bi))
+    for base, members in _ver_groups.items():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda x: x[0])
+        for _vnum, bi in members[1:]:  # every version after the first
+            st = bi.get("state")
+            if isinstance(st, dict):
+                st["dieTreatment"] = "Amortize"
+                st["cuttingDieCost"] = "0"
+
     # ─── Letter-of-Quote detection ───────────────────────────────────
     # If the RFQ IS (or quotes) one of our own Letters of Quote, surface the
     # SPOT quote number so the client can pull the original quote up in a new
