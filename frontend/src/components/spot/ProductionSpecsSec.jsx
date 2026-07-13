@@ -236,7 +236,23 @@ export default function ProductionSpecsSec({ result }) {
           );
         })()}
         <F l="Perf %" inline>
-          <Num value={s.perfPct} onChange={(v) => setField("perfPct", v)} step="0.01" min="0" max="1" style={{ width: 60, textAlign: "center" }} data-testid="input-perf-pct" />
+          {/* User enters a WHOLE percent (e.g. 25 for 25%); we store the decimal
+              fraction (0.25) the engine expects, so pricing math / legacy parity
+              are unchanged. Clamped 0–100 so a mis-typed value can't blow up the cut. */}
+          <Num
+            value={s.perfPct === "" || s.perfPct == null ? "" : String(+(Number(s.perfPct) * 100).toFixed(2))}
+            onChange={(v) => {
+              if (v === "") { setField("perfPct", "0"); return; }
+              let pct = Number(v);
+              if (Number.isNaN(pct)) return;
+              pct = Math.max(0, Math.min(100, pct));
+              setField("perfPct", String(+(pct / 100).toFixed(4)));
+            }}
+            step="1" min="0" max="100"
+            title="Enter whole percent, e.g. 25 for 25% perforated"
+            style={{ width: 60, textAlign: "center" }}
+            data-testid="input-perf-pct"
+          />
         </F>
         <F l="Mats" inline>
           <div style={{ display: "flex", gap: 2 }}>

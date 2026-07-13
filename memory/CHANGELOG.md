@@ -1361,3 +1361,19 @@ Keeps cloud's compact layout but adds legacy functionality.
   plain-text .msg no longer raises; end-to-end parse endpoint extracts email body + attachment
   correctly (test only errored on a deliberately-fake PDF payload, not the .msg handling).
 - REQUIRES REDEPLOY to reach production.
+
+## 2026-07-13 — Perf % input: whole-percent entry (UX), decimal storage (parity kept)
+- Problem: Perf % field expected a decimal FRACTION (0–1) but was labeled "%", so typing a whole
+  number (e.g. 50) fed the engine perf=50 → cutting-runtime multiplier (1-perf)+(perf/0.4) = 76×,
+  exploding the cut cost. Confirmed NO legacy/cloud math mismatch — formulas (pricing.py 85/95 ==
+  SPOT_R1.5.html 2344/2356), rate default (cadPerfSpeedFactor=0.40), and the old 0–1 input were
+  all identical. Root cause was the fraction-vs-percent input-scale trap (native input max=1 does
+  not clamp typed values).
+- Change (frontend ProductionSpecsSec.jsx only): Perf % input now accepts a WHOLE percent (25 = 25%),
+  clamps 0–100, and stores the decimal fraction (0.25) the engine expects. Engine math, stored data,
+  PDF, and pricing parity are UNCHANGED — only the input display layer converts (×100 in, ÷100 out).
+  Added title hint "Enter whole percent, e.g. 25 for 25%".
+- NOTE: deliberate UX deviation from legacy R1.5 (which took 0–1). Existing saved quotes store perf
+  as a fraction and display correctly (0.5 → 50). Verified via UI: entered 25 → field shows 25 →
+  stored 0.25 (round-trip confirmed).
+- REQUIRES REDEPLOY to reach production.
