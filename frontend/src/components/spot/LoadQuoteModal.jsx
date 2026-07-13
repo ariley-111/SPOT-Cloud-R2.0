@@ -373,7 +373,7 @@ export default function LoadQuoteModal({ onClose }) {
           </div>
         )}
 
-        <input className="sp-input" placeholder="Search est#, customer, project, item, team, owner…"
+        <input className="sp-input" placeholder="Search est#, customer, ident, project, item, team, owner…"
           value={q} onChange={(e) => setQ(e.target.value)}
           data-testid="load-search-input" style={{ flex: 1, minWidth: 200 }} />
 

@@ -142,8 +142,8 @@ async def list_quotes(
       • all  — alias for team (admin clarity)
     Optional `owner_id` filters to a single user (useful when team view is on).
     Optional `status` filters by current status (draft/saved/sent/won/lost).
-    Optional `q` full-text search across est#, customer (code/name), project
-      name (custRef), item description, estimating-team initials, and the
+    Optional `q` full-text search across est#, customer (code/name/ident),
+      project name (custRef), item description, estimating-team initials, and the
       owner's name/email. Searches ALL matching quotes, not just the page.
     Response is a flat list with `owner_name` joined in for display.
     """
@@ -163,7 +163,7 @@ async def list_quotes(
         ]
         or_clauses: List[Dict[str, Any]] = [
             {"est_num": rx}, {"customer_name": rx}, {"customer_code": rx},
-            {"state.custName": rx}, {"state.custCode": rx},
+            {"state.custName": rx}, {"state.custCode": rx}, {"state.custIdent": rx},
             {"state.custRef": rx}, {"state.itemDesc": rx}, {"state.estInitials": rx},
         ]
         if name_ids:

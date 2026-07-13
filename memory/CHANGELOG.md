@@ -1419,3 +1419,9 @@ Keeps cloud's compact layout but adds legacy functionality.
   (525 each); all colorsFront correct (4; Product Box 1); all prepress=Auto (9 prep charges);
   shared-die ask present.
 - REQUIRES REDEPLOY to reach production.
+
+## 2026-07-13 (cont.) — Load Quote: search by Customer Ident
+- Added state.custIdent to the quote search $or clauses (routes/quotes.py list_quotes) so the Load
+  Quote search box matches on customer ident (full or partial). Updated LoadQuoteModal placeholder
+  to "Search est#, customer, ident, project, item, team, owner…". Verified: q=2603658 / 2603692.ARD
+  / 4444 return the matching quotes. REQUIRES REDEPLOY for production.
