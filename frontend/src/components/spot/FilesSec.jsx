@@ -46,7 +46,7 @@ export default function FilesSec() {
     if (!filesQuoteId) { setSavedFiles([]); return; }
     let cancel = false;
     listParserFiles(filesQuoteId)
-      .then((arr) => { if (!cancel) setSavedFiles(arr); })
+      .then((arr) => { if (!cancel) setSavedFiles((arr || []).filter((f) => f.source !== "document")); })
       .catch(() => { if (!cancel) setSavedFiles([]); });
     return () => { cancel = true; };
   }, [filesQuoteId]);

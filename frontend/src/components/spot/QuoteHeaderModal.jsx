@@ -99,11 +99,19 @@ export default function QuoteHeaderModal({ onClose }) {
             </Field>
           </div>
 
-          <Field l="Quote Notes">
+          <Field l="Quote Notes (appears on the Letter of Quote)">
             <textarea className="sp-input" rows={3} data-testid="qh-notes"
               value={s.quoteNotes || ""}
               onChange={(e) => setField("quoteNotes", e.target.value)}
               placeholder="Special terms, conditions, or notes for customer..."
+              style={{ resize: "vertical", minHeight: 60 }} />
+          </Field>
+
+          <Field l="Estimator Notes (internal — NOT on the Letter of Quote)">
+            <textarea className="sp-input" rows={3} data-testid="qh-estimator-notes"
+              value={s.estimatorNotes || ""}
+              onChange={(e) => setField("estimatorNotes", e.target.value)}
+              placeholder="Internal notes between estimators (never printed on the customer quote)..."
               style={{ resize: "vertical", minHeight: 60 }} />
           </Field>
         </div>

@@ -271,10 +271,11 @@ export const sheetLibraryPriced = (body) =>
 export const listParserFiles = (quoteId) =>
   api.get(`/parser/files?quote_id=${encodeURIComponent(quoteId)}`).then((r) => r.data.files || []);
 // Attach files to a quote for reference WITHOUT running the parser.
-export const uploadParserFiles = (files, quoteId) => {
+export const uploadParserFiles = (files, quoteId, source = "upload") => {
   const fd = new FormData();
   for (const f of files || []) fd.append("files", f);
   fd.append("quote_id", quoteId);
+  fd.append("source", source);
   return api.post("/parser/files/upload", fd, {
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 120000,

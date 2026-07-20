@@ -334,10 +334,30 @@ export default function ProductionSpecsSec({ result }) {
           {s.tape === "Yes" && (
             <F l="" inline>
               <div style={{ display: "flex", gap: 2 }}>
-                <Tile label="Clear" active={s.tapeType === "Clear"}      onClick={() => setField("tapeType", "Clear")} small tint="#14b8a6" data-testid="tile-tapetype-clear" />
-                <Tile label="Reinf" active={s.tapeType === "Reinforced"} onClick={() => setField("tapeType", "Reinforced")} small tint="#14b8a6" data-testid="tile-tapetype-reinf" />
+                <Tile label="Film" active={s.tapeType === "Film" || s.tapeType === "Clear"}      onClick={() => setField("tapeType", "Film")} small tint="#14b8a6" data-testid="tile-tapetype-film" />
+                <Tile label="Foam" active={s.tapeType === "Foam" || s.tapeType === "Reinforced"} onClick={() => setField("tapeType", "Foam")} small tint="#14b8a6" data-testid="tile-tapetype-foam" />
               </div>
             </F>
+          )}
+          {s.tape === "Yes" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, alignSelf: "flex-end" }}>
+              <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--spot-text3)" }}>Strips</label>
+              <input className="sp-input" type="number" min="1" value={s.tapeStrips ?? "1"}
+                data-testid="input-tape-strips"
+                onChange={(e) => setField("tapeStrips", e.target.value)}
+                style={{ width: 50, padding: "5px 8px", fontSize: 12, textAlign: "center",
+                  borderColor: (!s.tapeStrips || Number(s.tapeStrips) <= 0) ? "var(--spot-err)" : undefined }} />
+            </div>
+          )}
+          {s.tape === "Yes" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, alignSelf: "flex-end" }}>
+              <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--spot-text3)" }}>Strip Len (in)</label>
+              <input className="sp-input" type="number" min="0" step="0.25" value={s.tapeStripLength ?? "0"}
+                data-testid="input-tape-strip-length"
+                onChange={(e) => setField("tapeStripLength", e.target.value)}
+                style={{ width: 64, padding: "5px 8px", fontSize: 12, textAlign: "center",
+                  borderColor: (!s.tapeStripLength || Number(s.tapeStripLength) <= 0) ? "var(--spot-err)" : undefined }} />
+            </div>
           )}
         </div>
       </div>

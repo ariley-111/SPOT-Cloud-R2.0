@@ -1099,20 +1099,22 @@ async def reassign_files(body: ReassignBody, _u: User = Depends(get_current_user
 async def upload_reference_files(
     files: List[UploadFile] = File(default=[]),
     quote_id: str = Form(...),
+    source: str = Form(default="upload"),
     u: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Persist RFQ/reference files to a quote WITHOUT running the parser.
 
     Lets estimators attach files for reference even when they build the
-    quote manually (no Anthropic parse). Files are stored exactly like
-    parse-rfq's persisted uploads (source='upload') so they appear in the
-    Saved RFQ files list and survive save/reload + the draft→quote reassign
-    migration."""
+    quote manually (no Anthropic parse). `source` distinguishes RFQ uploads
+    ("upload") from ad-hoc quote documents ("document" — invoices, outsourcing
+    docs, etc.). Both are stored in GridFS + survive save/reload + the
+    draft→quote reassign migration."""
     qid = (quote_id or "").strip()
     if not qid:
         raise HTTPException(400, "quote_id is required")
     if not files:
         raise HTTPException(400, "No files provided")
+    src = source if source in ("upload", "document") else "upload"
     saved: List[Dict[str, Any]] = []
     for f in files:
         try:
@@ -1125,7 +1127,7 @@ async def upload_reference_files(
                 mime=f.content_type or "application/octet-stream",
                 content=content,
                 uploaded_by=getattr(u, "email", "") or "",
-                source="upload",
+                source=src,
             )
             saved.append({"id": meta["id"], "filename": meta["filename"], "bytes": meta["bytes"]})
         except Exception as e:

@@ -41,6 +41,7 @@ export default function RightDashboard({ width }) {
       freightEmbed: row.freightEmbed || itemResult.freightEmbed || 0,
       dieLineCost: row.dieLineCost || itemResult.dieLineCost || 0,
       prepressLineCost: row.prepressLineCost || itemResult.prepressLineCost || 0,
+      proofLineCost: row.proofLineCost || itemResult.proofLineCost || 0,
       miscLineCost: row.miscLineCost || itemResult.miscLineCost || 0,
       sellTotal: row.sellTotal || itemResult.sellTotal || 0,
       miscLineItems: row.miscLineItems || itemResult.miscLineItems || [],
@@ -1490,8 +1491,9 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                 const dieSep = !!r.dieSep && (r.dieLineCost || 0) > 0;
                 const freightSep = !!r.freightSep && (r.freightLine || 0) > 0;
                 const prepressSep = !!r.prepressSep && (r.prepressLineCost || 0) > 0;
+                const proofSep = !!r.proofSep && (r.proofLineCost || 0) > 0;
                 const miscSep = (r.miscLineCost || 0) > 0;
-                const hasAnyLine = dieSep || freightSep || prepressSep || miscSep;
+                const hasAnyLine = dieSep || freightSep || prepressSep || proofSep || miscSep;
                 if (!hasAnyLine) {
                   return (
                     <div style={{ marginTop: 4, fontSize: 11, color: "var(--spot-text3)" }}>
@@ -1503,11 +1505,12 @@ function EconomicsPanel({ s, result, aggregate, isMultiPart, activeItemIdx }) {
                 return (
                   <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--spot-text2)", fontStyle: "italic", paddingTop: 4, flexWrap: "wrap" }}>
                     {freightSep && <span>Freight: {fmtMoney(r.freightLine)}</span>}
-                    {dieSep && <span>Die: {fmtMoney(r.dieLineCost)}</span>}
                     {prepressSep && <span>Prepress: {fmtMoney(r.prepressLineCost)}</span>}
+                    {proofSep && <span>Proofs: {fmtMoney(r.proofLineCost)}</span>}
                     {(r.miscLineItems || []).filter((li) => (li.amt || 0) > 0).map((li, mi) => (
                       <span key={`econ-mli-${mi}`}>{li.name || "Misc"}: {fmtMoney(li.amt)}</span>
                     ))}
+                    {dieSep && <span>Die: {fmtMoney(r.dieLineCost)}</span>}
                     <span style={{ fontWeight: 700, color: "var(--spot-accent)", fontStyle: "normal" }}>
                       Order: {fmtMoney(r.sellTotal)}
                     </span>
@@ -1647,7 +1650,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         )}
         {detail && r.assemblyCost > 0 && (
           <SubRow label={s.tape === "Yes"
-            ? `Tape ${labelize(s.tapeType || "Clear")}`
+            ? `Tape ${(s.tapeType === "Foam" || s.tapeType === "Reinforced") ? "Foam" : "Film"} · ${s.tapeStrips || 1} strip${Number(s.tapeStrips) === 1 ? "" : "s"} × ${s.tapeStripLength || 0}"`
             : `Glue ${labelize(s.gluingComplexity || "Standard")}, ${s.jointsPerPiece || 1} jt @ $23.00/hr`}
             value={fmtMoney(r.assemblyCost)} />
         )}
@@ -1660,6 +1663,13 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
             Prepress amort.{detail && r.prepressEmbedded > 0 ? <span style={{ color: "var(--spot-text3)" }}> {fmtMoney(r.prepressEmbedded)}, no OH/GM</span> : ""}
           </span>
         } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.prepressEmbedded)}</span>} />
+        {(r.proofEmbedded || 0) > 0 && (
+          <Row label={
+            <span style={{ fontStyle: "italic" }}>
+              Proofs amort.{detail ? <span style={{ color: "var(--spot-text3)" }}> {fmtMoney(r.proofEmbedded)}, no OH/GM</span> : ""}
+            </span>
+          } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(r.proofEmbedded)}</span>} />
+        )}
         {/* Hide Die row in Indirect when no embedded die — legacy parity:
             legacy doesn't render a "Die: None" line in the Indirect section.
             Embedded die only appears when treatment is Amortize and engine
@@ -1693,10 +1703,11 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
           const freight = src.freightLine || 0;
           const die = src.dieLineCost || 0;
           const prepress = src.prepressLineCost || 0;
+          const proof = src.proofLineCost || 0;
           const misc = src.miscLineCost || 0;
           const itemsSell = src.itemSell || 0;
-          const grandTotal = src.sellTotal || (itemsSell + freight + die + prepress + misc);
-          const hasAnyLine = freight > 0 || die > 0 || prepress > 0 || misc > 0;
+          const grandTotal = src.sellTotal || (itemsSell + freight + die + prepress + proof + misc);
+          const hasAnyLine = freight > 0 || die > 0 || prepress > 0 || proof > 0 || misc > 0;
           return (
             <>
               {hasAnyLine && (
@@ -1742,29 +1753,6 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                   } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(freight)}</span>} />
                 );
               })()}
-              {die > 0 && (() => {
-                // Component-scoped: active component's die. Job-scoped (Per-Job):
-                // aggregate die base/markup across the set.
-                const baseCost = isMpPerJob
-                  ? Number(src.dieBaseTotal || 0)
-                  : Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
-                const markupPct = isMpPerJob
-                  ? Number(src.dieMarkupAvg || 0)
-                  : Number(s?.dieMarkup || r.dieMarkup || 0);
-                const showBreakdown = baseCost > 0 && markupPct > 0;
-                return (
-                  <Row label={
-                    <span style={{ fontStyle: "italic" }}>
-                      Die
-                      {showBreakdown && (
-                        <span style={{ color: "var(--spot-text3)" }}>
-                          {" "}{fmtMoney(baseCost)} + {(markupPct * 100).toFixed(0)}% markup
-                        </span>
-                      )}
-                    </span>
-                  } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />
-                );
-              })()}
               {prepress > 0 && (() => {
                 const baseCost = isMpPerJob ? 0 : Number(s?.prepressCost || r.prepressCost || 0);
                 const markupPct = Number(s?.prepressMarkup || r.prepressMarkup || 0);
@@ -1780,6 +1768,23 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                       )}
                     </span>
                   } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(prepress)}</span>} />
+                );
+              })()}
+              {proof > 0 && (() => {
+                const baseCost = isMpPerJob ? 0 : Number(s?.proofCost || r.proofCost || 0);
+                const markupPct = Number(s?.proofMarkup || r.proofMarkup || 0);
+                const showBreakdown = baseCost > 0 && markupPct > 0;
+                return (
+                  <Row label={
+                    <span style={{ fontStyle: "italic" }}>
+                      Proofs
+                      {showBreakdown && (
+                        <span style={{ color: "var(--spot-text3)" }}>
+                          {" "}{fmtMoney(baseCost)} + {(markupPct * 100).toFixed(0)}% markup
+                        </span>
+                      )}
+                    </span>
+                  } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(proof)}</span>} />
                 );
               })()}
               {/* Named misc items — one row per user-typed name, with markup */}
@@ -1805,6 +1810,29 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
                     } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(li.amt)}</span>} />
                   );
                 });
+              })()}
+              {/* Die is intentionally LAST among one-time line items (per estimator
+                  convention) — only misc/other charges may follow it above the total. */}
+              {die > 0 && (() => {
+                const baseCost = isMpPerJob
+                  ? Number(src.dieBaseTotal || 0)
+                  : Number(s?.cuttingDieCost || r.cuttingDieCost || 0);
+                const markupPct = isMpPerJob
+                  ? Number(src.dieMarkupAvg || 0)
+                  : Number(s?.dieMarkup || r.dieMarkup || 0);
+                const showBreakdown = baseCost > 0 && markupPct > 0;
+                return (
+                  <Row label={
+                    <span style={{ fontStyle: "italic" }}>
+                      Die
+                      {showBreakdown && (
+                        <span style={{ color: "var(--spot-text3)" }}>
+                          {" "}{fmtMoney(baseCost)} + {(markupPct * 100).toFixed(0)}% markup
+                        </span>
+                      )}
+                    </span>
+                  } value={<span style={{ fontStyle: "italic" }}>{fmtMoney(die)}</span>} />
+                );
               })()}
                   <RowTotal label={isMpPerJob ? "Quote Total (job)" : "Quote Total"} value={fmtMoney(grandTotal)} accent="var(--spot-purple)" />
                 </>

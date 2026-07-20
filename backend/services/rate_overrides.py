@@ -57,6 +57,7 @@ _RATE_TO_ASMP: Dict[str, Any] = {
     "clearTapeCost":     ("clearTapeCostPerFt",      float),
     "reinfTapeCost":     ("reinforcedTapeCostPerFt", float),
     "tapeFtPerPc":       ("tapeFootPerPiece", float),
+    "tapeCostPerInch":   ("tapeCostPerInch", float),
     "side2Factor":       ("side2PrintFactor", float),
     "incaMinChg":        ("incaMinCharge",   float),
     "cadMinChg":         ("cadMinCharge",    float),

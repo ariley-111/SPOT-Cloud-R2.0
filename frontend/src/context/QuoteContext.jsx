@@ -45,7 +45,7 @@ const isTabDirty = (st) => !!(st && (
 
 const DEFAULT_SEC = {
   job: true, bom: true, qty: true, prod: true, quoteTable: true,
-  pricing: false, rates: false, engine: false, files: true,
+  pricing: false, rates: false, engine: false, files: true, documents: false,
 };
 
 function makeBlankTab(label = "New Quote", initials = "") {

@@ -146,9 +146,12 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         assembly_cost = max((ord_qty * jppc * per_j / 60) * asmp.get("handGluingRate", 23),
                             asmp.get("handGluingMinCharge", 0))
     elif prod.get("tape") == "Yes":
-        cost_per_ft = asmp.get("reinforcedTapeCostPerFt", 0.08) if prod.get("tapeType") == "Reinforced" else asmp.get("clearTapeCostPerFt", 0.03)
-        ft_per_pc = asmp.get("tapeFootPerPiece", 2)
-        assembly_cost = ord_qty * ft_per_pc * cost_per_ft
+        # Tape labor: $/inch × total tape inches (qty × #strips × strip length).
+        # Same rate for Film & Foam (admin-editable, like gluing/stripping).
+        tape_rate = asmp.get("tapeCostPerInch", 0.00245)
+        strips = pn(prod.get("tapeStrips"))
+        strip_len = pn(prod.get("tapeStripLength"))
+        assembly_cost = ord_qty * strips * strip_len * tape_rate
 
     # Freight
     freight_amt = 0 if prod.get("freightTreatment") == "None" else pn(prod.get("freightCost")) * (1 + pn(prod.get("freightMarkup")))
@@ -162,6 +165,16 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
     prepress_sep = prod.get("prepressTreatment") == "Separate Line" and prepress_cost > 0
     prepress_line_cost = prepress_cost if prepress_sep else 0
     prepress_embedded = prepress_cost if not prepress_sep else 0
+
+    # Proofs — one-time, per-component charge (flat $, default 0% markup).
+    # Treatment None (default) = $0; Separate Line = one-time line item;
+    # Amortize = spread into unit cost. Mirrors prepress behavior.
+    proof_treat = prod.get("proofTreatment", "None")
+    proof_base = pn(prod.get("proofCost")) if proof_treat not in (None, "None", "") else 0
+    proof_cost = proof_base * (1 + pn(prod.get("proofMarkup") or 0))
+    proof_sep = proof_treat == "Separate Line" and proof_cost > 0
+    proof_line_cost = proof_cost if proof_sep else 0
+    proof_embedded = proof_cost if not proof_sep else 0
 
     # Misc charges
     misc_items = prod.get("miscCharges") or []
@@ -178,9 +191,9 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         else:
             misc_embedded += marked
 
-    total_direct = mat_total + mat_makeready + print_direct + saber_cost + cutter_direct + strip_cost + assembly_cost + freight_embed + prepress_embedded + misc_embedded
+    total_direct = mat_total + mat_makeready + print_direct + saber_cost + cutter_direct + strip_cost + assembly_cost + freight_embed + prepress_embedded + proof_embedded + misc_embedded
     die_amort_method = prod.get("dieAmortMethod", "Markup")
-    markup_exclude = (die_embedded + freight_embed + prepress_embedded + misc_embedded) if die_amort_method == "Markup" else 0
+    markup_exclude = (die_embedded + freight_embed + prepress_embedded + proof_embedded + misc_embedded) if die_amort_method == "Markup" else 0
     direct_for_overhead = total_direct - markup_exclude
     overhead = direct_for_overhead * asmp.get("overheadPct", 0)
     total_mfg = total_direct + overhead
@@ -205,7 +218,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
     else:
         item_sell = sell_tier * o_msf
 
-    sell_total = item_sell + freight_line + die_line_cost + prepress_line_cost + misc_line_cost
+    sell_total = item_sell + freight_line + die_line_cost + prepress_line_cost + proof_line_cost + misc_line_cost
     sell_pc = sell_total / ord_qty if ord_qty > 0 else 0
     sell_sh = sell_total / sheet_qty if sheet_qty > 0 else 0
     sell_msf = item_sell / o_msf if o_msf > 0 else 0
@@ -228,6 +241,8 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         "freightLine": freight_line, "freightEmbed": freight_embed, "freightSep": freight_sep,
         "prepressLineCost": prepress_line_cost, "prepressSep": prepress_sep,
         "prepressEmbedded": prepress_embedded, "prepressBase": prepress_base,
+        "proofLineCost": proof_line_cost, "proofSep": proof_sep,
+        "proofEmbedded": proof_embedded, "proofBase": proof_base, "proofTreatment": proof_treat,
         "miscLineCost": misc_line_cost, "miscEmbedded": misc_embedded, "miscLineItems": misc_line_items,
         "totalDirect": total_direct, "overhead": overhead, "totalMfg": total_mfg,
         "costPc": cost_pc, "costSh": cost_sh, "costMSF": cost_msf,

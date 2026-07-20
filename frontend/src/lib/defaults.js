@@ -88,7 +88,9 @@ export const DEFAULT_STATE = Object.freeze({
   gluingComplexity: "Standard",        // Simple|Standard|Complex
 
   tape: "No",
-  tapeType: "Clear",                   // Clear|Reinforced
+  tapeType: "Film",                    // Film|Foam
+  tapeStrips: "1",                     // # of strips per piece
+  tapeStripLength: "0",                // strip length (inches)
 
   // ─── One-Time Costs ───────────────────────────────────────────
   prepressTreatment: "Auto",           // Auto | None | Separate Line | Amortize
@@ -102,6 +104,11 @@ export const DEFAULT_STATE = Object.freeze({
   cuttingDieCost: "0",
   dieMarkup: "0.15",                   // Default 15% markup (legacy RATE_DEFAULTS)
   dieAmortMethod: "Markup",            // Markup | OrderMargin
+
+  // ─── Proofs (one-time, per component) ─────────────────────────
+  proofTreatment: "None",              // None | Separate Line | Amortize
+  proofCost: "200",                    // flat $, admin-editable default
+  proofMarkup: "0",                    // 0% markup
 
   miscCharges: [],                     // [{id,name,cost,treatment}]
 
@@ -125,6 +132,7 @@ export const DEFAULT_STATE = Object.freeze({
   quoteTerms: "Net 30",
   quoteExpDays: "30",
   quoteNotes: "",
+  estimatorNotes: "",                  // internal — NOT on the Letter of Quote PDF
   dueDate: "",
   shipTo: "",
 });

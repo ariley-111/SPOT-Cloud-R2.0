@@ -933,6 +933,19 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
         )}
       </div>
 
+      {/* Proofs — one-time, per-component (flat $, 0% markup, default $200).
+           None (default) = $0; Line = one-time line item; Amort = spread into unit. */}
+      <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--spot-text2)", width: 54, flexShrink: 0 }}>Proofs</span>
+        <Tile label="None"  active={(s.proofTreatment || "None") === "None"}          onClick={() => setField("proofTreatment", "None")} small data-testid="tile-proof-none" />
+        <Tile label="Line"  active={s.proofTreatment === "Separate Line"} onClick={() => setManyFields({ proofTreatment: "Separate Line", proofCost: Number(s.proofCost) > 0 ? s.proofCost : "200" })} small tint="#22c55e" data-testid="tile-proof-line" />
+        <Tile label="Amort" active={s.proofTreatment === "Amortize"}      onClick={() => setManyFields({ proofTreatment: "Amortize", proofCost: Number(s.proofCost) > 0 ? s.proofCost : "200" })} small data-testid="tile-proof-amort" />
+        {(s.proofTreatment && s.proofTreatment !== "None") && (
+          <Num value={s.proofCost ?? "200"} onChange={(v) => setField("proofCost", v)} step="0.01" min="0" style={{ width: 70, padding: "4px 5px", fontSize: 12 }} data-testid="input-proof-cost" />
+        )}
+      </div>
+
+
       {/* Misc charges */}
       {(s.miscCharges || []).map((mc, mi) => (
         <div key={mc.id || mi} style={{ marginBottom: 4, padding: "3px 0",
@@ -988,6 +1001,7 @@ function OneTimeCosts({ s, setField, setManyFields, route }) {
       {(() => {
         const anyAmort = s.dieTreatment === "Amortize"
           || (s.printReq === "Yes" && s.prepressTreatment === "Amortize")
+          || (s.proofTreatment === "Amortize")
           || (s.miscCharges || []).some((c) => c.treatment === "Amortize")
           || (s.freightTreatment === "Amortize");
         if (!anyAmort) return null;

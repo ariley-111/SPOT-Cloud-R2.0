@@ -77,6 +77,30 @@ def _print_short(d: Dict[str, Any]) -> str:
     return f"{mode}{suffix}"
 
 
+def _tape_short(d: Dict[str, Any]) -> str:
+    """Customer-facing tape descriptor for the spec line, e.g.
+    'Film 2 strips 24"'. Empty string when tape is not applied."""
+    if d.get("tape") != "Yes":
+        return ""
+    ttype = d.get("tapeType") or "Film"
+    strips = d.get("tapeStrips")
+    length = d.get("tapeStripLength")
+    out = ttype
+    try:
+        n = int(float(strips)) if strips not in (None, "", "0") else 0
+        if n > 0:
+            out += f" {n} strip{'s' if n != 1 else ''}"
+    except (TypeError, ValueError):
+        pass
+    try:
+        ln = float(length) if length not in (None, "") else 0
+        if ln > 0:
+            out += f' {_fn(ln, 2)}"'
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
 def _first_name(full_name: str) -> str:
     """First name from a directory name; handles 'First Last' and 'Last, First'
     (e.g. 'Riley, Dean' → 'Dean')."""
@@ -229,6 +253,7 @@ def _matched_set_pricing_grid(bom_items: List[Dict[str, Any]],
     die_per_tier = [float(t.get("dieLineCost") or 0) for t in active_tiers]
     frt_per_tier = [float(t.get("freightLine") or 0) for t in active_tiers]
     pp_per_tier  = [float(t.get("prepressLineCost") or 0) for t in active_tiers]
+    proof_per_tier = [float(t.get("proofLineCost") or 0) for t in active_tiers]
     misc_per_tier = [float(t.get("miscLineCost") or 0) for t in active_tiers]
 
     def _charge_row(label: str, vals: List[float]) -> str:
@@ -244,6 +269,7 @@ def _matched_set_pricing_grid(bom_items: List[Dict[str, Any]],
     charge_rows_html.append(_charge_row("Die", die_per_tier))
     charge_rows_html.append(_charge_row("Freight", frt_per_tier))
     charge_rows_html.append(_charge_row("Prepress", pp_per_tier))
+    charge_rows_html.append(_charge_row("Proofs", proof_per_tier))
     charge_rows_html.append(_charge_row("Misc", misc_per_tier))
     charge_rows_html = [r for r in charge_rows_html if r]
 
@@ -344,6 +370,8 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                     sp.append(f"{_fn(iw, 4)}\u00D7{_fn(il_, 4)}")
             except (ValueError, TypeError): pass
             if typ == "Manufactured": sp.append(_print_short(ist))
+            _tpc = _tape_short(ist)
+            if _tpc: sp.append(_tpc)
             line = " \u00B7 ".join([p for p in sp if p])
             type_color = ("#3b82f6" if typ == "Manufactured" else
                           "#06b6d4" if typ == "Purchased" else "#22c55e")
@@ -390,6 +418,8 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             pass
         if fsc: spec_parts.append("FSC/SFI Material")
         spec_parts.append(_print_short(state))
+        _tp = _tape_short(state)
+        if _tp: spec_parts.append(_tp)
         spec_line = " \u00B7 ".join([p for p in spec_parts if p])
         title = item_desc or box_style or "Item"
         item_bar = (
@@ -414,8 +444,9 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
     s_die  = any(float(r.get("dieLineCost") or 0)      > 0 for r in rows)
     s_frt  = any(float(r.get("freightLine") or 0)      > 0 for r in rows)
     s_pp   = any(float(r.get("prepressLineCost") or 0) > 0 for r in rows)
+    s_proof = any(float(r.get("proofLineCost") or 0) > 0 for r in rows)
     s_misc = any(float(r.get("miscLineCost") or 0)     > 0 for r in rows)
-    has_line_charges = s_die or s_frt or s_pp or s_misc
+    has_line_charges = s_die or s_frt or s_pp or s_proof or s_misc
     by_part = charge_mode == "By Part" and has_line_charges
     by_type = charge_mode == "By Type" and has_line_charges
     is_lump = charge_mode == "Lump Sum" and has_line_charges
@@ -446,6 +477,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         if float(r.get("freightLine") or 0) > 0: parts.append("Freight")
         if float(r.get("dieLineCost") or 0) > 0: parts.append("Die")
         if float(r.get("prepressLineCost") or 0) > 0: parts.append("Prepress")
+        if float(r.get("proofLineCost") or 0) > 0: parts.append("Proofs")
         items = _row_misc_items(r)
         if items:
             for li in items: parts.append(li.get("name") or "Misc")
@@ -469,12 +501,13 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         # When Freight is the ONLY line charge present, the combined column is
         # simply "Freight" (per user). If Die/Prepress/Misc also appear we keep
         # the generic "Charges" header for the combined column.
-        _only_freight = s_frt and not (s_die or s_pp or s_misc)
+        _only_freight = s_frt and not (s_die or s_pp or s_proof or s_misc)
         header_cells.append(f'<th style="{th_s}">{"Freight" if _only_freight else "Charges"}</th>')
     if by_part:
         if s_die:  header_cells.append(f'<th style="{th_s}">Die</th>')
         if s_frt:  header_cells.append(f'<th style="{th_s}">Freight</th>')
         if s_pp:   header_cells.append(f'<th style="{th_s}">Prepress</th>')
+        if s_proof: header_cells.append(f'<th style="{th_s}">Proofs</th>')
         for nm in misc_names:
             header_cells.append(f'<th style="{th_s}">{nm}</th>')
     header_cells.append(f'<th style="{th_s};color:#1e40af">Total</th>')
@@ -491,8 +524,9 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         die  = float(r.get("dieLineCost") or 0)
         frt  = float(r.get("freightLine") or 0)
         prep = float(r.get("prepressLineCost") or 0)
+        proof = float(r.get("proofLineCost") or 0)
         misc = float(r.get("miscLineCost") or 0)
-        charges_sum = die + frt + prep + misc
+        charges_sum = die + frt + prep + proof + misc
 
         bg = "#fff" if i % 2 == 0 else "#f9fafb"
         cells = [
@@ -506,6 +540,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             if s_die:  cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(die)  if die  > 0 else DASH}</td>')
             if s_frt:  cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(frt)  if frt  > 0 else DASH}</td>')
             if s_pp:   cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(prep) if prep > 0 else DASH}</td>')
+            if s_proof: cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(proof) if proof > 0 else DASH}</td>')
             for nm in misc_names:
                 v = _row_misc_amt(r, nm)
                 cells.append(f'<td style="padding:8px 10px;text-align:right;color:#6b7280">{_fm(v) if v > 0 else DASH}</td>')
@@ -518,7 +553,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
         lump_lines = []
         for r in rows:
             ssum = (float(r.get("dieLineCost") or 0) + float(r.get("freightLine") or 0)
-                    + float(r.get("prepressLineCost") or 0) + float(r.get("miscLineCost") or 0))
+                    + float(r.get("prepressLineCost") or 0) + float(r.get("proofLineCost") or 0) + float(r.get("miscLineCost") or 0))
             if ssum <= 0:
                 continue
             lbl = _row_charge_label(r)
@@ -581,6 +616,8 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 pass
             if str(c.get("type") or "Manufactured") == "Manufactured":
                 spec_parts_c.append(_print_short(bs))
+                _tpcc = _tape_short(bs)
+                if _tpcc: spec_parts_c.append(_tpcc)
             spec_parts_c.append(f'{c.get("pcsPerSet", 1)} pc/set')
             spec_line_c = " \u00B7 ".join([p for p in spec_parts_c if p])
 
@@ -592,8 +629,9 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             col_frt  = any(float(r.get("freightLine") or 0) > 0 for r in rows_c)
             col_die  = any(float(r.get("dieLineCost") or 0) > 0 for r in rows_c)
             col_prep = any(float(r.get("prepressLineCost") or 0) > 0 for r in rows_c)
+            col_proof = any(float(r.get("proofLineCost") or 0) > 0 for r in rows_c)
             col_misc = any(float(r.get("miscLineCost") or 0) > 0 for r in rows_c)
-            n_cols = 4 + sum([col_frt, col_die, col_prep, col_misc])
+            n_cols = 4 + sum([col_frt, col_die, col_prep, col_proof, col_misc])
             _thr = ('padding:6px 10px;text-align:right;font-size:11px;font-weight:700;'
                     'text-transform:uppercase;letter-spacing:.06em;color:#6b7280')
             _chg = 'padding:6px 10px;text-align:right;font-size:11px;color:#6b7280'
@@ -606,6 +644,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 frt_c = float(r.get("freightLine") or 0)
                 die_c = float(r.get("dieLineCost") or 0)
                 prep_c = float(r.get("prepressLineCost") or 0)
+                proof_c = float(r.get("proofLineCost") or 0)
                 misc_c = float(r.get("miscLineCost") or 0)
                 total_c = float(r.get("sellTotal") or 0)
                 total_base_sell += float(r.get("itemSell") or 0)
@@ -617,6 +656,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
                 if col_frt:  chg_cells += f'<td style="{_chg}">{_fm(frt_c) if frt_c > 0 else DASH}</td>'
                 if col_die:  chg_cells += f'<td style="{_chg}">{_fm(die_c) if die_c > 0 else DASH}</td>'
                 if col_prep: chg_cells += f'<td style="{_chg}">{_fm(prep_c) if prep_c > 0 else DASH}</td>'
+                if col_proof: chg_cells += f'<td style="{_chg}">{_fm(proof_c) if proof_c > 0 else DASH}</td>'
                 if col_misc: chg_cells += f'<td style="{_chg}">{_fm(misc_c) if misc_c > 0 else DASH}</td>'
                 body_rows_c.append(
                     f'<tr style="border-bottom:1px solid #e5e7eb;background:{bg_c}">'
@@ -636,6 +676,7 @@ def _customer_pdf_html(quote: Dict[str, Any], results: List[Dict[str, Any]], cha
             if col_frt:  chg_headers += f'<th style="{_thr}">Freight</th>'
             if col_die:  chg_headers += f'<th style="{_thr}">Die</th>'
             if col_prep: chg_headers += f'<th style="{_thr}">Prepress</th>'
+            if col_proof: chg_headers += f'<th style="{_thr}">Proofs</th>'
             if col_misc: chg_headers += f'<th style="{_thr}">Misc</th>'
 
             sections_html.append(
