@@ -1425,3 +1425,15 @@ Keeps cloud's compact layout but adds legacy functionality.
   Quote search box matches on customer ident (full or partial). Updated LoadQuoteModal placeholder
   to "Search est#, customer, ident, project, item, team, owner…". Verified: q=2603658 / 2603692.ARD
   / 4444 return the matching quotes. REQUIRES REDEPLOY for production.
+
+## 2026-07-20 — PARKED: CAD cutting cost calibration (revisit later)
+- User wants to keep legacy cutting FORMULA but calibrate its params against real data. Analysis of
+  668 real jobs (CuttingInchesPerSheet × ActualSheets vs ActualCuttingCost, data is RUN cost only,
+  no makeready): through-origin fit = $0.00470/cut-inch. Legacy assumes 650 in/min @ $138/hr =
+  $0.00354/inch → legacy UNDER-costs cutting RUN by ~25-33%. Implied real regular speed ≈ 490 in/min
+  @ $138. ERP ComplexityOfCut carries run-speed signal (Standard ~525 vs Complex ~368 in/min) even
+  though the estimator's manual difficulty pick historically did not.
+- Work-center rates (ERP): Kongsburg $72/hr, LG Zund $69, Sm Zund $69 (SPOT currently uses $138).
+- OPEN OPTIONS (not yet done, user parked): (a) nudge cadRegularSpeed 650→~490 to match actuals;
+  (b) reconcile $138 vs ~$70 work-center rates; (c) get makeready-hours sample to calibrate CAD_SETUP.
+- NO CODE CHANGED. Straight tier already removed (2026-06-22); DIFFICULTY = [Simple,Standard,Complex].
