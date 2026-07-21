@@ -266,11 +266,11 @@ def _matched_set_pricing_grid(bom_items: List[Dict[str, Any]],
             )
         return f'<tr>{"".join(cells)}</tr>'
 
-    charge_rows_html.append(_charge_row("Die", die_per_tier))
     charge_rows_html.append(_charge_row("Freight", frt_per_tier))
     charge_rows_html.append(_charge_row("Prepress", pp_per_tier))
     charge_rows_html.append(_charge_row("Proofs", proof_per_tier))
     charge_rows_html.append(_charge_row("Misc", misc_per_tier))
+    charge_rows_html.append(_charge_row("Die", die_per_tier))
     charge_rows_html = [r for r in charge_rows_html if r]
 
     # QUOTE TOTAL row (legacy L4694-4699) — uses sellTotal directly (already

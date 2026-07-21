@@ -7,7 +7,8 @@ import Sec from "./Sec";
 // docs, die POs, etc.). Stored in GridFS with source="document", auto-saved to
 // the estimate on upload, previewable, and deletable (with a warning).
 export default function DocumentsSec() {
-  const { state: s, active } = useQuote();
+  const { active, sec, toggleSec } = useQuote();
+  const s = active?.state || {};
   const quoteId = s.quoteId || active?.id || "";
   const [docs, setDocs] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -46,7 +47,10 @@ export default function DocumentsSec() {
   const fmtSize = (b) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
   return (
-    <Sec title="Documents" testid="sec-documents">
+    <Sec label="Documents" hue="#818cf8" open={sec.documents}
+      onToggle={() => toggleSec("documents")}
+      badge={docs.length > 0 ? `📎 ${docs.length}` : undefined}
+      data-testid="sec-documents">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <input ref={inputRef} type="file" multiple onChange={onPick} style={{ display: "none" }}

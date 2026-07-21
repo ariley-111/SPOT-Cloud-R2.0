@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 67 — Verified the tape-cost + proofs-charge bug fix and all 6 acceptance criteria from the review request. Backend engine, PDF service, admin rates and UI all work end-to-end on the PREVIEW environment. Reused an existing admin draft (SA-260720-145138 TEST NEW FEATURES) with FOL / 200# B Kemi/Kraft. Tape=Yes/Film/2 strips/24\" produces assemblyCost=$11.76 (100 × 2 × 24 × 0.00245 → correct) and appears in the Cost Buildup Finishing section under 'Tape Film · 2 strips × 24\"' when DETAIL is expanded. Proofs treatment 'Line'/$200 renders as a Proofs $200.00 row in the One-Time Line Items ABOVE Die (Die last, matching pdf.py line 273 ordering). Preview modal By Part mode shows a PROOFS column with $200.00. Preview PDF (HTTP 200, valid %PDF-1.7, 120 KB) contains the tape spec descriptor 'Film 2 strips 24.00\"' and a PROOFS column with $200 per tier; Quote Notes sentinel appears while Estimator Notes sentinel does NOT (internal-only). Admin Pricing Console → Rates tab exposes editable inputs for tapeCostPerInch, defaultProofCost and proofMarkup (admin-input-rate-* testids present). Documents section renders '📎 1' badge after uploading a test PDF, list-shows-open/delete buttons work, and /api/quotes attaches file_count per quote so LoadQuoteModal can render paperclip counts.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "backend": [
+      "POST /api/auth/login admin@standardprinting.com → 200, JWT returned",
+      "POST /api/engine/calculate-all with tape=Yes/Film/2/24 + proofTreatment='Separate Line'/proofCost=200 → returns assemblyCost=117.6/294.0/588.0 (for qtys 1000/2500/5000, exact 1000×2×24×0.00245 arithmetic) and proofLineCost=200.0 with proofTreatment='Separate Line' on every tier",
+      "GET /api/admin/rates/categories → response has 'rate' category with groups {'Tape' → ['tapeCostPerInch']} and {'Proof defaults' → ['defaultProofCost','proofMarkup']}",
+      "POST /api/pdf/preview-quote (chargeMode='By Part') → 200, 120222-byte %PDF; extracted text contains PROOFS column, $200.00 tier values, and item spec descriptor 'Film 2 strips 24.00\"' (via _tape_short at pdf.py:80)",
+      "POST /api/pdf/preview-quote with quoteNotes='SENTINEL_QUOTE_ABC123' + estimatorNotes='SENTINEL_ESTIMATOR_XYZ789' → 200; extract shows Quote sentinel PRESENT, Estimator sentinel ABSENT (correctly hidden from Letter of Quote)",
+      "GET /api/quotes → each quote has file_count field (used by LoadQuoteModal Paperclip render)"
+    ],
+    "frontend": [
+      "Login as admin@standardprinting.com → SPOT loaded with 4 open tabs (SA-260720-145138 TEST NEW FEATURES was pre-existing draft)",
+      "ProductionSpecs: set input-tape-strips=2 and input-tape-strip-length=24 (Tape Yes / Film already active) → Item Setup ONE-TIME COSTS reflected",
+      "ItemSetup: tile-proof-line clicked + input-proof-cost=200 → proof state applied",
+      "Cost Buildup toggled to DETAIL → shows Finishing $11.76 with sub-row 'Tape Film · 2 strips × 24\" $11.76' and ONE-TIME LINE ITEMS block with Proofs $200.00 rendered ABOVE Die $1,200.00 + 15% markup $1,380.00 (Die confirmed as the LAST one-time line item — matches expected order)",
+      "Header modal (qh-notes + qh-estimator-notes textareas present) → filled sentinel strings, Done, Save → quote saved; page reloaded + re-authenticated → both sentinel strings persisted verbatim on reload",
+      "Preview modal opens → default 'By Type' mode shows single Charges column; clicking 'By Part' switched header row to Qty | Each | Per/M | Total | DIE | PROOFS | Quote Total with $200.00 in the PROOFS column and $1,380.00 in the DIE column; Quote Notes sentinel visible in body, Estimator Notes NOT visible; Export button present",
+      "Documents section (data-testid=sec-documents) expanded → documents-upload-btn is enabled (quote already saved), uploaded /tmp/testdocs/testdoc.pdf via documents-file-input → 1 document-row rendered with 📎 filename, size, Open + delete buttons; section badge shows '📎 1'",
+      "Toolbar AD avatar → toolbar-admin clicked → Pricing Admin Console loaded with Rates tab active. Page includes editable rate rows with admin-input-rate-* testids for the whole rate table. Body confirmed contains keys 'tapeCostPerInch', 'defaultProofCost', 'proofMarkup' (from /api/admin/rates/categories and rendered inputs)"
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routes/pdf.py L269-273: charge_rows_html order (Freight → Prepress → Proofs → Misc → Die) matches the requested 'Die is LAST' rule and Proofs appears above Die in the By Type/By Part header (L510) — good.",
+    "frontend/src/components/spot/DocumentsSec.jsx: upload_btn is correctly disabled until quoteId exists. UX-wise the tooltip 'Save the quote first, then attach documents.' surfaces on the error line but the button itself only shows title=... — consider surfacing that hint next to the disabled button so an estimator on a fresh draft understands why they can't attach. Not a defect.",
+    "useEngine.js L100-146 buildPayload and L152-244 buildMpPayload now forward tapeStrips/tapeStripLength/proofTreatment/proofCost/proofMarkup — the exact keys the engine consumes (backend/engine/runner.py L210-231). No missing keys. This is the actual bug-fix delta and is complete.",
+    "backend/engine/runner.py L588-590: the run_estimate result dict now includes proofLineCost/proofEmbedded/proofBase/proofTreatment — verified live by curl on /api/engine/calculate-all. This is the second half of the bug fix and is correctly wired for both the aggregate result rows and the MP componentPricing rows_out."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (5/5 endpoints verified)", "frontend": "100% (6/6 acceptance criteria passed)" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Reused pre-existing admin draft SA-260720-145138 'TEST NEW FEATURES' (PCA - Han · Full Overlap Slotted Container). Modified: tape strip length set to 24 (was 1.7538), proofs Line/$200, quote & estimator notes populated with sentinel strings, one testdoc.pdf (~200 bytes) attached as a Document. Quote was saved once during the flow. No other DB writes. No production data touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The engine bug (tape/proof missing from payload → missing from engine output) is fully fixed. Key sanity curls if you need to re-verify without the UI: (1) POST /api/engine/calculate-all with body {oneUpW:'12',oneUpL:'10',qtys:['1000','2500','5000'],flute:'B',boardGrade:'200',outsideLiner:'42# Kla-White',insideLiner:'None',medium:'26',printReq:'Yes',printMode:'Digital',printSides:'1',colorsFront:'1',tape:'Yes',tapeType:'Film',tapeStrips:'2',tapeStripLength:'24',proofTreatment:'Separate Line',proofCost:'200',proofMarkup:'0'} → each result row must have assemblyCost>0 and proofLineCost=200. (2) POST /api/pdf/preview-quote with the same state + chargeMode='By Part' returns a valid PDF whose text contains 'PROOFS' and 'Film 2 strips 24.00\"'. (3) POST /api/pdf/preview-quote with estimatorNotes set — the sentinel must NOT appear in extract_text() of the returned PDF. Cost Buildup DETAIL mode is required in the UI to see the Tape sub-row (SUMMARY only shows the Finishing total).",
+  "rca of the issue": "N/A — fix is verified end-to-end. Root cause per the review request (frontend engine payload builder was not sending tapeStrips/tapeStripLength/proofTreatment/proofCost/proofMarkup and backend run_estimate() omitted proof keys) is fully addressed in useEngine.js L119-126, L183-186 and runner.py L588-590. Live curl verification and full UI flow confirm the engine → cost-buildup → PDF chain."
+}

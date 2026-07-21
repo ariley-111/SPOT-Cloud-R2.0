@@ -7,6 +7,7 @@ import ItemSetupSec from "../components/spot/ItemSetupSec";
 import ProductionSpecsSec from "../components/spot/ProductionSpecsSec";
 import QuoteTableSec from "../components/spot/QuoteTableSec";
 import FilesSec from "../components/spot/FilesSec";
+import DocumentsSec from "../components/spot/DocumentsSec";
 import { BomSec, PricingStrategySec, BoardEngineSec } from "../components/spot/Placeholders";
 import RightDashboard from "../components/spot/RightDashboard";
 import InitialsGate from "../components/spot/InitialsGate";
@@ -129,6 +130,7 @@ export default function SpotApp({ onOpenAdmin }) {
             <PricingStrategySec />
             <BoardEngineSec result={primary} />
             <FilesSec />
+            <DocumentsSec />
           </div>
         </div>
 

@@ -586,6 +586,8 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "stripCost": wf["stripCost"], "assemblyCost": wf["assemblyCost"],
         "freightLine": wf["freightLine"], "freightEmbed": wf["freightEmbed"],
         "prepressLineCost": wf["prepressLineCost"], "prepressEmbedded": wf["prepressEmbedded"],
+        "proofLineCost": wf.get("proofLineCost") or 0, "proofEmbedded": wf.get("proofEmbedded") or 0,
+        "proofBase": wf.get("proofBase") or 0, "proofTreatment": wf.get("proofTreatment"),
         "miscLineCost": wf["miscLineCost"], "miscLineItems": wf.get("miscLineItems") or [],
         "overhead": wf["overhead"],
         "totalDirect": wf["totalDirect"], "totalMfg": wf["totalMfg"],

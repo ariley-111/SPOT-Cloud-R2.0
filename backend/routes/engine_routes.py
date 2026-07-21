@@ -728,6 +728,8 @@ async def calculate_multi_part(
         die_markup_avg = (sum(die_markup_amts) / len(die_markup_amts)) if die_markup_amts else 0.0
         line_prepress = sum(_safe_float(pc.get("prepressLineCost")) for pc in per_comp
                             if _safe_float(pc.get("prepressLineCost")) > 0)
+        line_proof = sum(_safe_float(pc.get("proofLineCost")) for pc in per_comp
+                         if _safe_float(pc.get("proofLineCost")) > 0)
         line_misc = sum(_safe_float(pc.get("miscLineCost")) for pc in per_comp
                         if _safe_float(pc.get("miscLineCost")) > 0)
         # Aggregate named misc line items across all components so the UI can
@@ -745,7 +747,7 @@ async def calculate_multi_part(
                     existing["amt"] += amt
                 else:
                     agg_misc_items.append({"name": name, "amt": amt})
-        line_charges = line_freight + line_die + line_prepress + line_misc
+        line_charges = line_freight + line_die + line_prepress + line_proof + line_misc
         omsf_total = sum(_safe_float(pc.get("oMSF")) for pc in per_comp)
 
         if pricing_mode == "Matched Set" and set_margin_ovride:
@@ -800,6 +802,7 @@ async def calculate_multi_part(
             "dieBaseTotal": die_base_total,
             "dieMarkupAvg": die_markup_avg,
             "prepressLineCost": line_prepress,
+            "proofLineCost": line_proof,
             "miscLineCost": line_misc,
             "miscLineItems": agg_misc_items,
             "itemsSell": job_sell_components,
@@ -954,11 +957,15 @@ async def calculate_multi_part(
                 "overhead": float(r.get("overhead") or 0),
                 "sheetsReq": float(r.get("sheetsReq") or 0),
                 "prepressLineCost": float(r.get("prepressLineCost") or 0),
+                "proofLineCost": float(r.get("proofLineCost") or 0),
+                "proofEmbedded": float(r.get("proofEmbedded") or 0),
+                "proofBase": float(r.get("proofBase") or 0),
                 "miscLineCost": float(r.get("miscLineCost") or 0),
                 "sellTotal": sell_total
                             + float(r.get("freightLine") or 0)
                             + float(r.get("dieLineCost") or 0)
                             + float(r.get("prepressLineCost") or 0)
+                            + float(r.get("proofLineCost") or 0)
                             + float(r.get("miscLineCost") or 0),
                 "gmDollar": float(r.get("gmDollar") or 0),
                 "gmPct": float(r.get("gmPct") or 0),

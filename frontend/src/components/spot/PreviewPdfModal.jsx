@@ -100,7 +100,7 @@ export default function PreviewPdfModal({ onClose }) {
 
   // Are there any line-item charges? (Die / Freight / Prepress / Misc on a separate line)
   const hasLineItems = useMemo(() => previewRows.some((r) =>
-    (r.dieLineCost > 0) || (r.freightLine > 0) || (r.prepressLineCost > 0) || ((r.miscLineCost || 0) > 0)
+    (r.dieLineCost > 0) || (r.freightLine > 0) || (r.prepressLineCost > 0) || ((r.proofLineCost || 0) > 0) || ((r.miscLineCost || 0) > 0)
   ), [previewRows]);
 
   // Legacy fmLnr (spot_r1_5.jsx L1218): "None" → "Kraft", strip weight + "-Lite"/"-White"
@@ -464,7 +464,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
   // is labeled "Freight" (per user); otherwise it stays the generic "Charges".
   const _anyFrt = rows.some((r) => Number(r.freightLine || 0) > 0);
   const _anyOther = rows.some((r) => Number(r.dieLineCost || 0) > 0
-    || Number(r.prepressLineCost || 0) > 0 || Number(r.miscLineCost || 0) > 0
+    || Number(r.prepressLineCost || 0) > 0 || Number(r.proofLineCost || 0) > 0 || Number(r.miscLineCost || 0) > 0
     || (r.miscLineItems || []).some((li) => Number(li.amt || 0) > 0));
   const byTypeLabel = _anyFrt && !_anyOther ? "Freight" : "Charges";
   // Per-row charge extraction helper.
@@ -472,14 +472,16 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
     const die = Number(r.dieLineCost || 0);
     const freight = Number(r.freightLine || 0);
     const prep = Number(r.prepressLineCost || 0);
+    const proof = Number(r.proofLineCost || 0);
     const miscItems = (r.miscLineItems || []).filter((li) => (li.amt || 0) > 0);
     const miscFallback = Number(r.miscLineCost || 0);
-    return { die, freight, prep, miscItems, miscFallback };
+    return { die, freight, prep, proof, miscItems, miscFallback };
   };
   // Discover which type-columns to render for By Part (only present ones).
   const colDie = byPart && rows.some((r) => Number(r.dieLineCost || 0) > 0);
   const colFrt = byPart && rows.some((r) => Number(r.freightLine || 0) > 0);
   const colPrep = byPart && rows.some((r) => Number(r.prepressLineCost || 0) > 0);
+  const colProof = byPart && rows.some((r) => Number(r.proofLineCost || 0) > 0);
   const miscNames = [];
   if (byPart) {
     rows.forEach((r) => (r.miscLineItems || []).forEach((li) => {
@@ -501,6 +503,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
     if (c.freight > 0) parts.push("Freight");
     if (c.die > 0) parts.push("Die");
     if (c.prep > 0) parts.push("Prepress");
+    if (c.proof > 0) parts.push("Proofs");
     c.miscItems.forEach((li) => parts.push(li.name || "Misc"));
     if (parts.length === 0 && c.miscFallback > 0) parts.push("Misc");
     return parts.join(" + ");
@@ -518,6 +521,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
             {colDie && <th style={thS}>Die</th>}
             {colFrt && <th style={thS}>Freight</th>}
             {colPrep && <th style={thS}>Prepress</th>}
+            {colProof && <th style={thS}>Proofs</th>}
             {miscNames.map((n) => <th key={n} style={thS}>{n}</th>)}
             <th style={{ ...thS, color: "#1e40af" }}>Quote Total</th>
           </tr>
@@ -526,7 +530,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
           {rows.map((r, i) => {
             const sellPc = r.qty > 0 ? r.itemSell / r.qty : 0;
             const c = rowCharges(r);
-            const chargesTotal = c.die + c.freight + c.prep
+            const chargesTotal = c.die + c.freight + c.prep + c.proof
               + (c.miscItems.length > 0 ? c.miscItems.reduce((a, li) => a + Number(li.amt || 0), 0) : c.miscFallback);
             const quoteTotal = Number(r.itemSell || 0) + chargesTotal;
             const DASH = "—";
@@ -547,6 +551,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
                 {colDie && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.die > 0 ? fmtMoney(c.die) : DASH}</td>}
                 {colFrt && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.freight > 0 ? fmtMoney(c.freight) : DASH}</td>}
                 {colPrep && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.prep > 0 ? fmtMoney(c.prep) : DASH}</td>}
+                {colProof && <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{c.proof > 0 ? fmtMoney(c.proof) : DASH}</td>}
                 {miscNames.map((n) => {
                   const v = miscAmt(r, n);
                   return <td key={n} style={{ padding: "8px 10px", textAlign: "right", fontSize: 11, color: "#6b7280" }}>{v > 0 ? fmtMoney(v) : DASH}</td>;
@@ -564,7 +569,7 @@ function PricingTable({ rows, hasLineItems, chargeMode, isMP }) {
         // names the charge types that apply at that qty and shows the combined sum.
         const lines = rows.map((r) => {
           const c = rowCharges(r);
-          const sum = c.die + c.freight + c.prep
+          const sum = c.die + c.freight + c.prep + c.proof
             + (c.miscItems.length > 0 ? c.miscItems.reduce((a, li) => a + Number(li.amt || 0), 0) : c.miscFallback);
           return { qty: r.qty, label: chargeLabel(r), sum };
         }).filter((x) => x.sum > 0);
