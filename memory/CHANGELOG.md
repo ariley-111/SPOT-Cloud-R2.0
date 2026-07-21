@@ -1469,3 +1469,13 @@ Keeps cloud's compact layout but adds legacy functionality.
   materials/finish; CAD Blank/Flat size used ONLY when customer orders "sheets", else W×L.
 - Testing agent iteration_67: 100% (backend 5/5, frontend 6/6). Formula correction verified via
   curl ($100) + UI screenshot (Finishing $100.00). REQUIRES REDEPLOY for production.
+
+## 2026-07-21 (cont.) — Tape = MATERIAL + LABOR (correction)
+- Clarified by user: tape (like every non-one-time cost) has BOTH a material and a labor component.
+  Prior code had material-only (qty×strips×stripLen×$0.00245/in ≈ legacy $0.03/ft clear tape); the
+  first fix wrongly REPLACED it with labor-only. Now assembly_cost = material + labor:
+    material = ord_qty × strips × stripLen(in) × tapeCostPerInch
+    labor    = (ord_qty × strips) / tapeStripsPerHour × tapeLaborRate
+  Verified: 100pc×2strips×1.753" → $0.86 material + $100.00 labor = $100.86.
+- Admin Tape group exposes tapeCostPerInch, tapeLaborRate, tapeStripsPerHour (all editable).
+- NOTE: Film & Foam currently share one material rate; user may later want distinct rates. REDEPLOY needed for prod.

@@ -146,15 +146,19 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         assembly_cost = max((ord_qty * jppc * per_j / 60) * asmp.get("handGluingRate", 23),
                             asmp.get("handGluingMinCharge", 0))
     elif prod.get("tape") == "Yes":
-        # Tape application LABOR — priced by number of strip applications, like
-        # gluing/stripping (admin-editable). Legacy: 60 strips/hour @ $30/hr =
-        # $0.50 per strip. Strip length is descriptive only (not a labor driver).
-        #   labor = (ord_qty × #strips) / stripsPerHour × $/hr
+        # Tape = MATERIAL + LABOR (like every non-one-time cost in the app).
+        #   material = total tape inches (qty × #strips × strip length) × $/inch
+        #   labor    = strip applications (qty × #strips) / strips-per-hour × $/hr
+        # Legacy material rate ~$0.03/ft = $0.00245/in; labor 60 strips/hr @ $30/hr.
+        strips = pn(prod.get("tapeStrips"))
+        strip_len = pn(prod.get("tapeStripLength"))
+        total_strips = ord_qty * strips
+        total_inches = total_strips * strip_len
+        tape_material = total_inches * asmp.get("tapeCostPerInch", 0.00245)
         labor_rate = asmp.get("tapeLaborRate", 30.0)
         strips_per_hr = asmp.get("tapeStripsPerHour", 60.0) or 60.0
-        strips = pn(prod.get("tapeStrips"))
-        total_strips = ord_qty * strips
-        assembly_cost = (total_strips / strips_per_hr) * labor_rate if strips_per_hr > 0 else 0
+        tape_labor = (total_strips / strips_per_hr) * labor_rate if strips_per_hr > 0 else 0
+        assembly_cost = tape_material + tape_labor
 
     # Freight
     freight_amt = 0 if prod.get("freightTreatment") == "None" else pn(prod.get("freightCost")) * (1 + pn(prod.get("freightMarkup")))
