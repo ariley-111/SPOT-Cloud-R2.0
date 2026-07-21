@@ -348,13 +348,15 @@ async def update_quote_status(quote_id: str, body: StatusUpdateRequest,
 class TestFlagRequest(BaseModel):
     good_for_testing: bool
     iquote_num: Optional[str] = None
+    became_job: Optional[bool] = None
 
 
 @quotes_router.patch("/{quote_id}/test-flag")
 async def set_test_flag(quote_id: str, body: TestFlagRequest,
                         user: User = Depends(get_current_user)) -> Dict[str, Any]:
     """Flag a saved quote as good for testing/comparison against the legacy
-    system, and store the matching iQuote #. TEMPORARY — to be removed."""
+    system, store the matching iQuote #, and whether it became a job.
+    TEMPORARY — to be removed."""
     doc = await db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
@@ -363,16 +365,17 @@ async def set_test_flag(quote_id: str, body: TestFlagRequest,
         {"$set": {
             "state.goodForTesting": bool(body.good_for_testing),
             "state.iquoteNum": (body.iquote_num or ""),
+            "state.iquoteWon": bool(body.became_job),
             "updated_at": _now(),
         }},
     )
     return {"quote_id": quote_id, "good_for_testing": bool(body.good_for_testing),
-            "iquote_num": body.iquote_num or ""}
+            "iquote_num": body.iquote_num or "", "became_job": bool(body.became_job)}
 
 
 # Ordered columns for the exportable testing report.
 _REPORT_COLUMNS = [
-    "SPOT Estimate #", "iQuote #", "Project Name", "Quote Type", "Component", "Qty",
+    "SPOT Estimate #", "iQuote #", "Became a Job", "Project Name", "Quote Type", "Component", "Qty",
     "Material Cost", "Print Mode", "Print Cost", "Route", "Route Hours", "Difficulty",
     "Inches of Rule", "Perf %", "Cutting Cost",
     "Strip Difficulty", "Strip Cost", "Glue Joints", "Glue Difficulty", "Glue Cost",
@@ -409,6 +412,7 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
     return {
         "SPOT Estimate #": q.get("est_num") or "",
         "iQuote #": state.get("iquoteNum") or "",
+        "Became a Job": "Yes" if state.get("iquoteWon") else "No",
         "Project Name": state.get("custRef") or "",
         "Quote Type": state.get("quoteType") or "Simple",
         "Component": comp_desc or "",

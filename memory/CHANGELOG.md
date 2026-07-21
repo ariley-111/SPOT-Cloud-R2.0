@@ -1497,3 +1497,9 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Verified: curl PATCH + xlsx download (5.7KB, correct columns/values incl tape $50.24, proofs $200,
   margin 31.4%); UI screenshot shows checkbox→iQuote field→Report button before Load. REDEPLOY for prod.
 - STILL PENDING (backlog): split shipments, combining components onto one skid.
+
+## 2026-07-21 (cont.) — Testing flag: added "Became a Job?" checkbox + report column
+- Toolbar: when "Test" is checked, a "Job?" checkbox appears (state.iquoteWon) alongside iQuote #.
+- PATCH /api/quotes/{id}/test-flag now accepts became_job → sets state.iquoteWon.
+- Report: new "Became a Job" (Yes/No) column, placed right after "iQuote #".
+- defaults.js: iquoteWon:false. Verified via curl (column = "Yes") + UI screenshot (Job? checkbox). REDEPLOY for prod.

@@ -135,6 +135,7 @@ export const DEFAULT_STATE = Object.freeze({
   estimatorNotes: "",                  // internal — NOT on the Letter of Quote PDF
   goodForTesting: false,               // TEMPORARY — flag for legacy-comparison report
   iquoteNum: "",                       // TEMPORARY — matching iQuote quote #
+  iquoteWon: false,                    // TEMPORARY — did the iQuote become a job?
   dueDate: "",
   shipTo: "",
 });

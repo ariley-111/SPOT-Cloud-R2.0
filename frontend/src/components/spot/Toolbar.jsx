@@ -95,9 +95,15 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   const onToggleTestFlag = async (checked) => {
     setField("goodForTesting", checked);
     if (quoteId) {
-      try { await setQuoteTestFlag(quoteId, { good_for_testing: checked, iquote_num: s.iquoteNum || "" }); } catch (_) {}
+      try { await setQuoteTestFlag(quoteId, { good_for_testing: checked, iquote_num: s.iquoteNum || "", became_job: !!s.iquoteWon }); } catch (_) {}
     } else if (checked) {
       pushToast("Flagged — Save the quote to include it in the testing report", "warn");
+    }
+  };
+  const onToggleBecameJob = async (checked) => {
+    setField("iquoteWon", checked);
+    if (quoteId) {
+      try { await setQuoteTestFlag(quoteId, { good_for_testing: !!s.goodForTesting, iquote_num: s.iquoteNum || "", became_job: checked }); } catch (_) {}
     }
   };
   const onTestReport = async () => {
@@ -177,9 +183,18 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
         {s.goodForTesting && (
           <input data-testid="toolbar-iquote-num" value={s.iquoteNum || ""}
             onChange={(e) => setField("iquoteNum", e.target.value)}
-            onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, { good_for_testing: true, iquote_num: s.iquoteNum || "" }).catch(() => {}); }}
+            onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, { good_for_testing: true, iquote_num: s.iquoteNum || "", became_job: !!s.iquoteWon }).catch(() => {}); }}
             placeholder="iQuote #" className="sp-input"
             style={{ width: 76, fontSize: 11, padding: "3px 6px", marginRight: 2 }} />
+        )}
+        {s.goodForTesting && (
+          <label data-testid="toolbar-became-job-label" title="Did this iQuote become a job?"
+            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700,
+                     color: s.iquoteWon ? "var(--spot-green)" : "var(--spot-text3)", padding: "0 4px", cursor: "pointer" }}>
+            <input type="checkbox" data-testid="toolbar-became-job" checked={!!s.iquoteWon}
+              onChange={(e) => onToggleBecameJob(e.target.checked)} />
+            Job?
+          </label>
         )}
         <button data-testid="toolbar-test-report" onClick={onTestReport} className="sp-tb-ghost" style={ghost}
           title="Export all quotes flagged for testing to .xlsx">
