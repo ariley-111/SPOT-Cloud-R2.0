@@ -116,6 +116,14 @@ export default function PreviewPdfModal({ onClose }) {
   if (w > 0 && l > 0) specBits.push(`${fmtDim(w)}×${fmtDim(l)}`);
   if (s.fscEnabled) specBits.push("FSC");
   specBits.push(printShort(s));
+  if (s.tape === "Yes") {
+    const tType = (s.tapeType === "Foam" || s.tapeType === "Reinforced") ? "Foam" : "Film";
+    const nStrips = Number(s.tapeStrips || 1);
+    const tLen = Number(s.tapeStripLength || 0);
+    let tp = `${tType} ${nStrips} strip${nStrips === 1 ? "" : "s"}`;
+    if (tLen > 0) tp += ` ${tLen}"`;
+    specBits.push(tp);
+  }
 
   // Export to backend PDF
   const onExport = async () => {
