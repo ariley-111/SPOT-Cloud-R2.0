@@ -1479,3 +1479,21 @@ Keeps cloud's compact layout but adds legacy functionality.
   Verified: 100pc×2strips×1.753" → $0.86 material + $100.00 labor = $100.86.
 - Admin Tape group exposes tapeCostPerInch, tapeLaborRate, tapeStripsPerHour (all editable).
 - NOTE: Film & Foam currently share one material rate; user may later want distinct rates. REDEPLOY needed for prod.
+
+## 2026-07-21 (cont.) — TEMPORARY: "Good for testing" flag + legacy-comparison xlsx report
+- Toolbar (Toolbar.jsx), before the Load button: a "Test" checkbox that flags the OPEN quote
+  (state.goodForTesting); when checked, an "iQuote #" input appears (state.iquoteNum); plus a
+  "Report" button. All marked TEMPORARY (to be removed later).
+- Backend: PATCH /api/quotes/{id}/test-flag {good_for_testing, iquote_num} sets state.goodForTesting
+  + state.iquoteNum on the saved quote (also persists via normal Save through state).
+- Backend: GET /api/quotes/_report/testing.xlsx — finds all quotes with state.goodForTesting=true,
+  re-runs the pricing engine in-process (calculate_all / calculate_multi_part) per quote so numbers
+  match the app, and exports openpyxl .xlsx. One row PER COMPONENT with columns: SPOT Estimate #,
+  iQuote #, Project Name, Quote Type, Component, Qty, Material Cost, Print Mode, Print Cost, Route,
+  Route Hours, Difficulty, Inches of Rule, Perf %, Cutting Cost, Strip Difficulty, Strip Cost,
+  Glue Joints, Glue Difficulty, Glue Cost, Tape Type, Tape Strip Count, Tape Inches, Tape Cost,
+  Freight, Die, Prepress, Proofs, Misc, Total Cost, Margin %, Sell Total, Quote Total.
+- defaults.js: added goodForTesting:false, iquoteNum:"".
+- Verified: curl PATCH + xlsx download (5.7KB, correct columns/values incl tape $50.24, proofs $200,
+  margin 31.4%); UI screenshot shows checkbox→iQuote field→Report button before Load. REDEPLOY for prod.
+- STILL PENDING (backlog): split shipments, combining components onto one skid.

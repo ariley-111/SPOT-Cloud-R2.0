@@ -1,10 +1,12 @@
 """Quote drafts (the 'tabs') + saved quotes."""
 from __future__ import annotations
 import re
+from io import BytesIO
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from db import db, COL_QUOTE_DRAFTS, COL_QUOTES, COL_USERS, COL_AUDIT_LOG
@@ -340,6 +342,171 @@ async def update_quote_status(quote_id: str, body: StatusUpdateRequest,
         await _log_audit(quote_id=quote_id, user_id=user.id, field="status",
                          old=prev, new=body.status, source="user")
     return Quote(**result)
+
+
+# ─── TEMPORARY: "Good for testing" flag + comparison report (remove later) ──
+class TestFlagRequest(BaseModel):
+    good_for_testing: bool
+    iquote_num: Optional[str] = None
+
+
+@quotes_router.patch("/{quote_id}/test-flag")
+async def set_test_flag(quote_id: str, body: TestFlagRequest,
+                        user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Flag a saved quote as good for testing/comparison against the legacy
+    system, and store the matching iQuote #. TEMPORARY — to be removed."""
+    doc = await db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
+    await db[COL_QUOTES].update_one(
+        {"id": quote_id},
+        {"$set": {
+            "state.goodForTesting": bool(body.good_for_testing),
+            "state.iquoteNum": (body.iquote_num or ""),
+            "updated_at": _now(),
+        }},
+    )
+    return {"quote_id": quote_id, "good_for_testing": bool(body.good_for_testing),
+            "iquote_num": body.iquote_num or ""}
+
+
+# Ordered columns for the exportable testing report.
+_REPORT_COLUMNS = [
+    "SPOT Estimate #", "iQuote #", "Project Name", "Quote Type", "Component", "Qty",
+    "Material Cost", "Print Mode", "Print Cost", "Route", "Route Hours", "Difficulty",
+    "Inches of Rule", "Perf %", "Cutting Cost",
+    "Strip Difficulty", "Strip Cost", "Glue Joints", "Glue Difficulty", "Glue Cost",
+    "Tape Type", "Tape Strip Count", "Tape Inches", "Tape Cost",
+    "Freight", "Die", "Prepress", "Proofs", "Misc",
+    "Total Cost", "Margin %", "Sell Total", "Quote Total",
+]
+
+
+def _n(x) -> float:
+    try:
+        return round(float(x or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
+                ist: Dict[str, Any], r: Dict[str, Any]) -> Dict[str, Any]:
+    print_on = (ist.get("printReq") or ist.get("printRequired") or "Yes") == "Yes"
+    strip_on = ist.get("handStripping") == "Yes"
+    glue_on = ist.get("handGluing") == "Yes"
+    tape_on = ist.get("tape") == "Yes"
+    qty = r.get("qty") or 0
+    try:
+        tstrips = float(ist.get("tapeStrips") or 0)
+        tlen = float(ist.get("tapeStripLength") or 0)
+    except (TypeError, ValueError):
+        tstrips = tlen = 0
+    tape_inches = round(qty * tstrips * tlen, 2) if tape_on else ""
+    try:
+        perf = round(float(ist.get("perfPct") or 0) * 100, 1)
+    except (TypeError, ValueError):
+        perf = 0
+    return {
+        "SPOT Estimate #": q.get("est_num") or "",
+        "iQuote #": state.get("iquoteNum") or "",
+        "Project Name": state.get("custRef") or "",
+        "Quote Type": state.get("quoteType") or "Simple",
+        "Component": comp_desc or "",
+        "Qty": qty,
+        "Material Cost": _n(r.get("matTotal")) + _n(r.get("matMakeready")),
+        "Print Mode": (ist.get("printMode") or "") if print_on else "",
+        "Print Cost": _n(r.get("printDirect")),
+        "Route": r.get("route") or "",
+        "Route Hours": round(float(r.get("cadHrs") or 0), 3),
+        "Difficulty": ist.get("cadDifficulty") or "",
+        "Inches of Rule": ist.get("totalRuleInches") or "",
+        "Perf %": perf,
+        "Cutting Cost": _n(r.get("cutterDirect")),
+        "Strip Difficulty": (ist.get("strippingComplexity") or "") if strip_on else "",
+        "Strip Cost": _n(r.get("stripCost")) if strip_on else "",
+        "Glue Joints": (ist.get("jointsPerPiece") or "") if glue_on else "",
+        "Glue Difficulty": (ist.get("gluingComplexity") or "") if glue_on else "",
+        "Glue Cost": _n(r.get("assemblyCost")) if glue_on else "",
+        "Tape Type": (ist.get("tapeType") or "") if tape_on else "",
+        "Tape Strip Count": (ist.get("tapeStrips") or "") if tape_on else "",
+        "Tape Inches": tape_inches,
+        "Tape Cost": _n(r.get("assemblyCost")) if tape_on else "",
+        "Freight": _n(r.get("freightLine")) + _n(r.get("freightEmbed")),
+        "Die": _n(r.get("dieLineCost")) + _n(r.get("dieEmbedded")),
+        "Prepress": _n(r.get("prepressLineCost")) + _n(r.get("prepressEmbedded")),
+        "Proofs": _n(r.get("proofLineCost")) + _n(r.get("proofEmbedded")),
+        "Misc": _n(r.get("miscLineCost")),
+        "Total Cost": _n(r.get("totalMfg")),
+        "Margin %": round(float(r.get("gmPct") or 0) * 100, 1),
+        "Sell Total": _n(r.get("itemSell")),
+        "Quote Total": _n(r.get("sellTotal")),
+    }
+
+
+@quotes_router.get("/_report/testing.xlsx")
+async def testing_report(user: User = Depends(get_current_user)) -> StreamingResponse:
+    """TEMPORARY: export every quote flagged 'good for testing' to .xlsx with a
+    per-component cost breakdown for side-by-side comparison with the legacy
+    system. Re-runs the pricing engine per quote so numbers match the app."""
+    import openpyxl
+    from openpyxl.styles import Font
+    from routes.engine_routes import calculate_all, calculate_multi_part
+
+    cursor = db[COL_QUOTES].find({"state.goodForTesting": True}, {"_id": 0}).sort("est_num", 1)
+    quotes = [d async for d in cursor]
+
+    rows: List[Dict[str, Any]] = []
+    for q in quotes:
+        state = q.get("state") or {}
+        payload = {**state, "quoteId": q.get("id")}
+        if payload.get("routeOverride") in (None, "", "Auto"):
+            payload.pop("routeOverride", None)
+        is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
+        try:
+            if is_mp:
+                data = await calculate_multi_part(payload=payload, _u=user)
+                bom = state.get("bomItems") or []
+                for c in (data.get("componentPricing") or []):
+                    idx = c.get("itemIndex")
+                    ist = (bom[idx].get("state") if isinstance(idx, int) and idx < len(bom) else {}) or {}
+                    for rr in (c.get("rows") or []):
+                        if rr.get("error"):
+                            continue
+                        rows.append(_report_row(q, state, c.get("desc"), ist, rr))
+            else:
+                data = await calculate_all(payload=payload, _u=user)
+                desc = state.get("itemDesc") or "Item"
+                for rr in (data.get("results") or []):
+                    if rr.get("error"):
+                        continue
+                    rows.append(_report_row(q, state, desc, state, rr))
+        except Exception as e:  # noqa: BLE001 — a bad quote shouldn't kill the whole export
+            rows.append({**{c: "" for c in _REPORT_COLUMNS},
+                         "SPOT Estimate #": q.get("est_num") or q.get("id"),
+                         "iQuote #": state.get("iquoteNum") or "",
+                         "Component": f"ENGINE ERROR: {type(e).__name__}: {e}"})
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Testing Comparison"
+    ws.append(_REPORT_COLUMNS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        ws.append([row.get(c, "") for c in _REPORT_COLUMNS])
+    ws.freeze_panes = "A2"
+    for i, col in enumerate(_REPORT_COLUMNS, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = max(11, min(24, len(col) + 3))
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"spot-testing-report-{datetime.now(timezone.utc).strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @quotes_router.delete("/{quote_id}")

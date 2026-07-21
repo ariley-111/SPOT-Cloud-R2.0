@@ -163,6 +163,19 @@ export const copyQuote = (id) =>
   api.post(`/quotes/${id}/copy`).then((r) => r.data);
 export const updateQuoteStatus = (id, status) =>
   api.patch(`/quotes/${id}/status`, { status }).then((r) => r.data);
+// TEMPORARY — "good for testing" flag + comparison report export.
+export const setQuoteTestFlag = (id, body) =>
+  api.patch(`/quotes/${id}/test-flag`, body).then((r) => r.data);
+export const downloadTestingReport = async () => {
+  const r = await api.get(`/quotes/_report/testing.xlsx`, { responseType: "blob" });
+  const url = URL.createObjectURL(r.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `spot-testing-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+};
 export const deleteQuote = (id) =>
   api.delete(`/quotes/${id}`).then((r) => r.data);
 export const listQuoteAudit = (quoteId) =>

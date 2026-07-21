@@ -2,11 +2,11 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useQuote } from "../../context/QuoteContext";
-import { createQuote, updateQuote, updateQuoteStatus, reassignParserFiles } from "../../api/spot";
+import { createQuote, updateQuote, updateQuoteStatus, reassignParserFiles, setQuoteTestFlag, downloadTestingReport } from "../../api/spot";
 import ApiStatusPill from "./ApiStatusPill";
 import SpotCube from "./SpotCube";
 import {
-  FolderOpen, FileText, Eye, Calculator, Layers, Save as SaveIcon,
+  FolderOpen, FileText, Eye, Calculator, Layers, Save as SaveIcon, Download,
   Moon, Sun, Settings, LogOut, User, ChevronDown,
 } from "lucide-react";
 
@@ -91,6 +91,24 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
     } finally { setSaving(false); }
   };
 
+  // TEMPORARY — testing/comparison flag helpers.
+  const onToggleTestFlag = async (checked) => {
+    setField("goodForTesting", checked);
+    if (quoteId) {
+      try { await setQuoteTestFlag(quoteId, { good_for_testing: checked, iquote_num: s.iquoteNum || "" }); } catch (_) {}
+    } else if (checked) {
+      pushToast("Flagged — Save the quote to include it in the testing report", "warn");
+    }
+  };
+  const onTestReport = async () => {
+    try {
+      pushToast("Building testing report…", "info");
+      await downloadTestingReport();
+    } catch (e) {
+      pushToast(`Report failed — ${e?.response?.data?.detail || e.message}`, "err");
+    }
+  };
+
   return (
     <div data-testid="spot-toolbar" style={{
       display: "flex", alignItems: "stretch", height: 56, flexShrink: 0,
@@ -148,6 +166,25 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
 
       {/* ── Zone 3 · Output actions (neutral ghost) ── */}
       <div style={{ ...zone, gap: 2 }}>
+        {/* TEMPORARY — testing/comparison flag + iQuote # + report export */}
+        <label data-testid="toolbar-test-flag-label" title="Flag this quote as good for testing/comparison with the legacy system (temporary)"
+          style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
+                   color: s.goodForTesting ? "var(--spot-green)" : "var(--spot-text3)", padding: "0 4px", cursor: viewOnly ? "not-allowed" : "pointer" }}>
+          <input type="checkbox" data-testid="toolbar-test-flag" checked={!!s.goodForTesting}
+            disabled={viewOnly} onChange={(e) => onToggleTestFlag(e.target.checked)} />
+          Test
+        </label>
+        {s.goodForTesting && (
+          <input data-testid="toolbar-iquote-num" value={s.iquoteNum || ""}
+            onChange={(e) => setField("iquoteNum", e.target.value)}
+            onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, { good_for_testing: true, iquote_num: s.iquoteNum || "" }).catch(() => {}); }}
+            placeholder="iQuote #" className="sp-input"
+            style={{ width: 76, fontSize: 11, padding: "3px 6px", marginRight: 2 }} />
+        )}
+        <button data-testid="toolbar-test-report" onClick={onTestReport} className="sp-tb-ghost" style={ghost}
+          title="Export all quotes flagged for testing to .xlsx">
+          <Download size={15} strokeWidth={2} /> Report
+        </button>
         <button data-testid="toolbar-load" onClick={() => openModal("load")} className="sp-tb-ghost" style={ghost} title="Load a saved quote">
           <FolderOpen size={15} strokeWidth={2} /> Load
         </button>

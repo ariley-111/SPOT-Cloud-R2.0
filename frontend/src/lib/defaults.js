@@ -133,6 +133,8 @@ export const DEFAULT_STATE = Object.freeze({
   quoteExpDays: "30",
   quoteNotes: "",
   estimatorNotes: "",                  // internal — NOT on the Letter of Quote PDF
+  goodForTesting: false,               // TEMPORARY — flag for legacy-comparison report
+  iquoteNum: "",                       // TEMPORARY — matching iQuote quote #
   dueDate: "",
   shipTo: "",
 });
