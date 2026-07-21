@@ -27,7 +27,7 @@ ASMP_DEFAULTS: Dict[str, Any] = {
     "saberMinCharge": 0, "saberCostPerCut": 0, "handStrippingMinCharge": 0, "handGluingMinCharge": 0,
     "crestSetup": {"Standard": 45, "Advanced": 90}, "crestSpeed": 150, "crestAdvSpeedFactor": 0.8,
     "clearTapeCostPerFt": 0.03, "reinforcedTapeCostPerFt": 0.08,
-    "tapeFootPerPiece": 2, "tapeCostPerInch": 0.00245, "side2PrintFactor": 0.6,
+    "tapeFootPerPiece": 2, "tapeCostPerInch": 0.00245, "tapeLaborRate": 30, "tapeStripsPerHour": 60, "side2PrintFactor": 0.6,
     "cadDifficulty": "Standard", "totalRuleInches": "0", "under5MsfFee": 0, "cadPerfSpeedFactor": 0.4,
     "crestDieCost": 1200,
     "bobstRate": 350, "bobstSpeed": 3000, "bobstSetup": 45, "bobstMinCharge": 250, "bobstDieCost": 1800,

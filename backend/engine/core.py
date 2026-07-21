@@ -414,7 +414,7 @@ RATE_DEFAULTS = {
     "incaMinChg": "0", "cadMinChg": "0", "crestMinChg": "0", "saberMinChg": "0", "saberCostPerCut": "0", "stripMinChg": "0", "glueMinChg": "0",
     "regInkRate": "0.05", "whiteInkFactor": "0.5", "regMR": "5", "whiteMR": "15",
     "stackHeight": "48", "cadRegSpeed": "650", "crestSpeedVal": "150",
-    "clearTapeCost": "0.03", "reinfTapeCost": "0.08", "tapeFtPerPc": "2", "tapeCostPerInch": "0.00245", "side2Factor": "0.60",
+    "clearTapeCost": "0.03", "reinfTapeCost": "0.08", "tapeFtPerPc": "2", "tapeCostPerInch": "0.00245", "tapeLaborRate": "30", "tapeStripsPerHour": "60", "side2Factor": "0.60",
     "crestSetupStd": "45", "crestSetupAdv": "90", "crestAdvSpeedFactor": "0.80",
     "perimStripMinPerPallet": "15", "cadPerfSpeedFactor": "0.40",
     "defaultPrepressCost": "50", "defaultPrintMode": "Satin",

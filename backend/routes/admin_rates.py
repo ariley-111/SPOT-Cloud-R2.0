@@ -60,7 +60,7 @@ CATEGORY_META = {
             {"label": "Minimum charges",    "keys": ["incaMinChg", "cadMinChg", "crestMinChg", "saberMinChg",
                                                      "stripMinChg", "glueMinChg", "bobstMinChg"]},
             {"label": "Ink",                "keys": ["regInkRate", "whiteInkFactor", "regMR", "whiteMR"]},
-            {"label": "Tape",               "keys": ["tapeCostPerInch"]},
+            {"label": "Tape",               "keys": ["tapeLaborRate", "tapeStripsPerHour"]},
             {"label": "Die costs",          "keys": ["crestDieCost", "bobstDieCost"]},
             {"label": "Markups",            "keys": ["freightMarkup", "dieMarkup", "miscChargeMarkup", "purchasedMarginPct"]},
             {"label": "Material & overhead", "keys": ["overheadPct", "spoilagePct", "kemiTariff", "palletPrepFee",

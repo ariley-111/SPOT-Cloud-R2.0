@@ -1437,3 +1437,35 @@ Keeps cloud's compact layout but adds legacy functionality.
 - OPEN OPTIONS (not yet done, user parked): (a) nudge cadRegularSpeed 650→~490 to match actuals;
   (b) reconcile $138 vs ~$70 work-center rates; (c) get makeready-hours sample to calibrate CAD_SETUP.
 - NO CODE CHANGED. Straight tier already removed (2026-06-22); DIFFICULTY = [Simple,Standard,Complex].
+
+## 2026-07-21 — FIX: Tape cost + Proofs not showing (cost buildup + PDF); batch wiring completed
+- ROOT CAUSE (tape/proofs missing on PREVIEW): frontend engine payload builders (useEngine.js
+  buildPayload + buildMpPayload) omitted tapeStrips/tapeStripLength AND all proof fields
+  (proofTreatment/proofCost/proofMarkup) → engine got 0-length strips (tape=$0) and proofs
+  defaulted to "None". Also backend run_estimate() result dict omitted proof keys
+  (proofLineCost/proofEmbedded/proofBase/proofTreatment), so even when proofs computed they
+  never reached the frontend/PDF. Both fixed. MP path (engine_routes.py componentPricing rows_out
+  + slot aggregation) also now carries proof (line_proof).
+- FIX: Tape LABOR formula corrected per user. Was qty×strips×stripLen×$0.00245/inch (gave $0.86 on
+  100pc×2strips). Now LABOR by strip count like gluing/stripping:
+  (ord_qty × #strips) / tapeStripsPerHour × tapeLaborRate. Defaults 60 strips/hr @ $30/hr
+  (= $0.50/strip). 100pc×2strips → 200/60×30 = $100.00 (verified curl + UI). Strip length is
+  descriptive only (PDF spec line + cost-buildup label), NOT a labor driver.
+- Admin rates: Tape group now exposes tapeLaborRate ($/hr) + tapeStripsPerHour (both in
+  RATE_DEFAULTS/ASMP_DEFAULTS + _RATE_TO_ASMP map). Old tapeCostPerInch key kept in defaults
+  (unused) to avoid breaking any stored override. defaultProofCost/proofMarkup already present.
+- PDF (routes/pdf.py): charge rows reordered so Die is LAST (Freight, Prepress, Proofs, Misc, Die);
+  Proofs row + tape spec descriptor (_tape_short) already present.
+- PreviewPdfModal.jsx: proofs added to hasLineItems, a Proofs column (after Prepress) in By-Part,
+  chargeLabel/chargesTotal/lump-sum sums.
+- Documents feature COMPLETED: DocumentsSec.jsx wired into SpotApp (below Files); fixed its Sec
+  props (label/open/onToggle + sec.documents/toggleSec) and useQuote destructuring (active.state).
+  Uploads use source="document" (GridFS), FilesSec excludes them, LoadQuote shows Paperclip count
+  via quotes.py file_count.
+- Estimator Notes: verified persists via state save/load; QuoteHeaderModal labels "Quote Notes
+  (appears on the Letter of Quote)" + "Estimator Notes (internal — NOT on the Letter of Quote)";
+  pdf.py renders ONLY quoteNotes (estimatorNotes never printed).
+- Parser rules present in parser_knowledge.py: IOR/I.O.R.→totalRuleInches; email body overrides CAD
+  materials/finish; CAD Blank/Flat size used ONLY when customer orders "sheets", else W×L.
+- Testing agent iteration_67: 100% (backend 5/5, frontend 6/6). Formula correction verified via
+  curl ($100) + UI screenshot (Finishing $100.00). REQUIRES REDEPLOY for production.
