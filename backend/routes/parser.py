@@ -519,6 +519,42 @@ class _BufferedUpload:
         return self._content
 
 
+# Anthropic accepts ONLY these image media types. Anything else (tiff, bmp,
+# svg, heic/heif, emf/wmf, x-icon, etc.) makes the whole request 400 — which
+# is why an email carrying artwork could kill an otherwise-valid parse.
+_ANTHROPIC_IMG_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+_ANTHROPIC_IMG_MAXPX = 1568  # long-edge cap; larger images are downsampled by Anthropic anyway
+
+
+def _sanitize_image_for_anthropic(content: bytes, media_type: str, fname: str):
+    """Return (b64, media_type) safe to send to Anthropic, or None if the image
+    can't be used. Passes supported, reasonably-sized images through untouched;
+    re-encodes unsupported/oversized ones to PNG via Pillow. NEVER raises — a
+    bad inline image must not abort the parse."""
+    try:
+        import io as _io
+        from PIL import Image
+        img = Image.open(_io.BytesIO(content))
+        img.load()
+        w, h = img.size
+        oversized = max(w, h) > _ANTHROPIC_IMG_MAXPX
+        # Fast path: already-supported type at a sane size → send as-is.
+        if media_type in _ANTHROPIC_IMG_TYPES and not oversized:
+            return base64.standard_b64encode(content).decode("utf-8"), media_type
+        if oversized:
+            scale = _ANTHROPIC_IMG_MAXPX / float(max(w, h))
+            img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+        if img.mode not in ("RGB", "RGBA", "L"):
+            img = img.convert("RGB")
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.standard_b64encode(buf.getvalue()).decode("utf-8"), "image/png"
+    except Exception as e:  # unreadable vector/proprietary art (EPS/AI/SVG/EMF), corrupt, etc.
+        logger.warning(f"image sanitize failed for {fname} ({media_type}): {e}")
+        return None
+
+
+
 async def _prepare_content(
     files: List[Any],
     email_body: Optional[str],
@@ -750,11 +786,19 @@ async def _prepare_content(
                         "source": {"type": "base64", "media_type": "image/png", "data": t["b64"]},
                     })
         elif media_type.startswith("image/"):
-            content_parts.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": media_type, "data": b64},
-            })
-            file_summary.append({"name": fname, "type": "image", "size": size})
+            san = _sanitize_image_for_anthropic(content, media_type, fname)
+            if san:
+                b64_img, mt = san
+                content_parts.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": mt, "data": b64_img},
+                })
+                file_summary.append({"name": fname, "type": "image", "size": size})
+            else:
+                # Unusable art (e.g. EPS/AI/SVG/EMF) — skip it, but keep parsing
+                # everything else instead of failing the whole RFQ.
+                file_summary.append({"name": fname, "type": "image", "size": size,
+                                     "error": "unsupported/unreadable image format — skipped"})
         elif (fname or "").lower().endswith(".xls"):
             # Legacy binary Excel (BIFF) — openpyxl can't read it; use xlrd.
             text = _extract_xls_text(content, fname)
