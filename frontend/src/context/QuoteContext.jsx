@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, applyState, deriveInitials } from "../lib/defaults";
-import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, takeOverQuote, createQuote, updateQuote, engineManifest } from "../api/spot";
+import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, reassignParserFiles, copyQuote, takeOverQuote, createQuote, updateQuote, engineManifest, parseRfqPolling, uploadParserFiles } from "../api/spot";
 import { useAuth } from "./AuthContext";
 import { generateEstNum, uniqueEstNum } from "../lib/format";
 import {
@@ -66,6 +66,12 @@ export function QuoteProvider({ children }) {
   const [initialsGateOpen, setInitialsGateOpen] = useState(false);
   const [sec, setSec] = useState(DEFAULT_SEC);
   const [toasts, setToasts] = useState([]);
+  // Per-quote RFQ parse jobs, keyed by quoteId. Lifting this above the tabs
+  // lets each quote parse INDEPENDENTLY in the background — starting a parse on
+  // one quote no longer blocks the others, and switching tabs never cancels an
+  // in-flight parse. FilesSec reads/acks its own quote's job. { [qid]:
+  // {busy, result, error, matchedQuote, doneAt} }
+  const [parseJobs, setParseJobs] = useState({});
   const saveTimers = useRef({});
 
   // Frozen-quote guardrails: track the active board-pricing version (to detect
@@ -1008,8 +1014,37 @@ export function QuoteProvider({ children }) {
     }));
   }, [activeId]);
 
+  // ─── Per-quote RFQ parse jobs (background, non-blocking) ──────────────
+  const _setParseJob = useCallback((qid, patch) => {
+    setParseJobs((prev) => ({ ...prev, [qid]: { ...(prev[qid] || {}), ...patch } }));
+  }, []);
+  const startParse = useCallback(async (quoteId, rfqFiles, extras, opts) => {
+    if (!quoteId || !rfqFiles || rfqFiles.length === 0) return;
+    _setParseJob(quoteId, { busy: true, error: "", result: null, matchedQuote: null, startedAt: Date.now() });
+    try {
+      const r = await parseRfqPolling(rfqFiles, "", "", opts || {});
+      if (extras && extras.length) { try { await uploadParserFiles(extras, quoteId); } catch (_) {} }
+      _setParseJob(quoteId, {
+        busy: false, result: r,
+        matchedQuote: r?.matchedQuote?.id ? r.matchedQuote : null,
+        doneAt: Date.now(),
+      });
+    } catch (e) {
+      _setParseJob(quoteId, {
+        busy: false, error: e?.response?.data?.detail || e.message, doneAt: Date.now(),
+      });
+    }
+  }, [_setParseJob]);
+  // Called by FilesSec once it has surfaced a completed job's result/error, so
+  // it isn't re-shown on the next tab switch (the result is held silently until
+  // the user returns to that quote, then consumed exactly once).
+  const ackParseJob = useCallback((quoteId) => {
+    _setParseJob(quoteId, { result: null, error: null, matchedQuote: null });
+  }, [_setParseJob]);
+
   const value = {
     tabs, activeId, active,
+    parseJobs, startParse, ackParseJob,
     setActiveId, newTab, closeTab, duplicateTab,
     loadIntoTab,
     closePromptId, requestCloseTab, cancelClose, discardCloseTab, saveAndCloseTab,

@@ -1503,3 +1503,24 @@ Keeps cloud's compact layout but adds legacy functionality.
 - PATCH /api/quotes/{id}/test-flag now accepts became_job → sets state.iquoteWon.
 - Report: new "Became a Job" (Yes/No) column, placed right after "iQuote #".
 - defaults.js: iquoteWon:false. Verified via curl (column = "Yes") + UI screenshot (Job? checkbox). REDEPLOY for prod.
+
+## 2026-07-23 — Parser fixes: concurrency, total-rule, email-artwork; corrugation pending
+- BUG (blocking): RFQ parse blocked ALL open quotes / one-at-a-time. Cause: FilesSec held busy+polling
+  in a single shared component (SpotApp renders one FilesSec for the active quote). FIX: lifted parse
+  jobs into QuoteContext keyed by quoteId (parseJobs + startParse + ackParseJob). Parses now run in the
+  background per-quote (fire-and-forget), never block other tabs, and switching tabs no longer cancels
+  them. Per user choice, a finished parse is held SILENTLY on its quote and the review modal auto-opens
+  when the estimator returns to that quote (FilesSec completion effect + shownRef guard, one-shot ack).
+  Backend already supported concurrent parses (asyncio.create_task + Mongo jobs). Smoke-tested: app
+  loads clean, no console errors. NOT yet E2E-tested with real concurrent Anthropic parses.
+- BUG (IOR): parser reported the "Knife Rule" line instead of TOTAL rule. FIX (parser_knowledge.py):
+  must use Total Rule (sum of knife/cut + score + perf + etc.); if only a per-category breakdown exists,
+  sum them; never report a single-category figure as totalRuleInches.
+- BUG (email artwork fails parse, ~390KB): Anthropic accepts ONLY jpeg/png/gif/webp; any other inline
+  image (tiff/bmp/heic/eps/ai/svg/emf/wmf) 400'd the WHOLE request. FIX (parser.py):
+  _sanitize_image_for_anthropic() passes supported+sane images through, re-encodes unsupported/oversized
+  to downscaled PNG via Pillow, and SKIPS unreadable vector art (logging it) instead of failing the parse.
+  Unit-verified: BMP->PNG, 3000px->1567px PNG, JPEG passthrough, EMF/garbage->skipped.
+- OPEN (corrugation reversing): user confirmed prod already has the earlier detection improvements.
+  Phrase on drawing: "corrugate across the vertical dimension" — ambiguous (along vs perpendicular).
+  Awaiting a NUMERIC example to lock the vertical/horizontal -> oneUpW mapping direction before editing.

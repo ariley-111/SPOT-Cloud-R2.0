@@ -11,7 +11,8 @@ import { parseAskField, metaFor, canonField, NUMERIC_KEYS, humanizeFieldPath, la
 import FilePreviewModal from "./FilePreviewModal";
 
 export default function FilesSec() {
-  const { active, sec, toggleSec, setManyFields, replaceState, pushToast, loadIntoTab } = useQuote();
+  const { active, sec, toggleSec, setManyFields, replaceState, pushToast, loadIntoTab,
+          parseJobs, startParse, ackParseJob } = useQuote();
   const { user: currentUser } = useAuth();
   const s = active?.state || {};
   // Stable file-ownership id — prefer the saved quote id (set after Save Quote)
@@ -21,7 +22,8 @@ export default function FilesSec() {
   const filesQuoteId = s.quoteId || active?.id || "";
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState([]);              // {filename, size, mime, class, file}
-  const [busy, setBusy] = useState(false);
+  const job = parseJobs[filesQuoteId] || {};
+  const busy = !!job.busy;                               // driven by the per-quote store
   const [parseResult, setParseResult] = useState(null);
   const [parserError, setParserError] = useState("");
   const [budget, setBudget] = useState(null);
@@ -59,6 +61,30 @@ export default function FilesSec() {
     setParserError("");
     setReviewOpen(false);
   }, [active?.id]);
+
+  // Surface a completed parse for THIS quote exactly once. Parses run in the
+  // background (QuoteContext), so a job may finish while the estimator is on a
+  // different tab — the result is held silently and opened when they return
+  // here. `shownRef` guards against re-opening on later tab switches.
+  const shownRef = useRef({});
+  useEffect(() => {
+    if (!filesQuoteId) return;
+    const j = parseJobs[filesQuoteId];
+    if (!j || j.busy || !j.doneAt) return;
+    if (shownRef.current[filesQuoteId] === j.doneAt) return;
+    shownRef.current[filesQuoteId] = j.doneAt;
+    if (j.result) {
+      setParseResult(j.result);
+      setReviewOpen(true);
+      if (j.matchedQuote) setMatchedQuote(j.matchedQuote);
+      parserBudget().then(setBudget).catch(() => {});
+    }
+    if (j.error) setParserError(j.error);
+    listParserFiles(filesQuoteId)
+      .then((arr) => setSavedFiles((arr || []).filter((f) => f.source !== "document")))
+      .catch(() => {});
+    ackParseJob(filesQuoteId);
+  }, [parseJobs, filesQuoteId, ackParseJob]);
 
   const isRfqLike = (name) => /\.(pdf|docx?|xlsx?|csv|tsv|rtf|eml|msg|txt|jpg|jpeg|png|webp|heic|zip)$/i.test(name || "");
   const ingestFiles = (list) => {
@@ -101,39 +127,22 @@ export default function FilesSec() {
 
   const runParseDirect = async (rfqFiles) => {
     if (!rfqFiles || rfqFiles.length === 0 || busy) return;
-    setBusy(true); setParserError(""); setParseResult(null);
-    try {
-      const r = await parseRfqPolling(rfqFiles, "", "", {
-        customerCode: s.custCode || "",
-        customerName: s.custName || "",
-        estInitials:  s.estInitials || "",
-        quoteId:      filesQuoteId,  // saved quote id if available, else draft id
-      });
-      setParseResult(r);
-      setReviewOpen(true);
-      // Letter-of-Quote re-submission: the parser recognized one of OUR quote
-      // numbers in the RFQ → surface a prompt to pull the original up + duplicate.
-      if (r.matchedQuote && r.matchedQuote.id) setMatchedQuote(r.matchedQuote);
-      // Auto-save any non-RFQ staged files too, so nothing attached is lost
-      // when the staging list is cleared below.
-      const extras = files.filter((f) => f.class !== "rfq").map((f) => f.file);
-      if (extras.length && filesQuoteId) {
-        try { await uploadParserFiles(extras, filesQuoteId); } catch (_) {}
-      }
-      // Parsed files are now persisted to the quote (server-side, before the
-      // Anthropic call) — they show in "Saved RFQ files". Clear the staging
-      // list so a later swap re-parses ONLY the new file, not old + new.
-      setFiles([]);
-      parserBudget().then(setBudget).catch(() => {});
-    } catch (e) {
-      setParserError(e?.response?.data?.detail || e.message);
-    } finally {
-      // Always refresh the saved-files panel — files are persisted BEFORE the
-      // Anthropic call, so even on parse failure (budget/timeout) the file is
-      // already saved and should appear immediately.
-      if (filesQuoteId) listParserFiles(filesQuoteId).then(setSavedFiles).catch(() => {});
-      setBusy(false);
-    }
+    if (!filesQuoteId) { pushToast("Save or open the quote before parsing", "warn"); return; }
+    setParserError(""); setParseResult(null); setReviewOpen(false);
+    // Non-RFQ staged files are auto-saved to the quote by startParse so nothing
+    // attached is lost. Clear staging now — files are persisted server-side
+    // BEFORE the Anthropic call, so a later swap re-parses only the new file.
+    const extras = files.filter((f) => f.class !== "rfq").map((f) => f.file);
+    setFiles([]);
+    // Fire-and-forget: the parse runs in the background (QuoteContext), keyed to
+    // THIS quote, so the estimator can keep working / start other parses. The
+    // completion effect above surfaces the review when it finishes.
+    startParse(filesQuoteId, rfqFiles, extras, {
+      customerCode: s.custCode || "",
+      customerName: s.custName || "",
+      estInitials:  s.estInitials || "",
+      quoteId:      filesQuoteId,
+    });
   };
   const runParse = async () => {
     const onlyRfq = files.filter((f) => f.class === "rfq").map((f) => f.file);
