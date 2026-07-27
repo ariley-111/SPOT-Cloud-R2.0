@@ -1524,3 +1524,16 @@ Keeps cloud's compact layout but adds legacy functionality.
 - OPEN (corrugation reversing): user confirmed prod already has the earlier detection improvements.
   Phrase on drawing: "corrugate across the vertical dimension" — ambiguous (along vs perpendicular).
   Awaiting a NUMERIC example to lock the vertical/horizontal -> oneUpW mapping direction before editing.
+
+## 2026-07-27 — Corrugation detection FIXED + validated on real CADs
+- User supplied 3 real CADs. Confirmed mapping was CORRECT (vertical corr -> vertical/up-down dim = oneUpW);
+  the bug was DETECTION: parser missed glyph/text corr marks and fell back to "first number = Width" (=horizontal)
+  -> reversed. FIX (parser_knowledge.py corrugation section): added rule 1b for ARROW/CARAT/LETTER glyphs
+  ("^ corr", "<<< C >>>", lone V/H, repeated edge triangles/blue carats -> up/down=Vertical, left/right=Horizontal),
+  a hard note that WRITTEN ORDER of the two numbers never decides Width (corr direction does), and 3 worked examples.
+- LIVE-PARSE VALIDATED (real CADs, Anthropic):
+  * SPC-26-111 "Grain/corr: Vertical" -> oneUpW=13.5938, oneUpL=20.3125, totalRuleInches=246.8998 (source CAD).
+  * Digital RFQ (3-part MP): "^ corr."/"<<< C >>>" -> (16.9375,20.875,196.472)/(19,25.125,245.975)/(11.5625,25.125,181.399).
+  All correct, not reversed; asks document the reasoning. Total-rule fix also validated (TAV Cut 188 vs Total 342).
+- STILL: concurrency refactor smoke-tested only (no live multi-parse E2E); email-artwork sanitizer unit-tested only.
+  All changes are PREVIEW — REDEPLOY for production.
