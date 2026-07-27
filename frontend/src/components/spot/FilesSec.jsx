@@ -608,6 +608,14 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     const norm = parseAskField(a.field);
     return { raw: a.field, reason: a.reason || "", norm, meta: norm ? metaFor(norm.key) : null };
   });
+  // Corrugate/grain orientation asks are the low-confidence, high-impact calls
+  // (a flipped Width/Length badly mis-prices the job) — flag them so they never
+  // get skimmed past among the other asks.
+  const isOrientationAsk = (a) => {
+    const key = a?.norm?.key;
+    if (key === "oneUpW" || key === "oneUpL") return true;
+    return /\b(corr|corrugat|grain|flute|orient|vertical|horizontal)\b/i.test(a?.reason || "");
+  };
 
   // Matched-Set vs Individual toggle: only surface for Multi-Part when the parser
   // is unsure (pricingMode missing or low overall confidence). Estimator-set value
@@ -626,7 +634,7 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     if (!a.norm) return mpTab === "job";                 // bare notes live under Job
     if (mpTab === "job") return a.norm.scope === "job";
     return a.norm.scope === "item" && a.norm.itemIdx === Number(mpTab);
-  });
+  }).sort((x, y) => (isOrientationAsk(y) ? 1 : 0) - (isOrientationAsk(x) ? 1 : 0));
   const showQty = !isMP || mpTab !== "job";              // qty is per-component on MP
 
 
@@ -1056,8 +1064,15 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                 {visibleAsks.map((a, i) => {
                   // Non-editable note (bare string ask or unrecognized field path).
                   if (!a.norm || !a.meta) {
+                    const orientNote = isOrientationAsk(a);
                     return (
-                      <div key={i} data-testid={`parse-ask-note-${i}`} style={{ fontSize: 12, color: "var(--spot-text2)" }}>
+                      <div key={i} data-testid={`parse-ask-note-${i}`} style={{
+                        fontSize: 12, color: "var(--spot-text2)",
+                        ...(orientNote ? { padding: "6px 8px", background: "rgba(245,158,11,0.10)",
+                          borderLeft: "3px solid #f59e0b", borderRadius: 4 } : {}),
+                      }}>
+                        {orientNote && <span style={{ fontSize: 10, fontWeight: 800, color: "#b45309",
+                          marginRight: 6 }}>⚠ VERIFY ORIENTATION</span>}
                         {a.raw && <span style={{ fontWeight: 700, color: "var(--spot-warn)" }}>{humanizeFieldPath(a.raw)}</span>}
                         {a.raw && a.reason && " — "}{a.reason}
                       </div>
@@ -1068,15 +1083,23 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                     ? (bomItems[a.norm.itemIdx]?.desc || `Item ${a.norm.itemIdx + 1}`) : null;
                   const scopeId = a.norm.scope === "item" ? `item-${a.norm.itemIdx}` : "job";
                   const edited = k in edits;
+                  const orient = isOrientationAsk(a);
                   return (
                     <div key={i} data-testid={`parse-ask-${scopeId}-${a.norm.key}`} style={{
-                      padding: "8px 10px", background: "var(--spot-bg2)",
-                      border: `1px solid ${edited ? "var(--spot-green)" : "var(--spot-border)"}`,
+                      padding: "8px 10px",
+                      background: orient && !edited ? "rgba(245,158,11,0.10)" : "var(--spot-bg2)",
+                      border: `1px solid ${edited ? "var(--spot-green)" : (orient ? "#f59e0b" : "var(--spot-border)")}`,
+                      borderLeft: orient ? "3px solid #f59e0b" : undefined,
                       borderRadius: 4,
                     }}>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 12 }}>{a.meta.label}</span>
                         <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>{a.meta.section}</span>
+                        {orient && <span data-testid={`parse-ask-orient-${scopeId}-${a.norm.key}`}
+                          title="The parser wasn't fully confident on corrugate/grain orientation — a flipped Width/Length mis-prices the job. Verify before applying."
+                          style={{ fontSize: 10, fontWeight: 800, color: "#b45309", background: "#f59e0b22",
+                          padding: "1px 6px", border: "1px solid #f59e0b", borderRadius: 3, letterSpacing: ".04em" }}>
+                          ⚠ VERIFY ORIENTATION</span>}
                         {compName && <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
                           padding: "0 5px", border: "1px solid #f59e0b55", borderRadius: 2 }}>{compName}</span>}
                         {edited && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-green)" }}>✓ set</span>}

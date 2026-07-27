@@ -1537,3 +1537,12 @@ Keeps cloud's compact layout but adds legacy functionality.
   All correct, not reversed; asks document the reasoning. Total-rule fix also validated (TAV Cut 188 vs Total 342).
 - STILL: concurrency refactor smoke-tested only (no live multi-parse E2E); email-artwork sanitizer unit-tested only.
   All changes are PREVIEW — REDEPLOY for production.
+
+## 2026-07-27 (cont.) — Review modal: highlight low-confidence orientation asks
+- In ReviewParseModal (FilesSec.jsx), corrugate/grain orientation asks (oneUpW/oneUpL, or reasons
+  mentioning corr/grain/flute/vertical/horizontal) are now visually flagged: amber left-border +
+  tinted background + a bold "⚠ VERIFY ORIENTATION" chip, and they float to the TOP of the asks list.
+  These are the parser's low-confidence, high-impact calls (a flipped W/L badly mis-prices the job).
+  Applies to both editable asks and bare-note asks. testid: parse-ask-orient-<scope>-<key>.
+- Verified: frontend compiles clean; parser confirmed to emit oneUpW orientation asks on live CADs.
+  UI highlight not screenshot-captured (parse E2E in-browser is slow). PREVIEW — redeploy for prod.
