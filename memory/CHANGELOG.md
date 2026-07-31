@@ -1633,3 +1633,44 @@ Keeps cloud's compact layout but adds legacy functionality.
 - All analysis now durable in /app/analysis/spotiq/ (matcher.py, build_exec.py,
   build_detailed.py, actuals.xlsx, cutting_detail.csv) after /tmp was wiped
   twice by container restarts.
+
+### 2026-07-31 — CRITICAL BUG FIX: testing report did not match UI (multi-part)
+- User discovered report numbers != UI for MP quotes in PRODUCTION.
+- ROOT CAUSE (backend/routes/quotes.py testing report):
+  1. Report read engine 'componentPricing' (each component priced INDEPENDENTLY)
+     instead of 'slots' (matched-set aggregation the UI displays). Wrong Sell
+     Total, Margin %, and Quote Total (showed component sell, not set total).
+  2. Report passed RAW saved state as engine payload instead of the UI's curated
+     buildPayload/buildMpPayload shape.
+  3. Python payload builders must STRIP None values — JS drops undefined keys,
+     explicit nulls defeat engine .get(key, default) fallbacks.
+- Per-category COSTS were always correct. Simple quotes were unaffected.
+- The 'eggcrate anomaly' was a REPORT ARTIFACT (componentPricing independent-
+  pricing path), not a real UI pricing bug.
+- FIX: _mp_engine_payload/_simple_engine_payload mirror useEngine.js builders
+  (incl. active-item mirroring w/ _MP_ITEM_KEYS, Per-Job freight zeroing, None
+  stripping); MP rows now read slots[].perComponent, Quote Total = slot
+  sellTotal, Margin = slot gmPct.
+- TESTED: parity scripts /app/analysis/spotiq/test_report_parity.py — MP (3 comps
+  x 2 qtys) and Simple (2 qtys): report == UI engine output EXACTLY. PASS.
+- IMPACT: workbook analysis sell numbers are INVALID for the 16 Multi-Part
+  estimates (22 Simple estimates valid). Requires PRODUCTION REDEPLOY + user
+  re-export + full analysis re-run.
+- LESSON: any endpoint that re-prices saved quotes MUST use the shared payload
+  builders and read the same response branch the UI renders.
+
+### 2026-08-03 — FULL parity regression: ALL 34 saved quotes PASS (preview)
+- New script /app/analysis/spotiq/parity_regression.py: independently replicates
+  the JS payload builders (useEngine.js buildPayload/buildMpPayload, incl. JS
+  undefined-drop vs null-keep semantics and active-item mirror), flags each
+  saved quote one at a time, downloads the report XLSX, and compares Sell Total /
+  Quote Total / Total Cost / Margin % per component per qty against the live
+  engine endpoints the UI calls.
+- RESULT: 34/34 quotes PASS, 0 FAIL, 0 ERROR — covers Simple, Multi-Part
+  Individual, Multi-Part Matched Set (incl. 12-component sets), multi-qty tiers.
+- goodForTesting flags restored after run; no test artifacts left in DB.
+- STATUS: fix verified in PREVIEW only. Production still runs the broken report
+  until user redeploys. After redeploy user must re-export the report and spot-
+  check the exact production quotes that originally mismatched (RW-* estimates).
+- Prior analysis workbooks remain SUSPECT until rebuilt from a re-exported,
+  parity-verified production report.

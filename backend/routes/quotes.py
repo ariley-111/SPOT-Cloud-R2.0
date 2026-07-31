@@ -396,7 +396,9 @@ def _n(x) -> float:
 
 
 def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
-                ist: Dict[str, Any], r: Dict[str, Any]) -> Dict[str, Any]:
+                ist: Dict[str, Any], r: Dict[str, Any],
+                quote_total: Optional[float] = None,
+                margin_pct: Optional[float] = None) -> Dict[str, Any]:
     print_on = (ist.get("printReq") or ist.get("printRequired") or "Yes") == "Yes"
     strip_on = ist.get("handStripping") == "Yes"
     glue_on = ist.get("handGluing") == "Yes"
@@ -444,11 +446,125 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Proofs": _n(r.get("proofLineCost")) + _n(r.get("proofEmbedded")),
         "Misc": _n(r.get("miscLineCost")),
         "Total Cost": _n(r.get("totalMfg")),
-        "Margin %": round(float(r.get("gmPct") or 0) * 100, 1),
+        "Margin %": round(float((margin_pct if margin_pct is not None else r.get("gmPct")) or 0) * 100, 1),
         "Sell Total": _n(r.get("itemSell")),
-        "Quote Total": _n(r.get("sellTotal")),
-        **_iquote_delta(state, _n(r.get("sellTotal"))),
+        "Quote Total": _n(r.get("sellTotal")) if quote_total is None else round(float(quote_total), 2),
+        **_iquote_delta(state, _n(r.get("sellTotal")) if quote_total is None else round(float(quote_total), 2)),
     }
+
+
+# Item-level keys mirrored from the top-level state into the active bom item —
+# MUST stay in sync with buildMpPayload() in frontend/src/hooks/useEngine.js.
+_MP_ITEM_KEYS = [
+    "itemDesc", "boxStyle", "custIdent", "quoteMode", "oneUpW", "oneUpL",
+    "sheetSizeW", "sheetSizeL", "sheetPcsPerSheet", "corrFlipped", "overrideSheetId",
+    "qtys", "selSlot", "flute", "boardGrade", "outsideLiner", "insideLiner", "medium",
+    "fscEnabled", "fscFee", "buyMinBoard", "boardSubstitution",
+    "printReq", "printMode", "printSides", "whiteInk", "colorsFront", "colorsBack",
+    "routeOverride", "cadDifficulty", "cadPricingMethod", "totalRuleInches",
+    "perfPct", "productMats", "saber", "saberCuts", "saberBlanksOut",
+    "handStripping", "perimeterStripping", "strippingComplexity",
+    "handGluing", "jointsPerPiece", "gluingComplexity",
+    "tape", "tapeType", "tapeStrips", "tapeStripLength",
+    "prepressTreatment", "prepressCost", "proofTreatment", "proofCost", "proofMarkup",
+    "dieTreatment", "cuttingDieCost", "dieAmortMethod", "miscCharges",
+    "freightType", "freightTreatment", "freightCost", "freightMarkup",
+    "freightCarrier", "freightByQty", "forcedSellPc", "gmByTier", "pricingBasis",
+]
+
+
+def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[str, Any]:
+    """Build the multi-part engine payload EXACTLY like the UI's buildMpPayload()
+    (frontend/src/hooks/useEngine.js) so the report prices what the UI shows."""
+    items = list(state.get("bomItems") or [])
+    active = state.get("activeItemIdx") or 0
+    if isinstance(active, int) and 0 <= active < len(items):
+        mirror = {k: state.get(k) for k in _MP_ITEM_KEYS if state.get(k) is not None}
+        items[active] = {**items[active],
+                         "state": {**(items[active].get("state") or {}), **mirror}}
+    if state.get("freightScope") == "Per Job":
+        items = [{**it, "state": {**(it.get("state") or {}),
+                                  "freightCost": "0", "freightTreatment": "None"}}
+                 for it in items]
+    payload = {
+        "quoteType": state.get("quoteType"),
+        "pricingMode": state.get("pricingMode") or "Matched Set",
+        "setMarginPct": state.get("setMarginPct") or "0.40",
+        "setMarginOverride": bool(state.get("setMarginOverride")),
+        "fulfillmentMarginPct": state.get("fulfillmentMarginPct") or "0.45",
+        "purchasedMarginPct": state.get("purchasedMarginPct") or "0.40",
+        "qtys": [str(x) for x in (state.get("qtys") or [])],
+        "activeItemIdx": active,
+        "bomItems": items,
+        "estInitials": state.get("estInitials"),
+        "custName": state.get("custName"), "custCode": state.get("custCode"),
+        "custRef": state.get("custRef"),
+        "destZip": state.get("destZip"), "quoteFOB": state.get("quoteFOB"),
+        "freightScope": state.get("freightScope"),
+        "freightAllocMethod": state.get("freightAllocMethod"),
+        "jobFreightCost": state.get("jobFreightCost"),
+        "jobFreightTreatment": state.get("jobFreightTreatment"),
+        "jobFreightBySlot": state.get("jobFreightBySlot") or {},
+        "freightMarkup": state.get("freightMarkup"),
+        "freightCarrier": state.get("freightCarrier"),
+        "prepressScope": state.get("prepressScope"),
+        "prepressAllocMethod": state.get("prepressAllocMethod"),
+        "jobPrepressCost": state.get("jobPrepressCost"),
+        "jobPrepressTreatment": state.get("jobPrepressTreatment"),
+        "pricingVersionId": state.get("pricingVersionId") or None,
+        "quoteId": quote_id or None,
+    }
+    # JS drops undefined keys on serialization; explicit nulls would defeat the
+    # engine's .get(key, default) fallbacks. Mirror that by stripping Nones.
+    return {k: v for k, v in payload.items() if v is not None}
+
+
+def _simple_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[str, Any]:
+    """Mirror of the UI's buildPayload() whitelist (useEngine.js)."""
+    ro = state.get("routeOverride")
+    payload = {
+        "oneUpW": state.get("oneUpW") or "0", "oneUpL": state.get("oneUpL") or "0",
+        "qtys": [str(x) for x in (state.get("qtys") or [])],
+        "flute": state.get("flute"), "boardGrade": state.get("boardGrade"),
+        "outsideLiner": state.get("outsideLiner"), "insideLiner": state.get("insideLiner"),
+        "medium": state.get("medium"), "fscEnabled": bool(state.get("fscEnabled")),
+        "printReq": state.get("printReq"), "printMode": state.get("printMode"),
+        "printSides": state.get("printSides"), "whiteInk": state.get("whiteInk"),
+        "colorsFront": state.get("colorsFront"), "colorsBack": state.get("colorsBack"),
+        **({"routeOverride": ro} if ro and ro != "Auto" else {}),
+        "cadDifficulty": state.get("cadDifficulty"), "cadPricingMethod": state.get("cadPricingMethod"),
+        "totalRuleInches": state.get("totalRuleInches"), "perfPct": state.get("perfPct"),
+        "productMats": state.get("productMats"),
+        "saber": state.get("saber"), "saberCuts": state.get("saberCuts"),
+        "saberBlanksOut": state.get("saberBlanksOut"),
+        "handStripping": state.get("handStripping"),
+        "perimeterStripping": state.get("perimeterStripping"),
+        "strippingComplexity": state.get("strippingComplexity"),
+        "handGluing": state.get("handGluing"), "jointsPerPiece": state.get("jointsPerPiece"),
+        "gluingComplexity": state.get("gluingComplexity"),
+        "tape": state.get("tape"), "tapeType": state.get("tapeType"),
+        "tapeStrips": state.get("tapeStrips"), "tapeStripLength": state.get("tapeStripLength"),
+        "quoteFOB": state.get("quoteFOB"), "freightCost": state.get("freightCost"),
+        "freightTreatment": state.get("freightTreatment"), "freightMarkup": state.get("freightMarkup"),
+        "freightCarrier": state.get("freightCarrier"),
+        "cuttingDieCost": state.get("cuttingDieCost"), "dieTreatment": state.get("dieTreatment"),
+        "dieMarkup": state.get("dieMarkup"),
+        "prepressCost": state.get("prepressCost"), "prepressTreatment": state.get("prepressTreatment"),
+        "proofTreatment": state.get("proofTreatment"), "proofCost": state.get("proofCost"),
+        "proofMarkup": state.get("proofMarkup"),
+        "miscCharges": state.get("miscCharges"), "miscChargeMarkup": state.get("miscChargeMarkup"),
+        "pricingBasis": state.get("pricingBasis"),
+        "gmByTier": state.get("gmByTier") or None,
+        "sellByTier": state.get("sellByTier") or None,
+        "freightByQty": state.get("freightByQty") or None,
+        "forcedSellPc": state.get("forcedSellPc") or None,
+        "buyMinBoard": state.get("buyMinBoard") or "Auto",
+        "boardSubstitution": state.get("boardSubstitution") or None,
+        "overrideSheetId": state.get("overrideSheetId") or None,
+        "pricingVersionId": state.get("pricingVersionId") or None,
+        "quoteId": quote_id or None,
+    }
+    return {k: v for k, v in payload.items() if v is not None}
 
 
 def _iquote_delta(state: Dict[str, Any], spot_total: float) -> Dict[str, Any]:
@@ -478,23 +594,26 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     rows: List[Dict[str, Any]] = []
     for q in quotes:
         state = q.get("state") or {}
-        payload = {**state, "quoteId": q.get("id")}
-        if payload.get("routeOverride") in (None, "", "Auto"):
-            payload.pop("routeOverride", None)
         is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
         try:
             if is_mp:
-                data = await calculate_multi_part(payload=payload, _u=user)
+                # Price EXACTLY like the UI: buildMpPayload-equivalent payload, then
+                # read the SLOTS aggregation (what the Quote Table / right rail show)
+                # — NOT componentPricing, which prices each component independently.
+                data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
                 bom = state.get("bomItems") or []
-                for c in (data.get("componentPricing") or []):
-                    idx = c.get("itemIndex")
-                    ist = (bom[idx].get("state") if isinstance(idx, int) and idx < len(bom) else {}) or {}
-                    for rr in (c.get("rows") or []):
-                        if rr.get("error"):
+                by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
+                for slot in (data.get("slots") or []):
+                    quote_total = slot.get("sellTotal")
+                    slot_gm = slot.get("gmPct")
+                    for pc in (slot.get("perComponent") or []):
+                        if pc.get("error"):
                             continue
-                        rows.append(_report_row(q, state, c.get("desc"), ist, rr))
+                        ist = by_id.get(pc.get("itemId") or "", {})
+                        rows.append(_report_row(q, state, pc.get("desc"), ist, pc,
+                                                quote_total=quote_total, margin_pct=slot_gm))
             else:
-                data = await calculate_all(payload=payload, _u=user)
+                data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)
                 desc = state.get("itemDesc") or "Item"
                 for rr in (data.get("results") or []):
                     if rr.get("error"):
