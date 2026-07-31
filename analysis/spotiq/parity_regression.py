@@ -211,14 +211,18 @@ def ui_values(q):
         resp = requests.post(f"{API}/api/engine/calculate-multi-part", headers=H, json=payload)
         resp.raise_for_status()
         data = resp.json()
+        per_job = state.get("freightScope") == "Per Job"
         for slot in (data.get("slots") or []):
-            qt = r2(slot.get("sellTotal"))
-            gm = round(float(slot.get("gmPct") or 0) * 100, 1)
             for pc in (slot.get("perComponent") or []):
                 if pc.get("error"):
                     continue
+                qt = r2(slot.get("sellTotal")) if per_job else r2(pc.get("sellTotal"))
+                fr = r2(pc.get("allocatedFreight")) if per_job else (
+                    r2((pc.get("freightLine") or 0) + (pc.get("freightEmbed") or 0)))
                 out[(pc.get("desc") or "", pc.get("qty"))] = (
-                    r2(pc.get("itemSell")), qt, r2(pc.get("totalMfg")), gm)
+                    r2(pc.get("itemSell")), qt, r2(pc.get("totalMfg")),
+                    r2(pc.get("gmDollar")),
+                    round(float(pc.get("gmPct") or 0) * 100, 1), fr)
     else:
         payload = build_payload(state, q.get("id"))
         resp = requests.post(f"{API}/api/engine/calculate-all", headers=H, json=payload)
@@ -230,8 +234,9 @@ def ui_values(q):
                 continue
             out[(desc, rr.get("qty"))] = (
                 r2(rr.get("itemSell")), r2(rr.get("sellTotal")),
-                r2(rr.get("totalMfg")),
-                round(float(rr.get("gmPct") or 0) * 100, 1))
+                r2(rr.get("totalMfg")), r2(rr.get("gmDollar")),
+                round(float(rr.get("gmPct") or 0) * 100, 1),
+                r2((rr.get("freightLine") or 0) + (rr.get("freightEmbed") or 0)))
     return out
 
 
@@ -250,7 +255,9 @@ def report_values():
             errors.append(comp)
             continue
         out[(comp, d.get("Qty"))] = (d.get("Sell Total"), d.get("Quote Total"),
-                                     d.get("Total Cost"), d.get("Margin %"))
+                                     d.get("Total Cost"), d.get("Margin $"),
+                                     d.get("Margin %"),
+                                     d.get("Freight") if d.get("Freight") != "" else 0.0)
     return out, errors
 
 

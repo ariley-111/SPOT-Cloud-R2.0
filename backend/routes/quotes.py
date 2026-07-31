@@ -392,7 +392,7 @@ _REPORT_COLUMNS = [
     "Strip Difficulty", "Strip Cost", "Glue Joints", "Glue Difficulty", "Glue Cost",
     "Tape Type", "Tape Strip Count", "Tape Inches", "Tape Cost",
     "Freight", "Die", "Prepress", "Proofs", "Misc",
-    "Total Cost", "Margin %", "Sell Total", "Quote Total",
+    "Total Cost", "Margin $", "Margin %", "Sell Total", "Quote Total",
     "iQuote $", "Δ $", "Δ %",
 ]
 
@@ -407,7 +407,7 @@ def _n(x) -> float:
 def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
                 ist: Dict[str, Any], r: Dict[str, Any],
                 quote_total: Optional[float] = None,
-                margin_pct: Optional[float] = None) -> Dict[str, Any]:
+                per_job_freight: bool = False) -> Dict[str, Any]:
     print_on = (ist.get("printReq") or ist.get("printRequired") or "Yes") == "Yes"
     strip_on = ist.get("handStripping") == "Yes"
     glue_on = ist.get("handGluing") == "Yes"
@@ -457,14 +457,24 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Tape Strip Count": (ist.get("tapeStrips") or "") if tape_on else "",
         "Tape Inches": tape_inches,
         "Tape Cost": _n(r.get("assemblyCost")) if tape_on else "",
-        "Freight": _n(r.get("freightLine")) + _n(r.get("freightEmbed")),
+        # Per-Job freight (UTS dashboard) lives in allocatedFreight — the
+        # component's markup-inclusive share of the job shipment (matches the
+        # Quote Table / right-rail). Per-item freight = line + embedded.
+        "Freight": (_n(r.get("allocatedFreight")) if per_job_freight
+                    else _n(r.get("freightLine")) + _n(r.get("freightEmbed"))),
         "Die": _n(r.get("dieLineCost")) + _n(r.get("dieEmbedded")),
         "Prepress": _n(r.get("prepressLineCost")) + _n(r.get("prepressEmbedded")),
         "Proofs": _n(r.get("proofLineCost")) + _n(r.get("proofEmbedded")),
         "Misc": _n(r.get("miscLineCost")),
         "Total Cost": _n(r.get("totalMfg")),
-        "Margin %": round(float((margin_pct if margin_pct is not None else r.get("gmPct")) or 0) * 100, 1),
+        # Margin is THIS COMPONENT's production margin — exactly what the
+        # right-rail Cost Buildup "Margin ... of sell" shows for the component.
+        "Margin $": _n(r.get("gmDollar")),
+        "Margin %": round(float(r.get("gmPct") or 0) * 100, 1),
         "Sell Total": _n(r.get("itemSell")),
+        # Quote Total mirrors the rail's One-Time Line Items rollup: Per-Job
+        # freight mode → job/order total for the tier; otherwise the component's
+        # own sell + its one-time line charges.
         "Quote Total": _n(r.get("sellTotal")) if quote_total is None else round(float(quote_total), 2),
         **_iquote_delta(state, _n(r.get("sellTotal")) if quote_total is None else round(float(quote_total), 2)),
     }
@@ -629,15 +639,16 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
                 data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
                 bom = state.get("bomItems") or []
                 by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
+                per_job = (state.get("freightScope") == "Per Job")
                 for slot in (data.get("slots") or []):
-                    quote_total = slot.get("sellTotal")
-                    slot_gm = slot.get("gmPct")
                     for pc in (slot.get("perComponent") or []):
                         if pc.get("error"):
                             continue
                         ist = by_id.get(pc.get("itemId") or "", {})
-                        rows.append(_report_row(q, state, pc.get("desc"), ist, pc,
-                                                quote_total=quote_total, margin_pct=slot_gm))
+                        rows.append(_report_row(
+                            q, state, pc.get("desc"), ist, pc,
+                            quote_total=(slot.get("sellTotal") if per_job else None),
+                            per_job_freight=per_job))
             else:
                 data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)
                 desc = state.get("itemDesc") or "Item"

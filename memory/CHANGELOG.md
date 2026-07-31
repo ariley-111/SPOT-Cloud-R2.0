@@ -1713,3 +1713,24 @@ Keeps cloud's compact layout but adds legacy functionality.
   1124.61/CAD) not fully explained by carrier alone — after redeploy user must
   re-export; new Board/Sheet columns will pinpoint any remaining input drift.
 - NEEDS: production redeploy + user re-verification on RW-260629-133153.
+
+### 2026-07-31 — ROUND 3: report per-component margins + Per-Job freight + Margin $
+- User (preview, SA-260731-200557, MP Individual + Per-Job UTS freight): report
+  freight blank + margin wrong for every component.
+- CAUSES: (1) Per-Job freight lives in perComponent `allocatedFreight` (markup-
+  inclusive share) — report only read freightLine/freightEmbed (zeroed in Per-Job
+  payloads). (2) Report stamped SLOT-aggregate gmPct on every row; the UI rail
+  shows each component's own pc.gmPct.
+- REPORT SEMANTICS NOW (mirrors right-rail Cost Buildup exactly):
+  * Margin $ = pc.gmDollar (NEW column, user request), Margin % = pc.gmPct
+  * Freight = allocatedFreight when freightScope=Per Job, else line+embed
+  * Quote Total = slot.sellTotal (order total) in Per-Job mode, else the
+    component's own pc.sellTotal (sell + its one-time lines)
+- parity_regression.py expectations updated to rail semantics: 39/39 PASS
+  (incl. the user's Per-Job quote: freight 32.96/36.68/37.85/141.98 = 249.47
+  total = 216.93×1.15; margins 43.8/44.3/44.4/46.7).
+- ALSO FIXED: customer typeahead dropdown auto-opening when a saved quote loads
+  (EstimateInfoSec CustomerInput now only opens when current value === the exact
+  last-typed value; any programmatic change force-closes). Screenshot-verified.
+- NOTE: routes/quotes.py had a duplicated-tail corruption (unmatched paren +
+  duplicate list_quote_owners) from a bad edit — cleaned; ast.parse verified.
