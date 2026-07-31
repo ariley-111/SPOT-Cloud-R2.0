@@ -1588,3 +1588,11 @@ Keeps cloud's compact layout but adds legacy functionality.
   /tmp/add_actuals_tab.py; data /tmp/actuals.xlsx).
 - Still open: eggcrate anomaly trace (RW-260723-084853), cutting/print calibration
   decisions (need user direction + more actuals), 2 unmatched jobs.
+
+### 2026-07-31 — Preview SSO 500 fixed (env corruption on fork)
+- /api/auth/entra/login returned 500: ENTRA_TENANT_ID and ENTRA_CLIENT_ID in
+  backend/.env were overwritten with placeholder "spot-multi-user" during the
+  environment fork. Secret survived. Restored GUIDs from test_credentials.md,
+  restarted backend, verified 302 to login.microsoftonline.com/<tenant>.
+- LEARNING: after any fork, verify Entra env values against test_credentials.md
+  before debugging SSO errors.
