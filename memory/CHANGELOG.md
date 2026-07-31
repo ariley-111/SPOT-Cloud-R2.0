@@ -1616,3 +1616,20 @@ Keeps cloud's compact layout but adds legacy functionality.
 - /tmp analysis scripts: iq_analysis2.py (matcher, reads /tmp/actuals.xlsx),
   threeway.py, build_exec.py, add_cutting_tab.py, add_actuals_tab.py,
   cutting_detail.csv, cutting_year.csv. /tmp NOT durable — container restarts wipe it.
+
+### 2026-07-31 — Leadership workbooks corrected & finalized
+- User corrections applied: (1) Quote Comparison component rows = COST
+  (iQuote TotalActualCost minus NotInSpotCost), TOTAL rows = SELL; (2) $/ea
+  column removed; (3) all Δ symbols replaced with the word "Delta"; (4) detailed
+  workbook cost comparisons redone on like-for-like "direct cost" basis
+  (Material+Print+Cutting+Strip+Glue+Freight summed identically both sides —
+  iQuote TotalActualCost NOT used; it contains uncategorized cost with no SPOT
+  counterpart; discovered via user's Tray example: categories sum $2,060 vs
+  TotalActualCost $3,798).
+- Corrected direct-cost Delta median +8.5% (was +10.2%). Sell stats unchanged.
+- Charts: 3-bar price chart (Actual Invoice / iQuote Sell / SPOT Sell) per user.
+- Invoices include dies AND shipping; actuals pull has NO freight column
+  (margins slightly worse than shown) — noted in workbook.
+- All analysis now durable in /app/analysis/spotiq/ (matcher.py, build_exec.py,
+  build_detailed.py, actuals.xlsx, cutting_detail.csv) after /tmp was wiped
+  twice by container restarts.

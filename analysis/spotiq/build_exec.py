@@ -150,16 +150,16 @@ for a, b in rows:
 
 # ═══ Sheet 2: Quote Comparison ═══
 ws = wb.create_sheet('Quote Comparison')
-widths = [44, 46, 8, 11, 12, 12, 10, 8, 9, 30]
+widths = [44, 46, 8, 12, 12, 10, 8, 9, 34]
 for i, w in enumerate(widths, 1):
     ws.column_dimensions[get_column_letter(i)].width = w
 ws['A1'] = 'Quote-by-Quote: SPOT vs iQuote vs Actual'
 ws['A1'].font = TITLE
-ws['A2'] = 'Grouped by SPOT project. COMPONENT ROWS compare COST (SPOT total cost vs iQuote TotalActualCost). TOTAL rows compare SELL PRICE. iQuote components auto-matched by product name + qty (blank = no confident 1:1 match). Δ% = SPOT vs iQuote (+ = SPOT higher).'
+ws['A2'] = 'Grouped by SPOT project. COMPONENT ROWS compare COST (SPOT total cost vs iQuote TotalActualCost minus NotInSpotCost). TOTAL rows compare SELL PRICE. iQuote components auto-matched by product name + qty (blank = no confident 1:1 match). Delta % = SPOT vs iQuote (+ = SPOT higher).'
 ws['A2'].font = Font(size=9, italic=True)
-ws.merge_cells('A2:J2')
+ws.merge_cells('A2:I2')
 
-hdr = ['Project / Component', 'Specs', 'Qty', 'SPOT $', 'SPOT $/ea', 'iQuote $', 'Δ $', 'Δ %', 'Verdict', 'Actual (produced jobs)']
+hdr = ['Project / Component', 'Specs', 'Qty', 'SPOT $', 'iQuote $', 'Delta $', 'Delta %', 'Verdict', 'Actual (produced jobs)']
 r = 4
 for c, h in enumerate(hdr, 1):
     cell = ws.cell(row=r, column=c, value=h)
@@ -178,9 +178,9 @@ for m in order:
         head += "   [OUTLIER — see detailed workbook]"
     cell = ws.cell(row=r, column=1, value=head)
     cell.font = Font(bold=True, size=10, color='1F3864')
-    for c in range(1, 11):
+    for c in range(1, 10):
         ws.cell(row=r, column=c).fill = GREYF
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=10)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=9)
     r += 1
     for cr in rows_:
         qty = cr['Qty']
@@ -189,21 +189,20 @@ for m in order:
         ws.cell(row=r, column=2, value=spec_text(cr)).font = Font(size=9)
         ws.cell(row=r, column=3, value=qty).font = Font(size=9)
         ws.cell(row=r, column=4, value=round(scost, 2)).font = Font(size=9)
-        ws.cell(row=r, column=5, value=round(scost / qty, 3) if qty else '').font = Font(size=9)
         ir = comp_map.get(id(cr))
         if ir is not None:
-            iq_c = f(ir['TotalActualCost'])
-            ws.cell(row=r, column=6, value=round(iq_c, 2)).font = Font(size=9)
-            ws.cell(row=r, column=7, value=round(scost - iq_c, 2)).font = Font(size=9)
+            iq_c = f(ir['TotalActualCost']) - f(ir['NotInSpotCost'])
+            ws.cell(row=r, column=5, value=round(iq_c, 2)).font = Font(size=9)
+            ws.cell(row=r, column=6, value=round(scost - iq_c, 2)).font = Font(size=9)
             if iq_c:
-                ws.cell(row=r, column=8, value=f"{(scost-iq_c)/iq_c*100:+.1f}%").font = Font(size=9)
+                ws.cell(row=r, column=7, value=f"{(scost-iq_c)/iq_c*100:+.1f}%").font = Font(size=9)
         r += 1
     ws.cell(row=r, column=1, value=f"    TOTAL SELL @ qty {m['qty']}").font = Font(bold=True, size=9)
     ws.cell(row=r, column=4, value=round(m['spot_sell'], 2)).font = Font(bold=True, size=9)
-    ws.cell(row=r, column=6, value=round(m['iq_sell'], 2)).font = Font(bold=True, size=9)
-    ws.cell(row=r, column=7, value=round(m['spot_sell'] - m['iq_sell'], 2)).font = Font(bold=True, size=9)
-    ws.cell(row=r, column=8, value=f"{m['dpct']:+.1f}%").font = Font(bold=True, size=9)
-    vc = ws.cell(row=r, column=9, value=m['verdict'])
+    ws.cell(row=r, column=5, value=round(m['iq_sell'], 2)).font = Font(bold=True, size=9)
+    ws.cell(row=r, column=6, value=round(m['spot_sell'] - m['iq_sell'], 2)).font = Font(bold=True, size=9)
+    ws.cell(row=r, column=7, value=f"{m['dpct']:+.1f}%").font = Font(bold=True, size=9)
+    vc = ws.cell(row=r, column=8, value=m['verdict'])
     vc.font = Font(bold=True, size=9)
     vc.fill = VFILL[m['verdict']]
     ak = ACTMAP.get((m['est'], str(m['qty'])))
@@ -211,7 +210,7 @@ for m in order:
         job_id = ak[0]
         a = act_cat(job_id)
         marg = (a['Sell'] - a['Total']) / a['Sell'] * 100
-        cell = ws.cell(row=r, column=10, value=f"Job {job_id}: invoiced ${a['Sell']:,.0f}, actual cost ${a['Total']:,.0f} → margin {marg:+.0f}%")
+        cell = ws.cell(row=r, column=9, value=f"Job {job_id}: invoiced ${a['Sell']:,.0f}, actual cost ${a['Total']:,.0f} → margin {marg:+.0f}%")
         cell.font = Font(size=9, bold=True, color=('9C0006' if marg < 0 else '2E7D32'))
     if m['note']:
         r += 1

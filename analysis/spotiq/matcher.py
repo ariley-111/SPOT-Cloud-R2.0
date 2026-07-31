@@ -46,13 +46,14 @@ def iq_cats(rows):
 
 def mk(est, iq, job, qty, opt, s_rows, i_rows, note=''):
     proj = s_rows[0]['Project Name'] if s_rows else ''
+    sc, ic = spot_cats(s_rows), iq_cats(i_rows)
     return {'est': est, 'iq': iq, 'job': job, 'qty': qty, 'opt': opt, 'note': note, 'proj': proj,
             's_rows': s_rows, 'i_rows': i_rows,
             'spot_sell': sum(f(r['Sell Total']) for r in s_rows),
             'iq_sell': sum(f(r['ComponentTotalPrice']) for r in i_rows),
-            'spot_cost': sum(f(r['Total Cost']) for r in s_rows),
-            'iq_cost': sum(f(r['TotalActualCost']) - f(r['NotInSpotCost']) for r in i_rows),
-            'scats': spot_cats(s_rows), 'icats': iq_cats(i_rows)}
+            'spot_cost': sum(sc.values()),
+            'iq_cost': sum(ic.values()),
+            'scats': sc, 'icats': ic}
 
 
 S = defaultdict(list)
