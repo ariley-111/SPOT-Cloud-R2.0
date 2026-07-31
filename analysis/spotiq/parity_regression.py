@@ -122,8 +122,27 @@ _MP_ITEM_KEYS = [
     "prepressTreatment", "prepressCost", "proofTreatment", "proofCost", "proofMarkup",
     "dieTreatment", "cuttingDieCost", "dieAmortMethod", "miscCharges",
     "freightType", "freightTreatment", "freightCost", "freightMarkup",
-    "freightCarrier", "freightByQty", "forcedSellPc", "gmByTier", "pricingBasis",
+    "freightCarrier", "freightByQty", "forcedSellPc", "gmByTier", "sellByTier",
+    "pricingBasis", "miscChargeMarkup",
 ]
+
+# New DEFAULT_STATE keys (2026-08): browser state always carries these after
+# applyState(), even for legacy saves that lack them in the DB.
+_NEW_DEFAULTS = {"freightCarrier": "", "pricingBasis": "Gross Margin %",
+                 "gmByTier": None, "sellByTier": None, "forcedSellPc": None,
+                 "miscChargeMarkup": None}
+
+
+def js_state(state):
+    """Replicate applyState(): merge new defaults + freightCarrier heal."""
+    s = {**_NEW_DEFAULTS, **state}
+    if s.get("freightCarrier") and isinstance(s.get("bomItems"), list):
+        s["bomItems"] = [
+            {**it, "state": {**(it.get("state") or {}), "freightCarrier": s["freightCarrier"]}}
+            if it and it.get("state") and not (it.get("state") or {}).get("freightCarrier")
+            else it
+            for it in s["bomItems"]]
+    return s
 
 
 def build_mp_payload(state, quote_id):
@@ -184,7 +203,7 @@ def r2(x):
 
 def ui_values(q):
     """Call the engine exactly like the UI and return {(component, qty): (sell, quote_total, cost, gm)}."""
-    state = q.get("state") or {}
+    state = js_state(q.get("state") or {})
     is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
     out = {}
     if is_mp:

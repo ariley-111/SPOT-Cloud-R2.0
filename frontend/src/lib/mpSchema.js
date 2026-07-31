@@ -55,8 +55,12 @@ export const ITEM_LEVEL_KEYS = Object.freeze(
  *  Always includes `custIdent` + `miscCharges` (item-level per legacy spot_r1_5.jsx
  *  L2675-2683) even if the schema-driven ITEM_LEVEL_KEYS list misses them during
  *  module bootstrap. */
-export function gatherItemState(state) {
-  const out = {};
+export function gatherItemState(state, prev = null) {
+  // Non-destructive: start from the item's EXISTING state so keys written
+  // directly into bomItems[i].state (freight dashboard per-item maps, transit,
+  // parser extras) survive tab switches instead of being wiped by the
+  // whitelist rebuild. Top-level values overwrite the whitelist keys.
+  const out = { ...(prev || {}) };
   for (const k of ITEM_LEVEL_KEYS) out[k] = state[k];
   out.custIdent = state.custIdent || "";
   // Defensive: copy the array (don't share refs across items), use fresh array
@@ -108,6 +112,10 @@ export function applyItemStateTo(currentState, itemState) {
   for (const k of ITEM_LEVEL_KEYS) cleared[k] = DEFAULT_STATE[k];
   cleared.custIdent = "";  // Explicit safety net
   cleared.miscCharges = [];  // Fresh empty array — don't leak previous item's misc charges
+  // Per-item freight maps must NOT leak across items (freightByQty is job-level
+  // for Simple quotes, but inside MP tab-switching it's per-component data).
+  cleared.freightByQty = {};
+  cleared.perJobFreightByQty = {};
   const it = itemState || {};
   const finalCust = ("custIdent" in it) ? it.custIdent : "";
   // miscCharges: deep-copy the array so subsequent mutations don't bleed across items

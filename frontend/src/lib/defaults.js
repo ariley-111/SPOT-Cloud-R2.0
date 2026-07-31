@@ -111,6 +111,13 @@ export const DEFAULT_STATE = Object.freeze({
   proofMarkup: "0",                    // 0% markup
 
   miscCharges: [],                     // [{id,name,cost,treatment}]
+  miscChargeMarkup: null,              // null → admin rate default
+
+  // ─── Pricing Strategy (per component — must round-trip per BOM item) ──
+  pricingBasis: "Gross Margin %",      // Gross Margin % | Sell $/MSF
+  gmByTier: null,                      // null → engine GM_DEFAULTS curve
+  sellByTier: null,                    // null → engine SELL_DEFAULTS curve
+  forcedSellPc: null,                  // {qtyIdx: forced $/pc} overrides
 
   // ─── Freight ──────────────────────────────────────────────────
   quoteFOB: "Origin",                  // Origin | Destination | Will-Call | Ship
@@ -120,6 +127,8 @@ export const DEFAULT_STATE = Object.freeze({
   localDeliveryZone: null,
   freightCost: "0",
   freightMarkup: "0.15",
+  freightCarrier: "",                  // resolved carrier — zeroes markup for local delivery
+  freightTransit: "",                  // carrier transit days (display)
   freightScope: "None",                // None | Per Item | Per Job
   jobFreightTreatment: "Amortize",
   jobFreightCost: "0",
@@ -143,7 +152,17 @@ export const DEFAULT_STATE = Object.freeze({
 
 /** Reset-first: returns a brand new object based on DEFAULT_STATE merged with patch. */
 export function applyState(patch) {
-  return { ...DEFAULT_STATE, ...(patch || {}) };
+  const s = { ...DEFAULT_STATE, ...(patch || {}) };
+  // Legacy-save heal: freightCarrier predates per-item persistence — older MP
+  // saves only kept it at the top level (last-active item). Seed items missing
+  // it so per-item freight markup (0 for local delivery) prices consistently.
+  if (s.freightCarrier && Array.isArray(s.bomItems)) {
+    s.bomItems = s.bomItems.map((it) =>
+      it && it.state && !it.state.freightCarrier
+        ? { ...it, state: { ...it.state, freightCarrier: s.freightCarrier } }
+        : it);
+  }
+  return s;
 }
 
 // ─── Lookup tables ──────────────────────────────────────────────

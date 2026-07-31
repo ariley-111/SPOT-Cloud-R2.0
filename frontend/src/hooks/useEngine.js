@@ -192,7 +192,8 @@ export function buildMpPayload(state) {
         freightCarrier: state.freightCarrier,
         freightByQty: state.freightByQty,
         forcedSellPc: state.forcedSellPc,
-        gmByTier: state.gmByTier, pricingBasis: state.pricingBasis,
+        gmByTier: state.gmByTier, sellByTier: state.sellByTier,
+        pricingBasis: state.pricingBasis, miscChargeMarkup: state.miscChargeMarkup,
       },
     };
   }

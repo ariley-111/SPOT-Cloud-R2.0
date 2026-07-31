@@ -247,6 +247,7 @@ export default function LoadQuoteModal({ onClose }) {
     try {
       const updated = await takeOverQuote(it.id);
       loadIntoTab({ ...(updated.state || {}), quoteId: updated.id, quoteStatus: updated.status || "draft",
+        viewOnly: false, ownerName: null,
         pricingVersionId: updated.pricing_version_id || null });
       pushToast(`Took over ${updated.est_num} — you are now the owner`, "ok");
       onClose();

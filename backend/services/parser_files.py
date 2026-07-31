@@ -155,6 +155,32 @@ async def reassign_quote_files(from_quote_id: str, to_quote_id: str) -> int:
     return res.modified_count
 
 
+async def clone_quote_files(from_quote_id: str, to_quote_id: str) -> int:
+    """Duplicate every non-deleted file from one quote to another — NEW metadata
+    docs + NEW GridFS blobs so the two quotes' file lifecycles stay independent
+    (deleting either quote can't orphan the other's attachments)."""
+    if not from_quote_id or not to_quote_id or from_quote_id == to_quote_id:
+        return 0
+    n = 0
+    async for doc in db[COL_PARSER_FILES].find(
+            {"quote_id": str(from_quote_id), "deleted_at": None}):
+        content = await read_parser_file_bytes(doc)
+        if content is None:
+            logger.warning(f"clone_quote_files: blob missing for {doc.get('id')}, skipped")
+            continue
+        await save_parser_file(
+            quote_id=to_quote_id,
+            filename=doc.get("filename") or "",
+            mime=doc.get("mime") or "",
+            content=content,
+            uploaded_by=doc.get("uploaded_by") or "",
+            source=doc.get("source") or "upload",
+            parent_filename=doc.get("parent_filename"),
+        )
+        n += 1
+    return n
+
+
 async def purge_quote_files(quote_id: str) -> int:
     """Hard-delete all files for a quote (called by quote/draft delete handler).
     Returns number of files purged."""

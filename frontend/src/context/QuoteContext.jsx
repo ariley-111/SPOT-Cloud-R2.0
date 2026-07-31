@@ -293,7 +293,8 @@ export function QuoteProvider({ children }) {
       if (next === "Matched Set") {
         // Snapshot current active item's edits FIRST so they don't get lost
         const activeIdx = s.activeItemIdx ?? 0;
-        const currSnap = (s.bomItems || []).length > 0 ? gatherItemState(s) : null;
+        const currSnap = (s.bomItems || []).length > 0
+          ? gatherItemState(s, s.bomItems[activeIdx]?.state) : null;
         const items = (s.bomItems || []).map((bi, i) => i === activeIdx && currSnap
           ? { ...bi, state: currSnap, desc: currSnap.itemDesc || bi.desc || "", custIdent: currSnap.custIdent || bi.custIdent || "" }
           : bi);
@@ -652,7 +653,7 @@ export function QuoteProvider({ children }) {
       const oldIdx = t.state.activeItemIdx ?? 0;
       if (newIdx === oldIdx || !items[newIdx]) return t;
       // Snapshot current top-level item-level fields into the outgoing item
-      const snap = gatherItemState(t.state);
+      const snap = gatherItemState(t.state, items[oldIdx]?.state);
       const target = items[newIdx];
       const itemsSaved = items.map((it, i) => (i === oldIdx ? {
         ...it,
@@ -713,7 +714,7 @@ export function QuoteProvider({ children }) {
       const oldIdx = t.state.activeItemIdx ?? 0;
       if (!items[oldIdx]) return t;
       // Snapshot current first — also sync BOM-item-level desc/custIdent.
-      const snap = gatherItemState(t.state);
+      const snap = gatherItemState(t.state, items[oldIdx]?.state);
       const itemsSaved = items.map((it, i) => (i === oldIdx ? {
         ...it,
         state: snap,
@@ -770,7 +771,7 @@ export function QuoteProvider({ children }) {
       const oldIdx = t.state.activeItemIdx ?? 0;
       // Snapshot current active first (so we don't lose unsaved edits) — also
       // sync desc/custIdent at the BOM-item level so tab labels stay accurate.
-      const snap = gatherItemState(t.state);
+      const snap = gatherItemState(t.state, items[oldIdx]?.state);
       items[oldIdx] = {
         ...items[oldIdx],
         state: snap,
@@ -1003,7 +1004,7 @@ export function QuoteProvider({ children }) {
       if (items.length === 0) return t;
       const idx = t.state.activeItemIdx ?? 0;
       if (!items[idx]) return t;
-      const snap = gatherItemState(t.state);
+      const snap = gatherItemState(t.state, items[idx]?.state);
       const itemsNext = items.map((it, i) => i === idx ? {
         ...it,
         state: snap,

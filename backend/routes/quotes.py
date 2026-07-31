@@ -306,6 +306,13 @@ async def copy_quote(quote_id: str, user: User = Depends(get_current_user)) -> Q
         rate_snapshot=effective_snapshot(),
     )
     await db[COL_QUOTES].insert_one(clone.model_dump())
+    # Attachments follow the copy — duplicate all RFQ/reference files so the
+    # new owner has the full source-document context.
+    from services.parser_files import clone_quote_files
+    try:
+        await clone_quote_files(quote_id, clone.id)
+    except Exception:  # noqa: BLE001 — a file-clone hiccup must not kill the copy
+        pass
     await _log_audit(
         quote_id=clone.id, user_id=user.id, field="copy",
         old=quote_id, new=clone.id, source="copy",
@@ -378,6 +385,7 @@ async def set_test_flag(quote_id: str, body: TestFlagRequest,
 # Ordered columns for the exportable testing report.
 _REPORT_COLUMNS = [
     "SPOT Estimate #", "iQuote #", "Became a Job", "Project Name", "Quote Type", "Component", "Qty",
+    "One-Up W", "One-Up L", "Board", "Liners", "Sheet",
     "Material Cost", "Print Mode", "Print Cost", "Route", "Route Hours", "Difficulty",
     "Inches of Rule", "Perf %", "Cutting Cost",
     "Strip Difficulty", "Strip Cost", "Glue Joints", "Glue Difficulty", "Glue Cost",
@@ -422,6 +430,14 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Quote Type": state.get("quoteType") or "Simple",
         "Component": comp_desc or "",
         "Qty": qty,
+        # Board/dims come from the ENGINE RESULT for THIS component — the actual
+        # board it was priced on, never another component's mirror.
+        "One-Up W": round(float(r.get("oneUpW")), 3) if r.get("oneUpW") else "",
+        "One-Up L": round(float(r.get("oneUpL")), 3) if r.get("oneUpL") else "",
+        "Board": f"{r.get('boardGrade')} {r.get('flute')}" if r.get("boardGrade") else "",
+        "Liners": (f"{r.get('outsideLiner') or ''}/{r.get('insideLiner') or ''}"
+                   if (r.get("outsideLiner") or r.get("insideLiner")) else ""),
+        "Sheet": (f"{r.get('sheetW')}x{r.get('sheetL')}" if r.get("sheetW") else ""),
         "Material Cost": _n(r.get("matTotal")) + _n(r.get("matMakeready")),
         "Print Mode": (ist.get("printMode") or "") if print_on else "",
         "Print Cost": _n(r.get("printDirect")),
@@ -469,7 +485,8 @@ _MP_ITEM_KEYS = [
     "prepressTreatment", "prepressCost", "proofTreatment", "proofCost", "proofMarkup",
     "dieTreatment", "cuttingDieCost", "dieAmortMethod", "miscCharges",
     "freightType", "freightTreatment", "freightCost", "freightMarkup",
-    "freightCarrier", "freightByQty", "forcedSellPc", "gmByTier", "pricingBasis",
+    "freightCarrier", "freightByQty", "forcedSellPc", "gmByTier", "sellByTier",
+    "pricingBasis", "miscChargeMarkup",
 ]
 
 
@@ -482,6 +499,14 @@ def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[s
         mirror = {k: state.get(k) for k in _MP_ITEM_KEYS if state.get(k) is not None}
         items[active] = {**items[active],
                          "state": {**(items[active].get("state") or {}), **mirror}}
+    # Legacy-save heal (mirror of applyState() in frontend/src/lib/defaults.js):
+    # freightCarrier predates per-item persistence — seed items missing it from
+    # the top-level value so per-item freight markup matches what the UI shows.
+    job_carrier = state.get("freightCarrier")
+    if job_carrier:
+        items = [it if (it.get("state") or {}).get("freightCarrier")
+                 else {**it, "state": {**(it.get("state") or {}), "freightCarrier": job_carrier}}
+                 for it in items]
     if state.get("freightScope") == "Per Job":
         items = [{**it, "state": {**(it.get("state") or {}),
                                   "freightCost": "0", "freightTreatment": "None"}}
