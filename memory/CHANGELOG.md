@@ -1573,3 +1573,18 @@ Keeps cloud's compact layout but adds legacy functionality.
   /tmp/build_workbook.py (tmp — regenerate if needed; source data /tmp/iq_compare.xlsx).
 - User asked about production actuals: agreed 3-way comparison (iQuote vs SPOT vs
   actuals) is next if user exports actual job costs joined on iQuote#/MISJobID.
+
+### 2026-07-31 — Actuals 3-way analysis (iQuote vs SPOT vs real job costs)
+- User provided Actuals tab (9 MIS jobs; 7 matched via iQuote sell price; 236869
+  $2,876.15 and 237252 $142.41 unmatched — awaiting user's iQuote #s).
+- Findings flip earlier read: 7 jobs sold $15,112 vs actual cost $19,561 (-29%,
+  4 of 7 sold at a loss). SPOT would-be prices $18,073 ≈ break-even (-8%).
+- Print: actual $3,594 vs SPOT -14% vs iQuote -46% (excl blowout) — the +37%
+  SPOT-vs-iQuote print gap was iQuote UNDER-costing. SPOT print slightly low if anything.
+- Material: SPOT within ±13% of actual. Cutting: BOTH under actual ~30%
+  (SPOT -29%) — parked CAD cutting calibration now has real data pointing UP.
+- Blowout job 236943 (iQ 223591): sold CAD-price $4,353, actual $9,468.
+- Workbook updated with 'Actuals 3-Way' tab (scripts /tmp/threeway.py,
+  /tmp/add_actuals_tab.py; data /tmp/actuals.xlsx).
+- Still open: eggcrate anomaly trace (RW-260723-084853), cutting/print calibration
+  decisions (need user direction + more actuals), 2 unmatched jobs.
