@@ -1596,3 +1596,23 @@ Keeps cloud's compact layout but adds legacy functionality.
   restarted backend, verified 302 to login.microsoftonline.com/<tenant>.
 - LEARNING: after any fork, verify Entra env values against test_credentials.md
   before debugging SSO errors.
+
+### 2026-07-31 — Cutting deep-dive + leadership deliverables
+- Year of cutting actuals (1,045 ops) analyzed: CAD-family WC rates uniform
+  ($69-72/hr; Clamshell $191, Bobst $80). Machine-mix theory dead.
+- Root cause of cutting under-cost: SPOT cadRegularSpeed 650 in/min vs ~165
+  effective actual (total-hours fit, robust to inconsistent setup logging);
+  cadRate $138 vs actual ~$72 masked half the miss. Setup (25 min) validated OK.
+- BOOKMARKED calibration (USER SAID NO CHANGES until after leadership review):
+  Option B preferred: cadRegularSpeed 650→~165 AND cadRate 138→72 (admin console).
+  Option A: cadRate→~$203. Revisit at ~25 produced pairs.
+- Deliverables hosted in /app/frontend/public/:
+  * SPOT_vs_iQuote_Analysis.xlsx (7 tabs, + Cutting Deep-Dive)
+  * SPOT_Executive_Summary.xlsx (Exec Summary + per-project Quote Comparison
+    with component specs, verdicts, actual-job margins)
+- NOTE: flagged quotes live in PRODUCTION DB (preview has 1 test quote) — spec
+  fields (finished size/board/ink colors) not in report export; offered to add
+  columns to testing report (needs redeploy + re-export).
+- /tmp analysis scripts: iq_analysis2.py (matcher, reads /tmp/actuals.xlsx),
+  threeway.py, build_exec.py, add_cutting_tab.py, add_actuals_tab.py,
+  cutting_detail.csv, cutting_year.csv. /tmp NOT durable — container restarts wipe it.
