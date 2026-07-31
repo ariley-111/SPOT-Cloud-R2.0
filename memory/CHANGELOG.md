@@ -1557,3 +1557,19 @@ Keeps cloud's compact layout but adds legacy functionality.
   |Δ%|, drill into per-category columns (board/print/cut/strip/glue/tape/freight)
   only on outliers — mirrors legacy parity audit approach. "Became a Job" quotes
   are market-validated and carry the most weight.
+
+### 2026-07-31 — SPOT vs iQuote accuracy analysis delivered
+- Matched 38 flagged SPOT estimates to 34 iQuote quotes = 49 scenarios (structural
+  fixes: kits, 2-out sets, option-variants per-component, riser exclusion).
+- Results (excl 3 outliers): sell Δ median +13.2% (SPOT higher), cost Δ +10.2%,
+  14/46 PASS ±10%. Print cost +37% is the systematic driver; material/cutting/
+  freight aligned. Material like-for-like (net of +6.5% board increase) ≈ -11%,
+  consistent with SPOT using fewer waste sheets (unproven — needs sheet counts).
+- Outliers: eggcrate component RW-260723-084853 ($9,570 vs $523, ~18x, inverted
+  qty pricing — suspected bug, NOT yet traced) and RW-260720-082503 kit modeling
+  mismatch (became job at ~2x SPOT price).
+- Deliverable: /app/frontend/public/SPOT_vs_iQuote_Analysis.xlsx (5 tabs + 4 charts,
+  legacy-style PASS/REVIEW/FAIL verdicts). Analysis scripts in /tmp/iq_analysis2.py,
+  /tmp/build_workbook.py (tmp — regenerate if needed; source data /tmp/iq_compare.xlsx).
+- User asked about production actuals: agreed 3-way comparison (iQuote vs SPOT vs
+  actuals) is next if user exports actual job costs joined on iQuote#/MISJobID.
