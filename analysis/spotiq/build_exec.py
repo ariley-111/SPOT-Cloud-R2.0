@@ -155,11 +155,11 @@ for i, w in enumerate(widths, 1):
     ws.column_dimensions[get_column_letter(i)].width = w
 ws['A1'] = 'Quote-by-Quote: SPOT vs iQuote vs Actual'
 ws['A1'].font = TITLE
-ws['A2'] = 'Grouped by SPOT project. All $ are SELL prices. Component-level iQuote prices auto-matched by product name + qty (blank = no confident 1:1 match; totals always compare). Δ% = SPOT vs iQuote (+ = SPOT higher).'
+ws['A2'] = 'Grouped by SPOT project. COMPONENT ROWS compare COST (SPOT total cost vs iQuote TotalActualCost). TOTAL rows compare SELL PRICE. iQuote components auto-matched by product name + qty (blank = no confident 1:1 match). Δ% = SPOT vs iQuote (+ = SPOT higher).'
 ws['A2'].font = Font(size=9, italic=True)
 ws.merge_cells('A2:J2')
 
-hdr = ['Project / Component', 'Specs', 'Qty', 'SPOT Sell $', 'SPOT Sell $/ea', 'iQuote Sell $', 'Δ $', 'Δ %', 'Verdict', 'Actual (produced jobs)']
+hdr = ['Project / Component', 'Specs', 'Qty', 'SPOT $', 'SPOT $/ea', 'iQuote $', 'Δ $', 'Δ %', 'Verdict', 'Actual (produced jobs)']
 r = 4
 for c, h in enumerate(hdr, 1):
     cell = ws.cell(row=r, column=c, value=h)
@@ -184,21 +184,21 @@ for m in order:
     r += 1
     for cr in rows_:
         qty = cr['Qty']
-        sell = f(cr['Sell Total'])
+        scost = f(cr['Total Cost'])
         ws.cell(row=r, column=1, value=f"    {cr['Component']}").font = Font(size=9)
         ws.cell(row=r, column=2, value=spec_text(cr)).font = Font(size=9)
         ws.cell(row=r, column=3, value=qty).font = Font(size=9)
-        ws.cell(row=r, column=4, value=round(sell, 2)).font = Font(size=9)
-        ws.cell(row=r, column=5, value=round(sell / qty, 3) if qty else '').font = Font(size=9)
+        ws.cell(row=r, column=4, value=round(scost, 2)).font = Font(size=9)
+        ws.cell(row=r, column=5, value=round(scost / qty, 3) if qty else '').font = Font(size=9)
         ir = comp_map.get(id(cr))
         if ir is not None:
-            iq_c = f(ir['ComponentTotalPrice'])
+            iq_c = f(ir['TotalActualCost'])
             ws.cell(row=r, column=6, value=round(iq_c, 2)).font = Font(size=9)
-            ws.cell(row=r, column=7, value=round(sell - iq_c, 2)).font = Font(size=9)
+            ws.cell(row=r, column=7, value=round(scost - iq_c, 2)).font = Font(size=9)
             if iq_c:
-                ws.cell(row=r, column=8, value=f"{(sell-iq_c)/iq_c*100:+.1f}%").font = Font(size=9)
+                ws.cell(row=r, column=8, value=f"{(scost-iq_c)/iq_c*100:+.1f}%").font = Font(size=9)
         r += 1
-    ws.cell(row=r, column=1, value=f"    TOTAL @ qty {m['qty']}").font = Font(bold=True, size=9)
+    ws.cell(row=r, column=1, value=f"    TOTAL SELL @ qty {m['qty']}").font = Font(bold=True, size=9)
     ws.cell(row=r, column=4, value=round(m['spot_sell'], 2)).font = Font(bold=True, size=9)
     ws.cell(row=r, column=6, value=round(m['iq_sell'], 2)).font = Font(bold=True, size=9)
     ws.cell(row=r, column=7, value=round(m['spot_sell'] - m['iq_sell'], 2)).font = Font(bold=True, size=9)
