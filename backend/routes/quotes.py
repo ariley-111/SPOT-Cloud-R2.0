@@ -296,7 +296,8 @@ async def copy_quote(quote_id: str, user: User = Depends(get_current_user)) -> Q
         est_num=f"{src.get('est_num', '')}-COPY",
         customer_code=src.get("customer_code"),
         customer_name=src.get("customer_name"),
-        state=src.get("state") or {},
+        # Keep state.estNum in sync so the loaded tab shows the -COPY number
+        state={**(src.get("state") or {}), "estNum": f"{src.get('est_num', '')}-COPY"},
         status="draft",  # always start a copy as draft
         test_mode=src.get("test_mode", False),
         # Duplicate IS the re-price path: pin the clone to the ACTIVE version

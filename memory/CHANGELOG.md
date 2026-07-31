@@ -1674,3 +1674,42 @@ Keeps cloud's compact layout but adds legacy functionality.
   check the exact production quotes that originally mismatched (RW-* estimates).
 - Prior analysis workbooks remain SUSPECT until rebuilt from a re-exported,
   parity-verified production report.
+
+### 2026-07-31 — P0 ROUND 2: per-item state LOSS on BOM tab switch (root cause)
+- User showed production RW-260629-133153 (MP Individual): report Header row had
+  wrong freight (80.50 vs UI 70.00), material, route (CAD vs Crest), cost, sell.
+- ROOT CAUSE (PROVEN via /app/analysis/spotiq/repro_header_mismatch.py):
+  keys the engine prices with were NOT in DEFAULT_STATE, so ITEM_LEVEL_KEYS
+  (derived) excluded them → gatherItemState() WIPED them from a component's
+  state on every tab switch; buildMpPayload mirrored them only for the ACTIVE
+  component. Lost keys: freightCarrier (→ engine defaulted to 15% freight
+  markup = exactly 70→80.50), forcedSellPc, gmByTier, sellByTier, pricingBasis,
+  miscChargeMarkup. Also RightDashboard writes freightByQty/perJobFreightByQty/
+  freightTransit directly into bomItems[i].state — wiped the same way.
+- FIXES:
+  1. defaults.js: added freightCarrier, freightTransit, pricingBasis
+     ("Gross Margin %"), gmByTier/sellByTier/forcedSellPc/miscChargeMarkup (null)
+     → now first-class ITEM_LEVEL_KEYS that round-trip per component.
+  2. mpSchema.gatherItemState(state, prev): non-destructive — merges the item's
+     EXISTING state first (QuoteContext call sites pass items[oldIdx]?.state).
+  3. applyItemStateTo: clears freightByQty/perJobFreightByQty (no cross-item leak).
+  4. applyState() heal (+ backend _mp_engine_payload mirror): legacy saves seed
+     missing per-item freightCarrier from top-level.
+  5. runner.py: miscChargeMarkup/pricingBasis defaults now treat explicit null
+     like absent (`or` fallback) so UI-null == report-absent.
+  6. useEngine buildMpPayload mirror += sellByTier, miscChargeMarkup (backend
+     _MP_ITEM_KEYS kept in sync).
+- REPORT NEW COLUMNS (user request): One-Up W, One-Up L, Board (grade+flute),
+  Liners (out/in), Sheet (WxL) — from each component's OWN engine result, so
+  any residual board/sheet drift on production is self-diagnosing.
+- FILES: copy_quote now clones all parser/RFQ files (new GridFS blobs) via
+  clone_quote_files(); take-over keeps files (same quote id — verified) and now
+  explicitly clears viewOnly in LoadQuoteModal. Copy also syncs state.estNum to
+  the "-COPY" number so the loaded tab shows it.
+- TESTED (preview): repro shows report==UI after fix; full parity regression
+  34/34 PASS (updated replica in parity_regression.py); testing agent iteration
+  68 all frontend flows PASS; copy/take-over file flows verified via curl.
+- RESIDUAL RISK: production Header material/route delta (1311.50/Crest vs
+  1124.61/CAD) not fully explained by carrier alone — after redeploy user must
+  re-export; new Board/Sheet columns will pinpoint any remaining input drift.
+- NEEDS: production redeploy + user re-verification on RW-260629-133153.
