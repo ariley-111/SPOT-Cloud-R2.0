@@ -171,7 +171,10 @@ export const downloadTestingReport = async () => {
   const url = URL.createObjectURL(r.data);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `spot-testing-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  // Unique per export (date + time) — same-day exports previously shared one
+  // filename, so users kept opening a stale earlier download and saw old data.
+  const ts = new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "");
+  a.download = `spot-testing-report-${ts}.xlsx`;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);

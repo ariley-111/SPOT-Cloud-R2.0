@@ -683,11 +683,15 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"spot-testing-report-{datetime.now(timezone.utc).strftime('%Y%m%d')}.xlsx"
+    # Timestamped filename + no-store: multiple same-day exports previously all
+    # downloaded as the SAME name, so users kept opening a stale earlier copy
+    # from Downloads and thought the report was wrong/missing columns.
+    fname = f"spot-testing-report-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}"',
+                 "Cache-Control": "no-store"},
     )
 
 

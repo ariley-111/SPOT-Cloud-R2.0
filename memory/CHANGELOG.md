@@ -1734,3 +1734,19 @@ Keeps cloud's compact layout but adds legacy functionality.
   last-typed value; any programmatic change force-closes). Screenshot-verified.
 - NOTE: routes/quotes.py had a duplicated-tail corruption (unmatched paren +
   duplicate list_quote_owners) from a bad edit — cleaned; ast.parse verified.
+
+### 2026-07-31 — PROD "still wrong" report = STALE DOWNLOADED FILE
+- User redeployed, then reported prod report "missing all the new columns" and
+  "costs/margins still wrong".
+- FACT CHECK (read-only against prod API, /app/analysis/spotiq/prod_parity_check.py):
+  prod serves the NEW report (all new columns) and 48/48 flagged prod quotes
+  PASS report-vs-engine parity on sell / quote total / cost / margin $ /
+  margin % / freight — including RW-260629-133153.
+- ROOT CAUSE of user confusion: frontend named EVERY export
+  `spot-testing-report-YYYY-MM-DD.xlsx` (date only) → same-day downloads got
+  "(1)/(2)" suffixes and users re-opened the stale earlier copy.
+- FIX (preview, needs redeploy): filename now date_HHMMSS in BOTH frontend
+  (api/spot.js downloadTestingReport) and backend Content-Disposition; response
+  Cache-Control: no-store.
+- LESSON: when a user says prod output is stale/wrong, verify against the prod
+  API directly before assuming a code bug — prod API is reachable read-only.
