@@ -136,6 +136,7 @@ export const DEFAULT_STATE = Object.freeze({
   goodForTesting: false,               // TEMPORARY — flag for legacy-comparison report
   iquoteNum: "",                       // TEMPORARY — matching iQuote quote #
   iquoteWon: false,                    // TEMPORARY — did the iQuote become a job?
+  iquoteTotal: "",                     // TEMPORARY — iQuote sell price for delta comparison
   dueDate: "",
   shipTo: "",
 });

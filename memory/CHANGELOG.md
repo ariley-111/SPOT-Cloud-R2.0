@@ -1546,3 +1546,14 @@ Keeps cloud's compact layout but adds legacy functionality.
   Applies to both editable asks and bare-note asks. testid: parse-ask-orient-<scope>-<key>.
 - Verified: frontend compiles clean; parser confirmed to emit oneUpW orientation asks on live CADs.
   UI highlight not screenshot-captured (parse E2E in-browser is slow). PREVIEW — redeploy for prod.
+
+### 2026-07-31 — Accuracy-testing workflow: iQuote $ delta comparison
+- Toolbar (Test flag active) gains "iQuote $" input next to iQuote # — records the
+  iQuote sell price for the flagged quote (`state.iquoteTotal`, PATCH /test-flag).
+- Testing xlsx report gains 3 columns after Quote Total: iQuote $, Δ $, Δ %
+  (SPOT minus iQuote; positive = SPOT priced higher). Rows with |Δ%| > 10 get an
+  amber highlight for outlier triage.
+- Methodology agreed with user: flag 20-30 real quotes across product mix, sort by
+  |Δ%|, drill into per-category columns (board/print/cut/strip/glue/tape/freight)
+  only on outliers — mirrors legacy parity audit approach. "Became a Job" quotes
+  are market-validated and carry the most weight.

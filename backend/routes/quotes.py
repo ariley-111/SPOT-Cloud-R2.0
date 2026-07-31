@@ -349,6 +349,7 @@ class TestFlagRequest(BaseModel):
     good_for_testing: bool
     iquote_num: Optional[str] = None
     became_job: Optional[bool] = None
+    iquote_total: Optional[float] = None
 
 
 @quotes_router.patch("/{quote_id}/test-flag")
@@ -366,6 +367,7 @@ async def set_test_flag(quote_id: str, body: TestFlagRequest,
             "state.goodForTesting": bool(body.good_for_testing),
             "state.iquoteNum": (body.iquote_num or ""),
             "state.iquoteWon": bool(body.became_job),
+            "state.iquoteTotal": (body.iquote_total if body.iquote_total else ""),
             "updated_at": _now(),
         }},
     )
@@ -382,6 +384,7 @@ _REPORT_COLUMNS = [
     "Tape Type", "Tape Strip Count", "Tape Inches", "Tape Cost",
     "Freight", "Die", "Prepress", "Proofs", "Misc",
     "Total Cost", "Margin %", "Sell Total", "Quote Total",
+    "iQuote $", "Δ $", "Δ %",
 ]
 
 
@@ -444,7 +447,20 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Margin %": round(float(r.get("gmPct") or 0) * 100, 1),
         "Sell Total": _n(r.get("itemSell")),
         "Quote Total": _n(r.get("sellTotal")),
+        **_iquote_delta(state, _n(r.get("sellTotal"))),
     }
+
+
+def _iquote_delta(state: Dict[str, Any], spot_total: float) -> Dict[str, Any]:
+    """Δ of SPOT quote total vs the recorded iQuote price (positive = SPOT higher)."""
+    try:
+        iq = float(state.get("iquoteTotal") or 0)
+    except (TypeError, ValueError):
+        iq = 0.0
+    if iq <= 0:
+        return {"iQuote $": "", "Δ $": "", "Δ %": ""}
+    delta = round(spot_total - iq, 2)
+    return {"iQuote $": round(iq, 2), "Δ $": delta, "Δ %": round(delta / iq * 100, 1)}
 
 
 @quotes_router.get("/_report/testing.xlsx")
@@ -453,7 +469,7 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     per-component cost breakdown for side-by-side comparison with the legacy
     system. Re-runs the pricing engine per quote so numbers match the app."""
     import openpyxl
-    from openpyxl.styles import Font
+    from openpyxl.styles import Font, PatternFill
     from routes.engine_routes import calculate_all, calculate_multi_part
 
     cursor = db[COL_QUOTES].find({"state.goodForTesting": True}, {"_id": 0}).sort("est_num", 1)
@@ -496,8 +512,14 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     ws.append(_REPORT_COLUMNS)
     for cell in ws[1]:
         cell.font = Font(bold=True)
+    amber = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+    dpct_col = _REPORT_COLUMNS.index("Δ %") + 1
     for row in rows:
         ws.append([row.get(c, "") for c in _REPORT_COLUMNS])
+        dpct = row.get("Δ %")
+        if isinstance(dpct, (int, float)) and abs(dpct) > 10:
+            for c in (dpct_col - 2, dpct_col - 1, dpct_col):
+                ws.cell(row=ws.max_row, column=c).fill = amber
     ws.freeze_panes = "A2"
     for i, col in enumerate(_REPORT_COLUMNS, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = max(11, min(24, len(col) + 3))
