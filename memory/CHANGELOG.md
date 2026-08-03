@@ -1750,3 +1750,28 @@ Keeps cloud's compact layout but adds legacy functionality.
   Cache-Control: no-store.
 - LESSON: when a user says prod output is stale/wrong, verify against the prod
   API directly before assuming a code bug — prod API is reachable read-only.
+
+### 2026-08-03 — SAVE-TIME COST SNAPSHOTS + CAD smart-default moved into engine
+- User demanded "read costs stored in the DB". Facts: only INPUT state was ever
+  stored; screen + report both recompute live. Implemented snapshots:
+  * POST/PUT /api/quotes now computes and stores `report_rows` +
+    `report_rows_at` on the quote doc (_snapshot_report_rows; failure never
+    blocks a save). Report reads stored rows; legacy quotes self-heal once.
+  * `_refresh_row_meta` overlays post-save-editable fields at export (iQuote #,
+    iQuote $, Δ, Became a Job, Project Name from current state).
+- SECOND REAL SCREEN≠REPORT ROOT CAUSE found on RA-260615-082017 (D/C Tray):
+  ProductionSpecsSec "smart default" effect flips cadPricingMethod to
+  "By Inches of Rule" when rule inches exist and cadMethodTouched is false —
+  but only ran for the ACTIVE on-screen component, and cadMethodTouched was
+  never persisted. Screen cut=81.43 vs saved-state pricing 73.60.
+- FIX: smart default is now resolved IN THE ENGINE (runner._resolve_cad_method)
+  — deterministic for active/non-active items, snapshots, and report.
+  cadMethodTouched added to DEFAULT_STATE, buildPayload, MP mirror,
+  _MP_ITEM_KEYS, backend builders, parity replica. All preview snapshots were
+  invalidated (report self-heals) since engine output changed.
+- VERIFIED: report row now exactly equals the on-screen rail for the previously
+  mismatched component (81.43/289.29/45.3%/239.29/528.57/1908.57);
+  39/39 parity regression PASS; testing agent iteration 69 all PASS
+  (Diff/Rule toggle, cadMethodTouched persistence, snapshot on save, typeahead).
+- Fixed leftover `userTypedRef` rename escapee in EstimateInfoSec Enter handler.
+- ALL of this is preview-only until user redeploys.

@@ -247,7 +247,7 @@ function CustomerInput({ value, onChange, onSelect }) {
           if (!open || results.length === 0) return;
           if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, results.length - 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
-          else if (e.key === "Enter")   { e.preventDefault(); onSelect(results[hi]); setOpen(false); userTypedRef.current = false; }
+          else if (e.key === "Enter")   { e.preventDefault(); onSelect(results[hi]); setOpen(false); typedValRef.current = null; }
           else if (e.key === "Escape")  { setOpen(false); }
         }}
         onFocus={() => { if (value === typedValRef.current && results.length > 0) setOpen(true); }}
