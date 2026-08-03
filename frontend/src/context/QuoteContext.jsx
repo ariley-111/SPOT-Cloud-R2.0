@@ -5,7 +5,7 @@ import { listDrafts, createDraft, updateDraft, deleteDraft, deleteAllDrafts, rea
 import { useAuth } from "./AuthContext";
 import { generateEstNum, uniqueEstNum } from "../lib/format";
 import {
-  gatherItemState, freshItemState, makeBomItem, applyItemStateTo,
+  gatherItemState, freshItemState, makeBomItem, applyItemStateTo, healLoadedState,
 } from "../lib/mpSchema";
 
 const QuoteCtx = createContext(null);
@@ -220,7 +220,7 @@ export function QuoteProvider({ children }) {
         if (drafts && drafts.length > 0) {
           const taken = new Set();
           const remoteTabs = drafts.slice(0, 8).map((d) => {
-            const st = applyState(d.state || {});
+            const st = healLoadedState(applyState(d.state || {}));
             // Backfill: stamp est# on any draft missing one (running `taken`
             // set prevents same-second collisions across multiple drafts).
             if (!st.estNum && initialsNow) {
@@ -543,7 +543,7 @@ export function QuoteProvider({ children }) {
   //  `opts.draftId` (set when loading an existing DRAFT) preserves the backend
   //  draft id so auto-save UPDATES it instead of creating a duplicate.
   const loadIntoTab = useCallback((nextState, opts = {}) => {
-    const applied = applyState(nextState);
+    const applied = healLoadedState(applyState(nextState));
     const label = nextState.custRef || nextState.itemDesc || nextState.custName || nextState.estNum || "Loaded";
     const settle = (id) => { frozenWarnedRef.current.delete(id); frozenGuardRef.current[id] = Date.now() + 2500; };
 

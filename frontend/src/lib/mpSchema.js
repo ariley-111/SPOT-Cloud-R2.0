@@ -91,6 +91,26 @@ export function freshItemState(overrides = {}) {
 }
 
 /** Build a blank BOM entry. */
+/** Load-time heal for legacy saves: older app versions kept the ACTIVE
+ *  component's live values only at the TOP level (never gathered into
+ *  bomItems[activeItemIdx].state). Persist that mirror into the item at load —
+ *  the same mirror buildMpPayload/report apply — so switching tabs and back
+ *  can never change a legacy quote's pricing. Idempotent for current saves. */
+export function healLoadedState(s) {
+  if (s?.quoteType !== "Multi-Part" || !Array.isArray(s.bomItems) || s.bomItems.length === 0) return s;
+  const idx = Number.isInteger(s.activeItemIdx) ? s.activeItemIdx : 0;
+  const it = s.bomItems[idx];
+  if (!it || !it.state) return s;
+  const merged = { ...it.state };
+  for (const k of ITEM_LEVEL_KEYS) {
+    if (k in s && s[k] !== undefined) merged[k] = s[k];
+  }
+  if (s.custIdent !== undefined) merged.custIdent = s.custIdent || "";
+  if (Array.isArray(s.miscCharges)) merged.miscCharges = [...s.miscCharges];
+  const bomItems = s.bomItems.map((b, i) => (i === idx ? { ...b, state: merged } : b));
+  return { ...s, bomItems };
+}
+
 export function makeBomItem(opts = {}) {
   const { desc = "", type = "Manufactured", pcsPerSet = 1, custIdent = "", state = null } = opts;
   return {
