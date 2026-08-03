@@ -123,7 +123,13 @@ export default function SpotApp({ onOpenAdmin }) {
             pointerEvents: "none", opacity: 0.55, userSelect: "none",
           } : undefined} aria-disabled={viewOnly || undefined}>
             <EstimateInfoSec />
-            <BomSec />
+            {/* BOM tab strip stays clickable in view-only so teammates can flip
+                between components to see each one's Cost Buildup. Switching
+                tabs only updates the active-item mirror (local UI state) — no
+                DB write, no owner change. */}
+            <div style={viewOnly ? { pointerEvents: "auto" } : undefined}>
+              <BomSec />
+            </div>
             <ItemSetupSec result={primary} />
             <ProductionSpecsSec result={primary} />
             <QuoteTableSec results={results} componentPricing={componentPricing} jobTotals={jobTotals} meta={meta} />
