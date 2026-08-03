@@ -798,6 +798,77 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     )
 
 
+@quotes_router.get("/_report/testing.json")
+async def testing_report_dump(user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return the raw stored state of every quote flagged 'good for testing'.
+    Consumed by the WORKAROUND xlsx-from-json endpoint above — user curls this
+    from prod, uploads the JSON to preview (which has the fixed engine), and
+    downloads a corrected xlsx. Admin only."""
+    if user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    cursor = db[COL_QUOTES].find({"state.goodForTesting": True}, {"_id": 0}).sort("est_num", 1)
+    quotes = [d async for d in cursor]
+    return {"count": len(quotes), "quotes": quotes}
+
+
+@quotes_router.post("/_report/testing.xlsx-from-json")
+async def testing_report_from_json(
+    body: Dict[str, Any],
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """WORKAROUND for stale prod deploys: accept an inline list of quote docs
+    (as would be returned by GET /api/quotes?owner_id=... or a Mongo dump) and
+    return a corrected xlsx computed with the CURRENT engine. Post body:
+      { "quotes": [ {id, est_num, state: {...}, ...}, ... ] }
+    Only admins can call this so an untrusted user can't feed arbitrary state
+    into the engine. Not indexed anywhere else — POST because payloads can be
+    multi-MB and URLs shouldn't carry them."""
+    if user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    quotes = body.get("quotes") or []
+    rows: List[Dict[str, Any]] = []
+    for q in quotes:
+        try:
+            fresh = await _compute_report_rows(q, user)
+        except Exception as e:  # noqa: BLE001
+            fresh = [{**{c: "" for c in _REPORT_COLUMNS},
+                      "SPOT Estimate #": q.get("est_num") or q.get("id") or "",
+                      "Component": f"ENGINE ERROR: {type(e).__name__}: {e}"}]
+        rows.extend(_refresh_row_meta(r, q) for r in fresh)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Testing Comparison"
+    ws.append(_REPORT_COLUMNS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    amber = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+    dpct_col = _REPORT_COLUMNS.index("Δ %") + 1
+    for row in rows:
+        ws.append([row.get(c, "") for c in _REPORT_COLUMNS])
+        dpct = row.get("Δ %")
+        if isinstance(dpct, (int, float)) and abs(dpct) > 10:
+            for c in (dpct_col - 2, dpct_col - 1, dpct_col):
+                ws.cell(row=ws.max_row, column=c).fill = amber
+    ws.freeze_panes = "A2"
+    for i, col in enumerate(_REPORT_COLUMNS, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = max(11, min(24, len(col) + 3))
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"spot-testing-report-fromjson-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"',
+                 "Cache-Control": "no-store"},
+    )
+
+
 @quotes_router.delete("/{quote_id}")
 async def delete_quote(quote_id: str, user: User = Depends(get_current_user)) -> Dict[str, Any]:
     """Hard-delete a saved quote — ADMIN ONLY. Also purges any attached RFQ
