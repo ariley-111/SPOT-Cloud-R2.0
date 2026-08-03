@@ -417,6 +417,13 @@ def _n(x) -> float:
         return 0.0
 
 
+def _rule_in(v: Any) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
                 ist: Dict[str, Any], r: Dict[str, Any],
                 quote_total: Optional[float] = None,
@@ -538,6 +545,32 @@ def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[s
         items = [{**it, "state": {**(it.get("state") or {}),
                                   "freightCost": "0", "freightTreatment": "None"}}
                  for it in items]
+
+    # CAD-pricing-method heal on EVERY item (not just active). Legacy stored
+    # `cadPricingMethod` on components even when the estimator never touched
+    # the toggle — historic saves left "By Difficulty" on components that have
+    # rule inches, which flips the report to by-difficulty even though the UI's
+    # smart-default useEffect (ProductionSpecsSec.jsx L23-28) heals the ACTIVE
+    # tab to "By Inches of Rule" as soon as it loads. Non-active tabs never got
+    # that heal until the estimator clicked into them.
+    #
+    # Deterministic fix: apply the same smart default to EVERY item's state up
+    # front so the report can't disagree with the UI regardless of which tab
+    # was last visited. Rule: when rule inches > 0 AND the estimator did NOT
+    # explicitly pick a method (`cadMethodTouched` falsy), price By Inches of
+    # Rule. Explicit estimator choice (`cadMethodTouched` true) is preserved.
+    def _heal_cad(ist: Dict[str, Any]) -> Dict[str, Any]:
+        if ist.get("cadMethodTouched"):
+            return ist
+        try:
+            ri = float(ist.get("totalRuleInches") or 0)
+        except (TypeError, ValueError):
+            ri = 0.0
+        want = "By Inches of Rule" if ri > 0 else "By Difficulty"
+        if (ist.get("cadPricingMethod") or "By Difficulty") == want:
+            return ist
+        return {**ist, "cadPricingMethod": want}
+    items = [{**it, "state": _heal_cad(it.get("state") or {})} for it in items]
     payload = {
         "quoteType": state.get("quoteType"),
         "pricingMode": state.get("pricingMode") or "Matched Set",
@@ -584,7 +617,18 @@ def _simple_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Di
         "printSides": state.get("printSides"), "whiteInk": state.get("whiteInk"),
         "colorsFront": state.get("colorsFront"), "colorsBack": state.get("colorsBack"),
         **({"routeOverride": ro} if ro and ro != "Auto" else {}),
-        "cadDifficulty": state.get("cadDifficulty"), "cadPricingMethod": state.get("cadPricingMethod"),
+        # CAD-method heal (matches ProductionSpecsSec.jsx L23-28 useEffect): when
+        # rule inches are present and the estimator never explicitly touched the
+        # By Difficulty / By Rule toggle, price By Inches of Rule. Same rule the
+        # UI applies at load — keeps report parity with what the estimator sees.
+        "cadDifficulty": state.get("cadDifficulty"),
+        "cadPricingMethod": (
+            state.get("cadPricingMethod")
+            if state.get("cadMethodTouched")
+            else ("By Inches of Rule"
+                  if _rule_in(state.get("totalRuleInches")) > 0
+                  else "By Difficulty")
+        ),
         "cadMethodTouched": bool(state.get("cadMethodTouched")),
         "totalRuleInches": state.get("totalRuleInches"), "perfPct": state.get("perfPct"),
         "productMats": state.get("productMats"),
