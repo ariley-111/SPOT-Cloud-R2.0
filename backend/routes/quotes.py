@@ -392,11 +392,16 @@ async def set_test_flag(quote_id: str, body: TestFlagRequest,
 
 
 # Ordered columns for the exportable testing report.
+# NOTE: "CAD Method" + "Cutter Basis" are DIAGNOSTIC columns that show which CAD
+# pricing method (By Difficulty vs By Inches of Rule) the engine actually used
+# and the exact basis string it printed on the right-rail Cost Buildup detail.
+# When a row's Total Cost doesn't match the UI, these columns pinpoint whether
+# the engine and UI disagreed on the CAD method.
 _REPORT_COLUMNS = [
     "SPOT Estimate #", "iQuote #", "Became a Job", "Project Name", "Quote Type", "Component", "Qty",
     "One-Up W", "One-Up L", "Board", "Liners", "Sheet",
     "Material Cost", "Print Mode", "Print Cost", "Route", "Route Hours", "Difficulty",
-    "Inches of Rule", "Perf %", "Cutting Cost",
+    "Inches of Rule", "Perf %", "CAD Method", "Cutter Basis", "Cutting Cost",
     "Strip Difficulty", "Strip Cost", "Glue Joints", "Glue Difficulty", "Glue Cost",
     "Tape Type", "Tape Strip Count", "Tape Inches", "Tape Cost",
     "Freight", "Die", "Prepress", "Proofs", "Misc",
@@ -455,6 +460,9 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Difficulty": ist.get("cadDifficulty") or "",
         "Inches of Rule": ist.get("totalRuleInches") or "",
         "Perf %": perf,
+        # DIAGNOSTICS: what the engine actually did for this row
+        "CAD Method": r.get("cadPricingMethod") or "",
+        "Cutter Basis": r.get("cutterBasis") or "",
         "Cutting Cost": _n(r.get("cutterDirect")),
         "Strip Difficulty": (ist.get("strippingComplexity") or "") if strip_on else "",
         "Strip Cost": _n(r.get("stripCost")) if strip_on else "",

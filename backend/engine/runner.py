@@ -579,6 +579,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "inkRate": asmp.get("inkPerSqFt") or 0.05,
         # Cutting / Finishing detail
         "cutterBasis": wf.get("cutterBasis") or "",
+        "cadPricingMethod": wf.get("cadPricingMethod") or "",
         "jointsPerPiece": json.get("jointsPerPiece"),
         "gluingComplexity": json.get("gluingComplexity"),
         "route": routing.get("route") or wf["route"], "cadHrs": wf["cadHrs"],

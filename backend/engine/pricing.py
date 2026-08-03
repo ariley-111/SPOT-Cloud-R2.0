@@ -242,6 +242,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         "pressHrs": press_hrs, "pressCost": press_cost, "inkCost": ink_cost, "whiteCost": white_cost,
         "side2Cost": side2_cost, "printDirect": print_direct,
         "saberCost": saber_cost, "route": route, "cutterDirect": cutter_direct, "cutterBasis": cutter_basis, "cadHrs": cad_hrs,
+        "cadPricingMethod": prod.get("cadPricingMethod") or "",
         "dieLineCost": die_line_cost, "dieSep": die_sep, "dieEmbedded": die_embedded, "dieBase": die_base,
         "dieAmortMethod": die_amort_method, "markupExclude": markup_exclude,
         "stripCost": strip_cost, "assemblyCost": assembly_cost,
