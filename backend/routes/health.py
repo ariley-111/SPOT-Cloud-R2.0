@@ -17,8 +17,10 @@ async def health():
     # to what the codebase currently exports proves whether prod is running the
     # latest fixes or a stale image.
     features: list[str] = []
+    col_count = 0
     try:
         from routes.quotes import _REPORT_COLUMNS  # type: ignore
+        col_count = len(_REPORT_COLUMNS)
         features = [c for c in _REPORT_COLUMNS if c in ("CAD Method", "Cutter Basis")]
     except Exception:
         pass
@@ -30,6 +32,7 @@ async def health():
         "started": _started_at.isoformat(),
         "phase": "Phase 2 — Backend APIs",
         "report_columns_new": features,  # empty → stale image, present → fresh
+        "report_column_count": col_count,  # should be 45 with fix, 43 without
     }
 
 
