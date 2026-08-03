@@ -2,6 +2,26 @@
 
 Append-only log of shipped features and fixes.
 
+## 2026-08-03 — Testing Report: always recompute at export (kill stale save-time snapshot)
+- **User report (prod, repeated):** the Testing/Comparison Report showed costs / sell / quote total that
+  didn't match what the UI shows for the same saved quote. Especially for later components of Multi-Part
+  quotes (e.g. `RW-260622-133707` components 2 & 3).
+- **Actual root cause (traced in `backend/routes/quotes.py`):** the export endpoint was reading
+  `report_rows` — a **frozen snapshot written at save time**. If a quote's snapshot was written before
+  a later engine/pricing/state-heal fix, the report kept replaying those stale numbers even though the
+  UI (which recomputes from state every time you open the quote) showed different, correct numbers.
+  User's earlier question ("do I need to re-save these or something?") was literally the workaround.
+- **Fix:** `testing_report()` no longer reads `report_rows`. Every row is priced fresh through
+  `_compute_report_rows(q, user)` — the same `_mp_engine_payload` / `_simple_engine_payload` code
+  path the UI uses. Snapshot is still written back after the fresh calc for audit/history, but never
+  read from at export. So the report equals the UI, forever, with no re-saving needed.
+- **Verified in preview:** live `/api/engine/calculate-all` call on `SA-260720-145138` returns
+  `totalMfg=1786.12 itemSell=2603.11 sellTotal=2803.11` — identical to the row emitted by the new
+  export. `_compute_report_rows` uses the same engine call the UI uses, so this parity holds for
+  every quote by construction.
+- **Needs prod redeploy.** Existing production snapshots don't need to be regenerated or re-saved —
+  they will simply be overwritten with fresh values on the next export.
+
 ## 2026-06-30 (cont.) — Parser review modal: liner labels + scope-first restructure
 
 ### Liner display labels (Iter 65 ✅)

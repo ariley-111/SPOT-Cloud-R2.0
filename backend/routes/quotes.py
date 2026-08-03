@@ -690,9 +690,11 @@ def _refresh_row_meta(row: Dict[str, Any], q: Dict[str, Any]) -> Dict[str, Any]:
 @quotes_router.get("/_report/testing.xlsx")
 async def testing_report(user: User = Depends(get_current_user)) -> StreamingResponse:
     """Export every quote flagged 'good for testing' to .xlsx with a per-component
-    cost breakdown. Rows come from the SAVE-TIME SNAPSHOT stored on each quote
-    (exactly the numbers priced when it was saved); quotes saved before the
-    snapshot feature are priced once on demand and the result stored."""
+    cost breakdown. Every row is priced FRESH here from the quote's saved state
+    using the current engine — the exact code path the UI uses when a quote is
+    opened. No stale save-time snapshot; if the UI shows a number today, the
+    report shows the same number today. A snapshot is still written back for
+    audit/history but never read from at export."""
     import openpyxl
     from openpyxl.styles import Font, PatternFill
 
@@ -701,10 +703,15 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
 
     rows: List[Dict[str, Any]] = []
     for q in quotes:
-        stored = q.get("report_rows")
-        if not stored:  # legacy quote saved before snapshots — self-heal once
-            stored = await _snapshot_report_rows(q, user)
-        rows.extend(_refresh_row_meta(r, q) for r in stored)
+        fresh = await _compute_report_rows(q, user)
+        # keep the snapshot in-sync for the next audit-only reader — never read from it here
+        try:
+            await db[COL_QUOTES].update_one(
+                {"id": q.get("id")},
+                {"$set": {"report_rows": fresh, "report_rows_at": _now()}})
+        except Exception:  # noqa: BLE001
+            pass
+        rows.extend(_refresh_row_meta(r, q) for r in fresh)
 
     wb = openpyxl.Workbook()
     ws = wb.active
