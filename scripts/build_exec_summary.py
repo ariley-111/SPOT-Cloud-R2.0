@@ -1189,6 +1189,271 @@ ch6.height = 10; ch6.width = 20
 ws.add_chart(ch6, 'F' + str(row_cat2_start))
 
 
+# ============================================================
+# TAB 7: Qty Bucket Analysis - where SPOT protects from historical loss
+# ============================================================
+ws = wb.create_sheet('Qty Bucket Analysis')
+for col, w in enumerate([16, 6, 12, 12, 13, 13, 14, 13, 14, 13, 13, 13], 1):
+    ws.column_dimensions[get_column_letter(col)].width = w
+
+ws['A1'] = 'Qty Bucket Analysis - wide-format produced jobs'
+ws['A1'].font = Font(bold=True, size=14, color='1F4E78')
+ws.merge_cells('A1:L1')
+
+ws['A2'] = ('Historical context: SPOT was built to eliminate wide-format under-pricing on '
+            'moderate-to-high qty jobs. This tab compares actual print cost vs iQuote and '
+            'SPOT estimates by qty bucket on 9 produced jobs, then shows margin as sold vs '
+            'margin if the same work had been priced at SPOT rates.')
+ws['A2'].alignment = LEFT_WRAP
+ws.merge_cells('A2:L2')
+ws.row_dimensions[2].height = 55
+
+# Build qty bucket data from JOB_MAP + actuals + spot + iq
+def _qb(q):
+    if q is None: return 'unknown'
+    if q < 100: return '< 100'
+    if q < 250: return '100-249'
+    if q < 500: return '250-499'
+    return '500+'
+
+# Aggregate per bucket
+bucket_data = {}
+# Index SPOT raw rows by iQuote # + qty for accurate produced-qty match
+_spot_by_iq_qty = defaultdict(lambda: defaultdict(list))
+for r in spot_rows:
+    _spot_by_iq_qty[r['iQuote #']][r['Qty']].append(r)
+
+for job_id in sorted(JOB_MAP.keys()):
+    est, iq_num = JOB_MAP[job_id]
+    a = actuals.get(job_id)
+    if not a:
+        continue
+
+    # Find iQuote produced-option qtys for this job (that's the qty the job actually ran at)
+    prod_qtys = set()
+    for r in iq_rows:
+        if r['IdQuote'] == iq_num and r.get('MISJobID') and r.get('MISJobID') != 'NULL':
+            try:
+                if int(r.get('MISJobID')) == job_id:
+                    prod_qtys.add(r['Quantity'])
+            except (TypeError, ValueError):
+                pass
+
+    # Sum SPOT rows for this iq at the produced qtys (with tolerance)
+    spot_print = 0.0
+    spot_sell = 0.0
+    matched_qty = None
+    for q, rows in _spot_by_iq_qty.get(iq_num, {}).items():
+        for pq in prod_qtys:
+            if q is not None and pq is not None and abs(q - pq) <= QTY_TOLERANCE:
+                for r in rows:
+                    spot_print += _f(r.get('Print Cost'))
+                    spot_sell += _f(r.get('Sell Total'))
+                    if matched_qty is None or q > matched_qty:
+                        matched_qty = q
+                break
+
+    # iQuote produced option data
+    iq_prod_print = 0.0
+    iq_prod_sell = 0.0
+    for r in iq_rows:
+        if r['IdQuote'] == iq_num and r.get('MISJobID') and r.get('MISJobID') != 'NULL':
+            try:
+                if int(r.get('MISJobID')) == job_id:
+                    iq_prod_print += _f(r.get('PressCost'))
+                    iq_prod_sell += _f(r.get('ComponentTotalPrice'))
+            except (TypeError, ValueError):
+                pass
+
+    qty = matched_qty or (max(prod_qtys) if prod_qtys else 0)
+    b = _qb(qty)
+    d = bucket_data.setdefault(b, {'n':0, 'sold':0, 'cost':0, 'spot_sell':0, 'iq_sell':0,
+                                    'p_act':0, 'p_iq':0, 'p_spot':0,
+                                    'jobs':[]})
+    d['n'] += 1
+    d['sold']      += a['sell']
+    d['cost']      += a['total']
+    d['spot_sell'] += spot_sell
+    d['iq_sell']   += iq_prod_sell
+    d['p_act']     += a['print']
+    d['p_iq']      += iq_prod_print
+    d['p_spot']    += spot_print
+    d['jobs'].append(job_id)
+
+
+# --- Table 1: Print vs actual by bucket ---
+row = 4
+ws.cell(row=row, column=1, value='Print cost - actual vs iQuote estimate vs SPOT estimate').font = Font(bold=True, size=12)
+row += 1
+hdrs = ['Qty bucket', 'Jobs', 'Actual Print $', 'iQuote Print $', 'iQuote vs Actual',
+        'SPOT Print $', 'SPOT vs Actual']
+for c, h in enumerate(hdrs, 1):
+    cell = ws.cell(row=row, column=c, value=h)
+    cell.font = HEADER_FONT; cell.fill = HEADER_FILL; cell.border = BORDER; cell.alignment = CENTER
+row += 1
+t1_start = row
+order = ['< 100', '100-249', '250-499', '500+']
+for b in order:
+    if b not in bucket_data:
+        continue
+    d = bucket_data[b]
+    iq_pct = (d['p_iq'] - d['p_act']) / d['p_act'] * 100 if d['p_act'] else 0
+    sp_pct = (d['p_spot'] - d['p_act']) / d['p_act'] * 100 if d['p_act'] else 0
+    vals = [b, d['n'], round(d['p_act']), round(d['p_iq']),
+            f'{"+" if iq_pct>=0 else "-"}{abs(iq_pct):.0f}%',
+            round(d['p_spot']),
+            f'{"+" if sp_pct>=0 else "-"}{abs(sp_pct):.0f}%']
+    for c, v in enumerate(vals, 1):
+        cell = ws.cell(row=row, column=c, value=v); cell.border = BORDER
+        if c in (3, 4, 6) and isinstance(v, (int, float)):
+            cell.number_format = '"$"#,##0'
+        if c == 5 and iq_pct <= -20:
+            cell.font = Font(bold=True, color='C00000')
+        if c == 7 and abs(sp_pct) <= 20:
+            cell.font = Font(bold=True, color='00B050')
+    row += 1
+t1_end = row - 1
+
+# Chart 1: Print by bucket - actual vs iQuote vs SPOT
+ch = BarChart()
+ch.type = 'col'; ch.style = 12; ch.grouping = 'clustered'
+ch.title = 'Print $ - actual vs iQuote estimate vs SPOT estimate (by qty)'
+ch.y_axis.title = 'Print $'
+ch.x_axis.title = 'Qty bucket'
+# Data spans Actual (col 3), iQuote (col 4), SPOT (col 6). We need contiguous columns.
+# Build a separate contiguous block for the chart.
+row += 2
+chart_hdr_row = row
+ws.cell(row=row, column=1, value='Chart data - Print $ by bucket').font = Font(bold=True)
+row += 1
+for c, h in enumerate(['Qty bucket', 'Actual $', 'iQuote est $', 'SPOT est $'], 1):
+    cell = ws.cell(row=row, column=c, value=h)
+    cell.font = HEADER_FONT; cell.fill = HEADER_FILL
+row += 1
+c_start = row
+for b in order:
+    if b not in bucket_data:
+        continue
+    d = bucket_data[b]
+    ws.cell(row=row, column=1, value=b)
+    ws.cell(row=row, column=2, value=round(d['p_act']))
+    ws.cell(row=row, column=3, value=round(d['p_iq']))
+    ws.cell(row=row, column=4, value=round(d['p_spot']))
+    row += 1
+c_end = row - 1
+
+data = Reference(ws, min_col=2, min_row=c_start-1, max_row=c_end, max_col=4)
+cats = Reference(ws, min_col=1, min_row=c_start, max_row=c_end)
+ch.add_data(data, titles_from_data=True)
+ch.set_categories(cats)
+ch.height = 10; ch.width = 20
+ws.add_chart(ch, 'I4')
+
+row += 2
+# --- Table 2: Margin analysis by bucket ---
+ws.cell(row=row, column=1, value='Margin as sold vs margin at SPOT prices').font = Font(bold=True, size=12)
+row += 1
+hdrs2 = ['Qty bucket', 'Jobs', 'Sold $', 'Actual Cost $', 'Margin as sold',
+         'SPOT would-be $', 'Margin at SPOT', 'Would-be swing $']
+for c, h in enumerate(hdrs2, 1):
+    cell = ws.cell(row=row, column=c, value=h)
+    cell.font = HEADER_FONT; cell.fill = HEADER_FILL; cell.border = BORDER; cell.alignment = CENTER
+row += 1
+t2_start = row
+tot_sold = tot_cost = tot_spot = 0
+for b in order:
+    if b not in bucket_data:
+        continue
+    d = bucket_data[b]
+    m_sold = (d['sold'] - d['cost']) / d['sold'] * 100 if d['sold'] else 0
+    m_spot = (d['spot_sell'] - d['cost']) / d['spot_sell'] * 100 if d['spot_sell'] else 0
+    swing = d['spot_sell'] - d['sold']
+    tot_sold += d['sold']; tot_cost += d['cost']; tot_spot += d['spot_sell']
+    vals = [b, d['n'], round(d['sold']), round(d['cost']),
+            f'{"+" if m_sold>=0 else "-"}{abs(m_sold):.0f}%',
+            round(d['spot_sell']),
+            f'{"+" if m_spot>=0 else "-"}{abs(m_spot):.0f}%',
+            round(swing)]
+    for c, v in enumerate(vals, 1):
+        cell = ws.cell(row=row, column=c, value=v); cell.border = BORDER
+        if c in (3, 4, 6, 8) and isinstance(v, (int, float)):
+            cell.number_format = '"$"#,##0'
+        if c == 5 and m_sold < 0:
+            cell.font = Font(bold=True, color='C00000')
+        if c == 7 and m_spot > 0:
+            cell.font = Font(bold=True, color='00B050')
+    row += 1
+
+m_sold_t = (tot_sold - tot_cost) / tot_sold * 100 if tot_sold else 0
+m_spot_t = (tot_spot - tot_cost) / tot_spot * 100 if tot_spot else 0
+swing_t = tot_spot - tot_sold
+totrow = [f'TOTAL ({sum(bucket_data[b]["n"] for b in order if b in bucket_data)} jobs)',
+          '',
+          round(tot_sold), round(tot_cost),
+          f'{"+" if m_sold_t>=0 else "-"}{abs(m_sold_t):.0f}%',
+          round(tot_spot),
+          f'{"+" if m_spot_t>=0 else "-"}{abs(m_spot_t):.0f}%',
+          round(swing_t)]
+for c, v in enumerate(totrow, 1):
+    cell = ws.cell(row=row, column=c, value=v)
+    cell.border = BORDER; cell.fill = TOTAL_FILL; cell.font = Font(bold=True)
+    if c in (3, 4, 6, 8) and isinstance(v, (int, float)):
+        cell.number_format = '"$"#,##0'
+row += 1
+t2_end = row - 1
+
+# Chart 2: Sold vs SPOT would-be vs actual cost by bucket
+row += 2
+ws.cell(row=row, column=1, value='Chart data - Margin analysis').font = Font(bold=True)
+row += 1
+for c, h in enumerate(['Qty bucket', 'Sold $', 'SPOT would-be $', 'Actual cost $'], 1):
+    cell = ws.cell(row=row, column=c, value=h)
+    cell.font = HEADER_FONT; cell.fill = HEADER_FILL
+row += 1
+c2_start = row
+for b in order:
+    if b not in bucket_data:
+        continue
+    d = bucket_data[b]
+    ws.cell(row=row, column=1, value=b)
+    ws.cell(row=row, column=2, value=round(d['sold']))
+    ws.cell(row=row, column=3, value=round(d['spot_sell']))
+    ws.cell(row=row, column=4, value=round(d['cost']))
+    row += 1
+c2_end = row - 1
+
+ch2 = BarChart()
+ch2.type = 'col'; ch2.style = 12; ch2.grouping = 'clustered'
+ch2.title = 'Sold price vs SPOT would-be price vs actual cost (by qty)'
+ch2.y_axis.title = '$'
+ch2.x_axis.title = 'Qty bucket'
+data = Reference(ws, min_col=2, min_row=c2_start-1, max_row=c2_end, max_col=4)
+cats = Reference(ws, min_col=1, min_row=c2_start, max_row=c2_end)
+ch2.add_data(data, titles_from_data=True)
+ch2.set_categories(cats)
+ch2.height = 10; ch2.width = 20
+ws.add_chart(ch2, 'I' + str(t2_start - 1))
+
+# --- Key findings box ---
+row += 2
+ws.cell(row=row, column=1, value='Key findings').font = Font(bold=True, size=12)
+row += 1
+findings = [
+    'Under 100 qty: both systems undershoot Print by ~55% vs actual. Print $ total is tiny so it did not drive losses.',
+    '100-249 qty: SPOT Print is within +/- 1% of actual. iQuote is -39% low. SPOT already correcting here.',
+    '250-499 qty: this is the historical loss zone. Sold at -67% margin. iQuote priced Print -68% vs actual. SPOT priced Print -21% (still low but far closer) and would have delivered +7% margin overall vs -67% as sold.',
+    '500+ qty: iQuote is -80% below actual on Print. SPOT is -35% (better but still low). Even so, would-be margin at SPOT is +64% vs +6% as sold.',
+    'Total 9 produced jobs: sold at -23% margin (losing money). Same work priced at SPOT would be +13% margin. Total dollar swing = +$7,611.',
+    'Historical loss pattern is real and concentrated in 250-499 qty wide-format work. SPOT is doing what it was designed to do.',
+]
+for t in findings:
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+    cell = ws.cell(row=row, column=1, value=t)
+    cell.alignment = LEFT_WRAP
+    ws.row_dimensions[row].height = 30
+    row += 1
+
+
 # ---------- Save ----------
 wb.save(OUT_PATH)
 print(f'Wrote {OUT_PATH}')
