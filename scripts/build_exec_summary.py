@@ -20,6 +20,24 @@ from collections import defaultdict
 IN_PATH = '/tmp/analysis/input.xlsx'
 OUT_PATH = '/tmp/analysis/SPOT_Exec_Summary_v2.xlsx'
 
+# ---------- Hard-coded scenario overrides ----------
+# Force a specific iQuote OptDesc (and optionally iQuote qty) for a given
+# (spot_iq_num, spot_qty). The comparison will sum the products listed in
+# `products` at the given iQuote (opt, qty). If products is None, the whole
+# option is used.
+IQ_OPTION_OVERRIDES = {
+    # 221998 - Meijer Elvive Floorstand: compare against "Option 1 - D/C w/riser" at qty 525
+    (221998, 525):  {'opt': 'Option 1 - D/C w/riser', 'iq_qty': 525, 'products': None},
+    # SPOT qty 1575 is Shelves (3 versions) = sum of iQuote Shelf 1+2+3 at qty 525 in same option
+    (221998, 1575): {'opt': 'Option 1 - D/C w/riser', 'iq_qty': 525,
+                     'products': ['Shelf 1', 'Shelf 2', 'Shelf 3'],
+                     'label': 'Shelves 1+2+3 combined'},
+}
+
+# Qty tolerance - treat SPOT qty and iQuote qty as the same tier when within N units
+# (accounts for iQuote adding a "sample" quantity like 500 -> 501, 918 -> 919, 1750 -> 1751)
+QTY_TOLERANCE = 1
+
 # ---------- Job to (SPOT est, iQuote #) mapping — from prior analysis ----------
 JOB_MAP = {
     236341: ('RW-260623-091031', 223207, 210),
@@ -211,6 +229,7 @@ for r in spot_rows:
 # 1+ components. We aggregate components INSIDE an option, then later pick the
 # right option to match each SPOT scenario.
 iq_options = {}  # (iq_num, opt_desc, qty) -> dict
+iq_option_components = {}  # (iq_num, opt_desc, qty) -> list of component dicts keyed by product name
 iq_produced_option = {}  # (iq_num, mis_job) -> opt_desc (option that actually ran)
 iq_by_iqnum_qty = defaultdict(list)  # (iq_num, qty) -> list of opt_desc
 
@@ -244,6 +263,7 @@ for r in iq_rows:
         'hand': hand,
         'sell': _f(r.get('ComponentTotalPrice')),
     })
+    iq_option_components.setdefault(key, s['components'])
     mis = r.get('MISJobID')
     if mis and mis != 'NULL':
         mis_int = _int_or_none(mis)
@@ -257,27 +277,104 @@ for r in iq_rows:
     iq_quote_totals[r['IdQuote']] = _f(r.get('TotalEstimatePrice'))
 
 
+def _find_iq_qty(iq_num, spot_qty):
+    """Return the actual iQuote qty tier that matches SPOT qty within QTY_TOLERANCE."""
+    if not iq_by_iqnum_qty:
+        return None
+    # exact match first
+    for (num, qty), _ in [((iq_num, spot_qty), None)]:
+        if (num, qty) in iq_by_iqnum_qty:
+            return qty
+    # tolerance search
+    candidate_qtys = [q for (n, q) in iq_by_iqnum_qty.keys() if n == iq_num]
+    for q in candidate_qtys:
+        if q is not None and spot_qty is not None and abs(q - spot_qty) <= QTY_TOLERANCE:
+            return q
+    return None
+
+
+def _synthesize_option_from_products(iq_num, opt, qty, product_names):
+    """Sum a subset of components inside an iQuote option to form a synthetic entity.
+    The result has a SINGLE combined 'component' entry so per-component matching in
+    Quote Comparison compares the whole synthetic bundle to the SPOT bundle line."""
+    key = (iq_num, opt, qty)
+    if key not in iq_options:
+        return None
+    all_comps = iq_option_components.get(key, [])
+    keep = []
+    lower_targets = {str(p).lower() for p in product_names}
+    for c in all_comps:
+        pname = str(c.get('product') or '').lower()
+        if any(t in pname for t in lower_targets):
+            keep.append(c)
+    if not keep:
+        return None
+    combined = {'product': '+'.join(c['product'] for c in keep),
+                'material': 0.0, 'print': 0.0, 'cutting': 0.0, 'hand': 0.0, 'sell': 0.0}
+    for c in keep:
+        for k in ('material', 'print', 'cutting', 'hand', 'sell'):
+            combined[k] += c[k]
+    agg = {'material': combined['material'], 'print': combined['print'],
+           'cutting': combined['cutting'], 'hand': combined['hand'],
+           'die': 0.0, 'freight': 0.0, 'not_in_spot': 0.0,
+           'total_cost': 0.0, 'sell_total': combined['sell'],
+           'components': [combined], 'mis_job': None}
+    return agg
+
+
 def resolve_iq_scenario(iq_num, qty, spot_sell_total, mis_job=None):
     """Pick the correct iQuote option to compare against a SPOT scenario.
-    Priority: 1) option flagged with the given mis_job, 2) option with produced job on this iq_num,
-              3) option whose sell_total is closest to SPOT sell_total,
-              4) any option present."""
-    opts = iq_by_iqnum_qty.get((iq_num, qty), [])
+    Order of precedence:
+      1. IQ_OPTION_OVERRIDES exact match on (iq_num, spot_qty)
+      2. produced-job option (option flagged with MISJobID)
+      3. only one option available
+      4. option whose sell_total is closest to SPOT sell_total
+      5. first option in list
+    Returns (option_data_dict, opt_desc_string) or (None, None).
+    """
+    # 1. Override
+    if (iq_num, qty) in IQ_OPTION_OVERRIDES:
+        ov = IQ_OPTION_OVERRIDES[(iq_num, qty)]
+        opt = ov['opt']
+        iq_qty = ov['iq_qty']
+        products = ov.get('products')
+        label = ov.get('label')
+        key = (iq_num, opt, iq_qty)
+        if key in iq_options:
+            if products:
+                synth = _synthesize_option_from_products(iq_num, opt, iq_qty, products)
+                if synth is not None:
+                    tag = f'{opt} (filtered: {label or ", ".join(products)}) at iQuote qty {iq_qty}'
+                    return synth, tag
+            tag = f'{opt} at iQuote qty {iq_qty}'
+            return iq_options[key], tag
+
+    # Look up iQuote qty tier with tolerance
+    iq_qty = _find_iq_qty(iq_num, qty)
+    if iq_qty is None:
+        return None, None
+    opts = iq_by_iqnum_qty.get((iq_num, iq_qty), [])
     if not opts:
         return None, None
+
+    tag_qty = '' if iq_qty == qty else f' (iQuote qty {iq_qty})'
+
+    # 2. Produced option
     if mis_job is not None and (iq_num, mis_job) in iq_produced_option:
         opt = iq_produced_option[(iq_num, mis_job)]
         if opt in opts:
-            return iq_options[(iq_num, opt, qty)], opt
+            return iq_options[(iq_num, opt, iq_qty)], f'{opt}{tag_qty}'
+    # 3. Only one option
     if len(opts) == 1:
         opt = opts[0]
-        return iq_options[(iq_num, opt, qty)], opt
-    # multi-option: pick nearest to spot sell
+        return iq_options[(iq_num, opt, iq_qty)], f'{opt}{tag_qty}' if opt else f'(single option){tag_qty}'
+    # 4. Nearest sell match
     if spot_sell_total is not None and spot_sell_total > 0:
-        best = min(opts, key=lambda o: abs(iq_options[(iq_num, o, qty)]['sell_total'] - spot_sell_total))
-        return iq_options[(iq_num, best, qty)], best
+        best = min(opts, key=lambda o: abs(iq_options[(iq_num, o, iq_qty)]['sell_total'] - spot_sell_total))
+        return iq_options[(iq_num, best, iq_qty)], f'{best}{tag_qty}'
+    # 5. First option
     opt = opts[0]
-    return iq_options[(iq_num, opt, qty)], opt
+    return iq_options[(iq_num, opt, iq_qty)], f'{opt}{tag_qty}'
 
 
 def _norm_words(s):
@@ -289,24 +386,28 @@ def _norm_words(s):
 
 def match_component(spot_name, iq_components, taken=None):
     """Find best-matching iQuote component for a SPOT component name.
+    Scoring: token-overlap count as primary, sequence similarity as tiebreaker.
     Returns (component_dict, index) or (None, None)."""
     if not iq_components:
         return None, None
+    from difflib import SequenceMatcher
     taken = taken or set()
     sw = _norm_words(spot_name)
+    sn = str(spot_name or '').lower().strip()
     best_idx = None
-    best_score = 0
+    best_key = (-1, -1.0)  # (overlap_count, similarity_ratio)
     for i, c in enumerate(iq_components):
         if i in taken:
             continue
-        iw = _norm_words(c.get('product'))
-        # Jaccard-lite: intersection size, prefer more overlap
-        score = len(sw & iw)
-        if score > best_score:
-            best_score = score
+        prod = str(c.get('product') or '')
+        iw = _norm_words(prod)
+        overlap = len(sw & iw)
+        ratio = SequenceMatcher(None, sn, prod.lower().strip()).ratio()
+        key = (overlap, ratio)
+        if key > best_key:
+            best_key = key
             best_idx = i
     if best_idx is None:
-        # Fall back to first untaken
         for i in range(len(iq_components)):
             if i not in taken:
                 return iq_components[i], i
