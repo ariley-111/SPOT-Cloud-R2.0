@@ -30,15 +30,12 @@ next-env.d.ts
 dist/
 dist
 
-# Environment files (comprehensive coverage)
-.env
-.env.*
-!.env.template
-!.env.example
-**/.env
-**/.env.*
-!**/.env.template
-!**/.env.example
+# Environment files (allow committing so Emergent deploy can update them)
+# .env and **/.env are intentionally NOT ignored — deployment pipeline needs them.
+.env.local
+.env.*.local
+**/.env.local
+**/.env.*.local
 
 *token.json*
 *credentials.json*
