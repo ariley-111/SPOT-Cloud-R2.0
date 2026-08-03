@@ -2,6 +2,24 @@
 
 Append-only log of shipped features and fixes.
 
+## 2026-08-03 — Executive Summary regenerated from fresh corrected report
+- **User request:** Rebuild the SPOT Exec Summary using the freshly corrected pricing report (SPOT rows,
+  iQuote export, actuals in one workbook) and apply strict formatting rules.
+- **Deliverable:** `/app/frontend/public/SPOT_Exec_Summary_Feb2026.xlsx` (also at
+  `/tmp/analysis/SPOT_Exec_Summary_v2.xlsx`). Reachable at
+  `${REACT_APP_BACKEND_URL}/SPOT_Exec_Summary_Feb2026.xlsx`.
+- **Build script:** `/app/scripts/build_exec_summary.py`
+- **Tabs:** Executive Summary, Quote Comparison (per-component Actuals 3-Way layout),
+  Pricing Summary (one row per SPOT component), Actuals 3-Way (per-job category rows +
+  sold vs actual vs would-be-SPOT summary).
+- **Rules applied:** word `delta` (never symbol), `+/-` (never `+-`), single `-` between data points,
+  no `--`, no dots. Missing side shown blank with note (e.g. iQuote export lacks die cost).
+- **Notes:** iQuote data is grouped by (IdQuote, OptDesc, Quantity). For each SPOT scenario, the
+  option is resolved by MISJobID (produced jobs) or by nearest sell match. Per-SPOT-component
+  matching to iQuote is done by name-token overlap so alt variants surface a clean 1:1 comparison
+  rather than a summed cross-variant blowup.
+
+
 ## 2026-08-03 — Testing Report: always recompute at export (kill stale save-time snapshot)
 - **User report (prod, repeated):** the Testing/Comparison Report showed costs / sell / quote total that
   didn't match what the UI shows for the same saved quote. Especially for later components of Multi-Part
