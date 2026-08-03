@@ -27,12 +27,22 @@ IN_PATH = '/tmp/analysis/input.xlsx'
 OUT_PATH = '/tmp/analysis/SPOT_Exec_Summary_v2.xlsx'
 
 # ---------- Overrides ----------
-# Force a specific iQuote OptDesc when comparing a given SPOT iQuote #.
-# The whole option is summed across all its rows / qtys.
 IQ_OPTION_OVERRIDES = {
-    221998: 'Option 1 - D/C w/riser',
     223860: 'Die Cut 2510223768',
 }
+
+# Per-(iq_num, spot_qty) overrides for opt/iq_qty/product-filter/product-exclude.
+IQ_PER_QTY_OVERRIDES = {
+    (221998, 525):  {'opt': 'Option 1 - D/C w/riser', 'iq_qty': 525,
+                     'exclude': ['Shelf 1', 'Shelf 2', 'Shelf 3'],
+                     'label': 'Panels + Riser + Box (qty 525 - excl shelves)'},
+    (221998, 1575): {'opt': 'Option 1 - D/C w/riser', 'iq_qty': 525,
+                     'products': ['Shelf 1', 'Shelf 2', 'Shelf 3'],
+                     'label': 'Shelves 1+2+3 at qty 525'},
+}
+
+# Force these iQuote #s to be treated as split-by-qty (each SPOT qty = own scenario).
+FORCE_SPLIT_BY_QTY_IQ_NUMS = {221998}
 
 # Job to (SPOT est #, iQuote #) mapping for the 3-way tab
 JOB_MAP = {
@@ -195,6 +205,67 @@ for r in iq_rows:
     iq_quote_totals[iq_num] = _f(r.get('TotalEstimatePrice'))
 
 
+# ---------- Detect "all options are single-component variants" iQuote #s ----------
+# Signature: for a given iq_num, EVERY row has TotalEstimatePrice == its own ComponentTotalPrice
+# AND every OptDesc has only ONE row. Means each option = 1 distinct variant that together
+# form the whole quote scope. These should be SUMMED (not picked from) when SPOT has variants.
+_iq_row_signature = defaultdict(list)  # iq_num -> list of (opt, qty, comp_price, tot_est)
+for r in iq_rows:
+    _iq_row_signature[r['IdQuote']].append((r.get('OptDesc') or '',
+                                              r.get('Quantity'),
+                                              _f(r.get('ComponentTotalPrice')),
+                                              _f(r.get('TotalEstimatePrice'))))
+
+VARIANTS_STYLE_IQ = set()  # iq_num for which iQuote should SUM all options at matched qty
+for iq_num, rows in _iq_row_signature.items():
+    if len(rows) < 2:
+        continue
+    all_single = all(abs(tot - cp) < 0.01 for (opt, qty, cp, tot) in rows)
+    # Count rows per OptDesc
+    per_opt = defaultdict(int)
+    for opt, qty, cp, tot in rows:
+        per_opt[opt] += 1
+    all_options_single_row = all(v == 1 for v in per_opt.values())
+    if all_single and all_options_single_row:
+        VARIANTS_STYLE_IQ.add(iq_num)
+
+
+def _sum_option_products(iq_num, opt, iq_qty, products=None, exclude=None):
+    """Sum a specific iQuote option's rows at a specific qty, with optional include/exclude filter."""
+    k = (iq_num, opt, iq_qty)
+    if k not in iq_by_key:
+        return None
+    d = iq_by_key[k]
+    if not products and not exclude:
+        return d
+    agg = {'material': 0.0, 'print': 0.0, 'cutting': 0.0,
+           'hand': 0.0, 'die': 0.0, 'freight': 0.0, 'not_in_spot': 0.0,
+           'total_cost': 0.0, 'sell_total': 0.0, 'products': []}
+    include_lower = {str(p).lower() for p in (products or [])}
+    exclude_lower = {str(p).lower() for p in (exclude or [])}
+    # We need per-row product breakdowns. iq_by_key rolls per (iq, opt, qty). Recompute from raw rows.
+    for r in iq_rows:
+        if r['IdQuote'] != iq_num or (r.get('OptDesc') or '') != opt or r['Quantity'] != iq_qty:
+            continue
+        pname = str(r.get('Product') or '').lower()
+        if include_lower and not any(t in pname for t in include_lower):
+            continue
+        if exclude_lower and any(t in pname for t in exclude_lower):
+            continue
+        cutting = _f(r.get('ZundCost')) + _f(r.get('CrestCost')) + _f(r.get('SaberCost')) \
+                  + _f(r.get('BobstCost')) + _f(r.get('OtherUncategorizedCost'))
+        hand = _f(r.get('HandStripCost')) + _f(r.get('GluingCost'))
+        agg['material'] += _f(r.get('MaterialCost'))
+        agg['print']    += _f(r.get('PressCost'))
+        agg['cutting']  += cutting
+        agg['hand']     += hand
+        agg['freight']  += _f(r.get('FreightCost'))
+        agg['sell_total'] += _f(r.get('ComponentTotalPrice'))
+        agg['products'].append({'product': str(r.get('Product') or ''),
+                                'qty': iq_qty, 'sell': _f(r.get('ComponentTotalPrice'))})
+    return agg if agg['products'] else None
+
+
 def _sum_option_at_qtys(iq_num, opt, qtys_to_sum):
     """Sum iq_by_key rows for a given (iq_num, opt) at a specific set of qtys."""
     agg = {'material': 0.0, 'print': 0.0, 'cutting': 0.0,
@@ -246,7 +317,8 @@ def _empty_scen(sample_row):
 
 for est, rows in spot_by_est.items():
     iq_num = rows[0].get('iQuote #')
-    alt_tier = _is_alt_tier(rows)
+    # Force split by qty for iq_num in FORCE_SPLIT_BY_QTY_IQ_NUMS
+    alt_tier = _is_alt_tier(rows) or (iq_num in FORCE_SPLIT_BY_QTY_IQ_NUMS)
     for r in rows:
         qty = r.get('Qty')
         tier = qty if alt_tier else 'ALL'
@@ -314,10 +386,12 @@ def _match_qtys(iq_num, opt, spot_qtys):
     return matched
 
 
-def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
+def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None, spot_row_count=0):
     """Return (option_dict, opt_desc_str, resolution_note).
     Sums iQuote entries for the chosen option at ONLY the qty tiers matching
     the SPOT scenario's qtys (with tolerance). Falls back to all qtys if none match.
+    spot_row_count is the number of SPOT rows in the scenario - used to decide
+    whether to SUM all variant-style iQuote options.
     """
     if iq_num is None:
         return None, None, 'No iQuote # on SPOT scenario'
@@ -325,6 +399,19 @@ def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
         return None, None, 'iQuote # not found in iQuote export'
 
     scen_qtys = set(scen_qtys) if scen_qtys else set()
+
+    # 0. Per-(iq, qty) override (product include/exclude filter)
+    single_qty = next(iter(scen_qtys)) if len(scen_qtys) == 1 else None
+    if single_qty is not None and (iq_num, single_qty) in IQ_PER_QTY_OVERRIDES:
+        ov = IQ_PER_QTY_OVERRIDES[(iq_num, single_qty)]
+        opt = ov['opt']
+        iq_qty = ov['iq_qty']
+        agg = _sum_option_products(iq_num, opt, iq_qty,
+                                     products=ov.get('products'),
+                                     exclude=ov.get('exclude'))
+        if agg is not None:
+            label = ov.get('label', '')
+            return agg, opt, f'per-qty override: {opt!r} at iQuote qty {iq_qty} - {label}'
 
     def build(opt, note_prefix):
         matched_qtys = _match_qtys(iq_num, opt, scen_qtys)
@@ -335,13 +422,12 @@ def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
             agg = _sum_option_at_qtys(iq_num, opt, matched_qtys)
             n = f'{note_prefix} - {qty_note}' if qty_note else note_prefix
             return agg, opt, n
-        # No qty overlap - fall back to whole option (all qtys)
         agg = _sum_option_at_qtys(iq_num, opt, all_qtys)
         qtys_str = ', '.join(str(q) for q in sorted(all_qtys))
         n = f'{note_prefix} - no qty overlap with SPOT; using all iQuote qtys ({qtys_str})'
         return agg, opt, n
 
-    # 1. Override
+    # 1. Whole-option override
     if iq_num in IQ_OPTION_OVERRIDES:
         opt = IQ_OPTION_OVERRIDES[iq_num]
         if (iq_num, opt) in iq_qtys_for_opt:
@@ -349,18 +435,36 @@ def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
 
     all_opts = iq_options_by_iqnum[iq_num]
 
-    # 2. Produced-job option
+    # 2. Produced-job option (for actuals resolution)
     if mis_job is not None and (iq_num, mis_job) in iq_produced_option:
         opt = iq_produced_option[(iq_num, mis_job)]
         if opt in all_opts:
             return build(opt, f'produced job {mis_job} ran option {opt!r}')
 
-    # 3. Single option
+    # 3. VARIANTS-STYLE iQuote: each option is one distinct variant. SUM all at matched qtys.
+    if iq_num in VARIANTS_STYLE_IQ and spot_row_count > 1:
+        agg = {'material': 0.0, 'print': 0.0, 'cutting': 0.0,
+               'hand': 0.0, 'die': 0.0, 'freight': 0.0, 'not_in_spot': 0.0,
+               'total_cost': 0.0, 'sell_total': 0.0, 'products': [], 'qtys': set()}
+        for opt in all_opts:
+            matched_qtys = _match_qtys(iq_num, opt, scen_qtys) or iq_qtys_for_opt[(iq_num, opt)]
+            a = _sum_option_at_qtys(iq_num, opt, matched_qtys)
+            if a is None:
+                continue
+            for f in ('material', 'print', 'cutting', 'hand', 'die',
+                      'freight', 'not_in_spot', 'total_cost', 'sell_total'):
+                agg[f] += a[f]
+            agg['products'].extend(a['products'])
+            agg['qtys'].update(a['qtys'])
+        return agg, f'ALL {len(all_opts)} options', \
+               f'variants-style iQuote: summed all {len(all_opts)} single-component options'
+
+    # 4. Single option
     if len(all_opts) == 1:
         opt = next(iter(all_opts))
         return build(opt, 'only one option available')
 
-    # 4. Multi-option: pick option whose qty set best overlaps SPOT's, then closest sell
+    # 5. Multi-option: pick option with best qty overlap + closest sell match
     def score(opt):
         oqtys = iq_qtys_for_opt[(iq_num, opt)]
         cover = 0
@@ -369,7 +473,6 @@ def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
                 if sq is not None and oq is not None and abs(oq - sq) <= QTY_TOLERANCE:
                     cover += 1
                     break
-        # sell at matched qtys
         matched = _match_qtys(iq_num, opt, scen_qtys)
         sell_at_match = sum(iq_by_key[(iq_num, opt, q)]['sell_total'] for q in matched)
         near = -abs(sell_at_match - (spot_sell or 0))
@@ -405,7 +508,7 @@ n_scen = len(spot_scenarios)
 n_matched = 0
 deltas_pct = []
 for (est, iq, tier), s in scen_sorted:
-    iq_data, _, _ = resolve_iq(iq, s['qtys'], s['sell_total'])
+    iq_data, _, _ = resolve_iq(iq, s['qtys'], s['sell_total'], spot_row_count=len(s.get('components', [])))
     if iq_data and iq_data['sell_total'] > 0:
         n_matched += 1
         deltas_pct.append((s['sell_total'] - iq_data['sell_total']) / iq_data['sell_total'] * 100)
@@ -559,7 +662,7 @@ chart_delta_pcts = []  # for histogram
 chart_qty_bucket = defaultdict(list)  # bucket -> list of delta pcts
 
 for (est, iq, tier), s in scen_sorted:
-    iq_data, iq_opt, iq_note = resolve_iq(iq, s['qtys'], s['sell_total'])
+    iq_data, iq_opt, iq_note = resolve_iq(iq, s['qtys'], s['sell_total'], spot_row_count=len(s.get('components', [])))
 
     became = ' - BECAME A JOB' if s['became_job'] == 'Yes' else ''
     proj = s['project'] or '(no project name)'
@@ -679,7 +782,7 @@ for c, h in enumerate(ps_headers, 1):
 row += 1
 
 for (est, iq, tier), s in scen_sorted:
-    iq_data, iq_opt, _ = resolve_iq(iq, s['qtys'], s['sell_total'])
+    iq_data, iq_opt, _ = resolve_iq(iq, s['qtys'], s['sell_total'], spot_row_count=len(s.get('components', [])))
     iq_sell = iq_data['sell_total'] if iq_data else None
     spot_sell = s['sell_total']
     qty_label = ', '.join(str(q) for q in sorted(s['qtys'])) if s['qtys'] else ''
@@ -964,7 +1067,7 @@ ws.cell(row=row_cat_start+1, column=3).fill = HEADER_FILL
 # Sum categories across matched scenarios
 cat_totals = defaultdict(lambda: [0.0, 0.0])
 for (est, iq, tier), s in scen_sorted:
-    iq_data, _, _ = resolve_iq(iq, s['qtys'], s['sell_total'])
+    iq_data, _, _ = resolve_iq(iq, s['qtys'], s['sell_total'], spot_row_count=len(s.get('components', [])))
     if not iq_data:
         continue
     for cat in ('material', 'print', 'cutting', 'hand', 'freight'):
