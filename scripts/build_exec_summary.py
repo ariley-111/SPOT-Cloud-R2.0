@@ -44,6 +44,14 @@ IQ_PER_QTY_OVERRIDES = {
 # Force these iQuote #s to be treated as split-by-qty (each SPOT qty = own scenario).
 FORCE_SPLIT_BY_QTY_IQ_NUMS = {221998}
 
+# Per-scenario notes to surface in the report (keyed by SPOT Estimate #)
+SCENARIO_NOTES = {
+    'RW-260622-133707': [
+        'SPOT D/C Tray was priced as saber + CAD - 3 cuts, 4 blanks out on a 60x120 sheet (unusual case).',
+        'iQuote quoted both bobst AND zund for the same component.',
+    ],
+}
+
 # Job to (SPOT est #, iQuote #) mapping for the 3-way tab
 JOB_MAP = {
     236341: ('RW-260623-091031', 223207),
@@ -680,6 +688,14 @@ for (est, iq, tier), s in scen_sorted:
         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
         c = ws.cell(row=row, column=1, value=f'    Resolution: {iq_note}')
         c.font = Font(italic=True, size=9, color='666666')
+        c.alignment = Alignment(horizontal='left', indent=1)
+        row += 1
+
+    # Per-scenario custom notes
+    for note_line in SCENARIO_NOTES.get(est, []):
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+        c = ws.cell(row=row, column=1, value=f'    Note: {note_line}')
+        c.font = Font(italic=True, size=9, color='C00000')
         c.alignment = Alignment(horizontal='left', indent=1)
         row += 1
 
