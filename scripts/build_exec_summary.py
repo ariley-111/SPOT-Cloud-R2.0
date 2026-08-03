@@ -154,12 +154,10 @@ for r in act_rows:
     r['job_id'] = _int_or_none(r.get('job_id'))
 
 
-# ---------- Aggregate iQuote by (iq_num, opt_desc) - whole option sum ----------
-# We keep per-qty breakdown too, for reference.
-iq_options = {}  # (iq_num, opt_desc) -> aggregated dict (across ALL qtys in that option)
-iq_option_qtys = defaultdict(set)  # (iq_num, opt_desc) -> set of qtys present
+# ---------- Aggregate iQuote per (iq_num, opt_desc, qty) - per-qty totals ----------
+iq_by_key = {}  # (iq_num, opt_desc, qty) -> aggregated dict for that specific qty tier
 iq_options_by_iqnum = defaultdict(set)  # iq_num -> set of opt_desc
-iq_options_by_iqnum_qty = defaultdict(set)  # (iq_num, qty) -> set of opt_desc
+iq_qtys_for_opt = defaultdict(set)  # (iq_num, opt_desc) -> set of qtys present
 iq_produced_option = {}  # (iq_num, mis_job) -> opt_desc (option run to production)
 iq_quote_totals = {}  # iq_num -> TotalEstimatePrice
 
@@ -167,12 +165,11 @@ for r in iq_rows:
     iq_num = r['IdQuote']
     opt = r.get('OptDesc') or ''
     qty = r['Quantity']
-    key = (iq_num, opt)
-    a = iq_options.setdefault(key, {
+    key = (iq_num, opt, qty)
+    a = iq_by_key.setdefault(key, {
         'material': 0.0, 'print': 0.0, 'cutting': 0.0,
         'hand': 0.0, 'die': 0.0, 'freight': 0.0, 'not_in_spot': 0.0,
-        'total_cost': 0.0, 'sell_total': 0.0,
-        'qtys': set(), 'products': [],
+        'total_cost': 0.0, 'sell_total': 0.0, 'products': [],
     })
     cutting = _f(r.get('ZundCost')) + _f(r.get('CrestCost')) + _f(r.get('SaberCost')) \
               + _f(r.get('BobstCost')) + _f(r.get('OtherUncategorizedCost'))
@@ -185,12 +182,10 @@ for r in iq_rows:
     a['not_in_spot'] += _f(r.get('NotInSpotCost'))
     a['total_cost'] += _f(r.get('TotalActualCost'))
     a['sell_total'] += _f(r.get('ComponentTotalPrice'))
-    a['qtys'].add(qty)
     a['products'].append({'product': str(r.get('Product') or ''), 'qty': qty,
                           'sell': _f(r.get('ComponentTotalPrice'))})
-    iq_option_qtys[key].add(qty)
     iq_options_by_iqnum[iq_num].add(opt)
-    iq_options_by_iqnum_qty[(iq_num, qty)].add(opt)
+    iq_qtys_for_opt[(iq_num, opt)].add(qty)
 
     mis = r.get('MISJobID')
     if mis and mis != 'NULL':
@@ -198,6 +193,24 @@ for r in iq_rows:
         iq_produced_option[(iq_num, mis_int)] = opt
 
     iq_quote_totals[iq_num] = _f(r.get('TotalEstimatePrice'))
+
+
+def _sum_option_at_qtys(iq_num, opt, qtys_to_sum):
+    """Sum iq_by_key rows for a given (iq_num, opt) at a specific set of qtys."""
+    agg = {'material': 0.0, 'print': 0.0, 'cutting': 0.0,
+           'hand': 0.0, 'die': 0.0, 'freight': 0.0, 'not_in_spot': 0.0,
+           'total_cost': 0.0, 'sell_total': 0.0, 'products': [], 'qtys': set()}
+    for q in qtys_to_sum:
+        k = (iq_num, opt, q)
+        if k not in iq_by_key:
+            continue
+        d = iq_by_key[k]
+        for f in ('material', 'print', 'cutting', 'hand', 'die',
+                  'freight', 'not_in_spot', 'total_cost', 'sell_total'):
+            agg[f] += d[f]
+        agg['products'].extend(d['products'])
+        agg['qtys'].add(q)
+    return agg if agg['sell_total'] > 0 or agg['products'] else None
 
 
 # ---------- Aggregate SPOT by est# ----------
@@ -288,20 +301,51 @@ for r in act_rows:
 
 
 # ---------- iQuote option resolver for a SPOT scenario ----------
+def _match_qtys(iq_num, opt, spot_qtys):
+    """Return the set of iQuote qtys (in this option) that match any SPOT qty within tolerance."""
+    iq_qtys = iq_qtys_for_opt.get((iq_num, opt), set())
+    matched = set()
+    for sq in spot_qtys:
+        if sq is None:
+            continue
+        for iq_q in iq_qtys:
+            if iq_q is not None and abs(iq_q - sq) <= QTY_TOLERANCE:
+                matched.add(iq_q)
+    return matched
+
+
 def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
-    """Return (option_dict, opt_desc_str, resolution_note) or (None, None, note).
-    scen_qtys = set of SPOT qtys in this scenario."""
+    """Return (option_dict, opt_desc_str, resolution_note).
+    Sums iQuote entries for the chosen option at ONLY the qty tiers matching
+    the SPOT scenario's qtys (with tolerance). Falls back to all qtys if none match.
+    """
     if iq_num is None:
         return None, None, 'No iQuote # on SPOT scenario'
     if iq_num not in iq_options_by_iqnum:
         return None, None, 'iQuote # not found in iQuote export'
 
+    scen_qtys = set(scen_qtys) if scen_qtys else set()
+
+    def build(opt, note_prefix):
+        matched_qtys = _match_qtys(iq_num, opt, scen_qtys)
+        all_qtys = iq_qtys_for_opt.get((iq_num, opt), set())
+        if matched_qtys:
+            qty_note = ('matched iQuote qty ' + ', '.join(str(q) for q in sorted(matched_qtys))
+                        if matched_qtys != scen_qtys else '')
+            agg = _sum_option_at_qtys(iq_num, opt, matched_qtys)
+            n = f'{note_prefix} - {qty_note}' if qty_note else note_prefix
+            return agg, opt, n
+        # No qty overlap - fall back to whole option (all qtys)
+        agg = _sum_option_at_qtys(iq_num, opt, all_qtys)
+        qtys_str = ', '.join(str(q) for q in sorted(all_qtys))
+        n = f'{note_prefix} - no qty overlap with SPOT; using all iQuote qtys ({qtys_str})'
+        return agg, opt, n
+
     # 1. Override
     if iq_num in IQ_OPTION_OVERRIDES:
         opt = IQ_OPTION_OVERRIDES[iq_num]
-        key = (iq_num, opt)
-        if key in iq_options:
-            return iq_options[key], opt, f'override: forced OptDesc {opt!r}'
+        if (iq_num, opt) in iq_qtys_for_opt:
+            return build(opt, f'override: forced OptDesc {opt!r}')
 
     all_opts = iq_options_by_iqnum[iq_num]
 
@@ -309,32 +353,31 @@ def resolve_iq(iq_num, scen_qtys, spot_sell, mis_job=None):
     if mis_job is not None and (iq_num, mis_job) in iq_produced_option:
         opt = iq_produced_option[(iq_num, mis_job)]
         if opt in all_opts:
-            return iq_options[(iq_num, opt)], opt, f'produced job {mis_job} ran option {opt!r}'
+            return build(opt, f'produced job {mis_job} ran option {opt!r}')
 
     # 3. Single option
     if len(all_opts) == 1:
         opt = next(iter(all_opts))
-        return iq_options[(iq_num, opt)], opt, 'only one option available'
+        return build(opt, 'only one option available')
 
-    # 4. Multi-option: pick option whose qty set overlaps SPOT's qtys, then nearest by sell
-    def qty_match_score(opt):
-        oqtys = iq_option_qtys[(iq_num, opt)]
-        # count SPOT qtys covered (within tolerance)
-        covered = 0
+    # 4. Multi-option: pick option whose qty set best overlaps SPOT's, then closest sell
+    def score(opt):
+        oqtys = iq_qtys_for_opt[(iq_num, opt)]
+        cover = 0
         for sq in scen_qtys:
             for oq in oqtys:
-                if sq is not None and oq is not None and abs(sq - oq) <= QTY_TOLERANCE:
-                    covered += 1
+                if sq is not None and oq is not None and abs(oq - sq) <= QTY_TOLERANCE:
+                    cover += 1
                     break
-        return covered
+        # sell at matched qtys
+        matched = _match_qtys(iq_num, opt, scen_qtys)
+        sell_at_match = sum(iq_by_key[(iq_num, opt, q)]['sell_total'] for q in matched)
+        near = -abs(sell_at_match - (spot_sell or 0))
+        return (cover, near)
 
-    ranked = sorted(all_opts,
-                    key=lambda o: (qty_match_score(o),
-                                   -abs(iq_options[(iq_num, o)]['sell_total'] - (spot_sell or 0))),
-                    reverse=True)
+    ranked = sorted(all_opts, key=score, reverse=True)
     if ranked:
-        opt = ranked[0]
-        return iq_options[(iq_num, opt)], opt, 'best qty overlap + closest sell match'
+        return build(ranked[0], 'best qty overlap + closest sell match')
     return None, None, 'no option resolvable'
 
 
@@ -1030,4 +1073,4 @@ ws.add_chart(ch6, 'F' + str(row_cat2_start))
 # ---------- Save ----------
 wb.save(OUT_PATH)
 print(f'Wrote {OUT_PATH}')
-print(f'Scenarios: {len(spot_scenarios)}  iQuote options: {len(iq_options)}  Actuals: {len(actuals)}')
+print(f'Scenarios: {len(spot_scenarios)}  iQuote (opt, qty) keys: {len(iq_by_key)}  Actuals: {len(actuals)}')
