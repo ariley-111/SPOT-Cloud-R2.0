@@ -827,8 +827,28 @@ async def testing_report_from_json(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
     import openpyxl
     from openpyxl.styles import Font, PatternFill
+    from routes.engine_routes import _RATE_SNAP_CACHE
 
     quotes = body.get("quotes") or []
+    # Upsert incoming quotes into preview DB so `_resolve_rate_snapshot(quoteId)`
+    # in engine_routes finds each quote's PROD rate_snapshot (attached to the doc)
+    # and applies it via `use_rate_freeze`. Without this, the engine falls back to
+    # preview's LIVE admin rates and computed values drift from the prod UI.
+    # Track inserted ids to clean up after so preview's DB stays isolated.
+    inserted_ids: List[str] = []
+    for q in quotes:
+        qid = q.get("id")
+        if not qid:
+            continue
+        exists = await db[COL_QUOTES].find_one({"id": qid}, {"_id": 0, "id": 1})
+        if not exists:
+            try:
+                await db[COL_QUOTES].insert_one(dict(q))
+                inserted_ids.append(qid)
+            except Exception:  # noqa: BLE001
+                pass
+        _RATE_SNAP_CACHE.pop(qid, None)  # bust cache so upserted snapshot wins
+
     rows: List[Dict[str, Any]] = []
     for q in quotes:
         try:
@@ -838,6 +858,15 @@ async def testing_report_from_json(
                       "SPOT Estimate #": q.get("est_num") or q.get("id") or "",
                       "Component": f"ENGINE ERROR: {type(e).__name__}: {e}"}]
         rows.extend(_refresh_row_meta(r, q) for r in fresh)
+
+    # Clean up: remove any quotes we inserted so preview isn't polluted with prod data
+    if inserted_ids:
+        try:
+            await db[COL_QUOTES].delete_many({"id": {"$in": inserted_ids}})
+        except Exception:  # noqa: BLE001
+            pass
+        for qid in inserted_ids:
+            _RATE_SNAP_CACHE.pop(qid, None)
 
     wb = openpyxl.Workbook()
     ws = wb.active
