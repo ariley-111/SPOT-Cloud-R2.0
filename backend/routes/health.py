@@ -13,6 +13,15 @@ _started_at = datetime.now(timezone.utc)
 async def health():
     """Liveness sentinel. Used for monitoring + parity-check vs legacy SPOT's /api/health."""
     uptime_sec = (datetime.now(timezone.utc) - _started_at).total_seconds()
+    # Fingerprint of which report code the running container has. Comparing this
+    # to what the codebase currently exports proves whether prod is running the
+    # latest fixes or a stale image.
+    features: list[str] = []
+    try:
+        from routes.quotes import _REPORT_COLUMNS  # type: ignore
+        features = [c for c in _REPORT_COLUMNS if c in ("CAD Method", "Cutter Basis")]
+    except Exception:
+        pass
     return {
         "status": "ok",
         "service": "SPOT Cloud",
@@ -20,6 +29,7 @@ async def health():
         "uptime_sec": uptime_sec,
         "started": _started_at.isoformat(),
         "phase": "Phase 2 — Backend APIs",
+        "report_columns_new": features,  # empty → stale image, present → fresh
     }
 
 
