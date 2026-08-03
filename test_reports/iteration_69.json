@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 69 — Frontend focus with light API verification for (1) CAD-method smart default + explicit override with cadMethodTouched persisted, (2) Save-time report_rows snapshot, (3) Customer typeahead not opening on programmatic load. All 3 review changes PASS. On a fresh Simple draft (25×11, 200/B, qty 100): default CAD PRICE = Diff, rule-inches input hidden, Quote Table @qty100 = SELL/EA $5.92 / Total $591.51 / route CAD 0.7h. Clicking Rule → rule-inches input renders; typing 180 recomputes to SELL/EA $6.46 / Total $646.00 / route CAD 0.9h. Clicking Diff again → STAYS on Diff, price drops back to $591.51 (cadMethodTouched=true persisted). Clicking Rule again → back to $646.00 with rule-inches=180 preserved. Save flow: UI Save on Simple quote (customer=TEST_QA_Cust_A, project=TEST_QA_Rule_Toggle) → est# SA-260803-103242 assigned, POST /api/quotes returned 200, quote appears in owner=me list. Direct MongoDB inspection confirmed report_rows list IS being stored on save (report_rows_at timestamp populated; first row keys ['SPOT Estimate #','iQuote #','Became a Job','Project Name','Quote Type','Component','Qty','One-Up W',...]). GET /api/quotes/{id} strips the field because Quote Pydantic model doesn't declare it — non-blocking because the testing_report endpoint reads it directly from the mongo doc. Testing Report .xlsx download succeeded (spot-testing-report-2026-08-03_103250.xlsx, 7891 bytes) after checking toolbar Test flag. Customer typeahead: typing 'TEST_QA_' did NOT open the dropdown (no matches); after Save + Load modal + click Open on the saved row (programmatic load), customer-typeahead-results is NOT present in DOM — value populated as 'TEST_QA_Cust_A' with dropdown closed. Cleanup: deleted test quotes via DELETE /api/quotes/{id} (all 200).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      { "endpoint": "GET /api/quotes/{id}", "issue": "Response strips report_rows because Quote pydantic model does not declare the field (models/schemas.py L115-136, ConfigDict(extra='ignore')). The field IS persisted to MongoDB and read correctly by the testing_report endpoint, but frontend/CLI callers cannot inspect it via the REST API. Consider adding `report_rows: Optional[List[Dict[str, Any]]] = None` and `report_rows_at: Optional[str] = None` to the Quote model." }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      { "component": "EstimateInfoSec.CustomerInput", "issue": "Line 250 handler references `userTypedRef.current = false` but the ref is named `typedValRef` — will throw ReferenceError if the user presses Enter to accept a highlighted typeahead suggestion. onMouseDown branch uses the correct `typedValRef.current = null;`. No repro during this run because we didn't select via Enter, but any keyboard-user picking a customer suggestion will hit an uncaught exception.", "selector": "frontend/src/components/spot/EstimateInfoSec.jsx:250", "priority": "MEDIUM" }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "frontend": [
+      "Login as admin via /api/auth/login (JWT token stored in localStorage → app auto-authenticates on reload).",
+      "Fresh Simple draft (New Tab): default CAD PRICE = Diff active, input-rule-inches NOT in DOM. 25×11 qty100 → Quote Table $5.92 SELL/EA, $591.51 Total, CAD 0.7h.",
+      "Click tile-cadprice-rule → input-rule-inches becomes visible. Fill 180 → recompute to $6.46 SELL/EA, $646.00 Total, CAD 0.9h.",
+      "Click tile-cadprice-diff → recompute back to $5.92 / $591.51 / CAD 0.7h; Diff tile shows green active border, Rule tile inactive (cadMethodTouched=true, method sticks).",
+      "Click tile-cadprice-rule again → back to $6.46 / $646.00; rule-inches value 180 preserved.",
+      "Save flow: filled customer 'TEST_QA_Cust_A' + project 'TEST_QA_Rule_Toggle' → toolbar Save → est# SA-260803-103242 assigned, status saved. GET /api/quotes?owner=me returned 200 with matched quote.",
+      "Direct MongoDB inspection (motor client): report_rows list present on ALL saved/draft quotes with report_rows_at timestamp; snapshot fix is active.",
+      "Toolbar test-flag checked → toolbar-test-report clicked → download event fired, spot-testing-report-2026-08-03_103250.xlsx (7891 bytes).",
+      "Customer typeahead — programmatic load scenario: after save+delete cycle, re-opened Load modal, opened a saved quote (SA-260803-103242) via modal row click → verified [data-testid=customer-typeahead-results] is NOT in DOM post-load; customer input value populated as TEST_QA_Cust_A.",
+      "Cleanup: DELETE /api/quotes/{id} returned 200 for all test-created drafts."
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "MEDIUM: Fix EstimateInfoSec.jsx line 250 — replace `userTypedRef.current = false;` with `typedValRef.current = null;` so keyboard Enter-select on customer typeahead doesn't throw ReferenceError.",
+    "MINOR: Add `report_rows: Optional[List[Dict[str, Any]]] = None` and `report_rows_at: Optional[str] = None` to models.schemas.Quote so the field can be inspected via the API (currently silently stripped by pydantic model_dump). Not required for functionality; helps debugging.",
+    "MINOR: Consider re-rendering the rule-inches input while CAD PRICE = Diff (or with a distinct 'auto-adopt' preview) so users can type rule inches WITHOUT first clicking Rule. Right now the engine-side smart default 'auto-flip Diff→Rule when totalRuleInches>0 && !cadMethodTouched' can only be exercised via programmatic setField (Report/email parser) — not through the UI's rule-inches input, which is gated behind Rule already being active. The explicit toggle acceptance path works; the auto-flip path is engine-only from UI perspective."
+  ],
+  "critical_code_review_comments": [
+    "ProductionSpecsSec.jsx L23-28 useEffect: relies on `s.cadMethodTouched` to skip; correct behavior. But this hook still triggers a setField during render commit on every totalRuleInches / cadPricingMethod change — noisy for state churn. Consider running on the engine side ONLY (per runner._resolve_cad_method) and removing the UI-side effect to eliminate a source of divergence between local optimistic state and engine truth.",
+    "quotes.py POST/PUT snapshot: exception is swallowed silently (try/except pass). If _compute_report_rows fails for any reason (engine error, malformed state) the quote is saved but with NO report_rows and no log — makes debugging report parity regressions hard. Recommend at minimum logger.warning(f'snapshot failed for {q.get(\"id\")}: ...') so silent misses show up in backend.err.log.",
+    "EstimateInfoSec.jsx L250: `userTypedRef` is not a declared variable — dead-code bug in the Enter key path.",
+    "models/schemas.py Quote extra='ignore' + missing report_rows field: caused temporary confusion during this test iteration (API GET didn't expose the persisted snapshot). Either declare the field or note in a comment that it's a Mongo-only extra."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend + light API)", "frontend": "100% (3/3 review acceptance areas PASS; 1 medium code bug + 1 minor API-model note)" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created (and DELETED) two test drafts during this run: SA-260803-103242 (TEST_QA_Cust_A / TEST_QA_Rule_Toggle — Simple 25×11 qty100) and SA-260803-103425 (empty MP smoke). Both removed via DELETE /api/quotes/{id} → 200. Also touched (in a fresh tab) but never saved: SA-260803-103147 and SA-260803-103431. No production/team quotes altered. Pre-existing TEST_QA_* drafts from iteration 68 remain (recommend admin cleanup).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The rule-inches input (input-rule-inches) is ONLY rendered when CAD PRICE = Rule (ProductionSpecsSec.jsx L212 `{byRule && ...}`). To test cadMethodTouched behavior from the UI: (1) click tile-cadprice-rule first to expose the input, (2) type into input-rule-inches, (3) toggle Diff/Rule tiles and observe price changes + method sticks. The 'auto-flip on typing rule inches while Diff is active' scenario is NOT reachable through the UI in a fresh Simple quote — the smart default only kicks in when totalRuleInches is set programmatically (email/CAD parse) before the user has touched cadPricingMethod. Also: report_rows is persisted to MongoDB on POST/PUT but the Quote pydantic model strips it from GET responses; verify via direct db query or the testing_report .xlsx export. The '+' new-tab button is at the right edge of the tab strip (no data-testid — locate via `button[title*=\"New\"]` or the last '+'-text button). Login-then-JWT-in-localStorage works reliably; the Microsoft-SSO button in the login UI can accidentally match `button:has-text(\"Sign in\")` — prefer email path or JWT injection.",
+  "rca of the issue": "N/A — CAD method toggle, save-time snapshot, and typeahead-on-load all verified working. One frontend code smell (line 250 undefined variable userTypedRef) discovered during code review — will throw only on Enter-key selection of a customer typeahead result."
+}

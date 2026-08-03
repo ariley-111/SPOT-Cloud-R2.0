@@ -123,6 +123,21 @@ def _resolve_misc_per_slot(misc_charges: Any, slot_index: int) -> List[Dict[str,
 
 
 
+def _resolve_cad_method(json: Dict[str, Any]) -> str:
+    """Smart default (single source of truth — mirrors the UI toggle): when the
+    estimator hasn't explicitly picked a method (cadMethodTouched) and inches of
+    rule are present, price By Inches of Rule. Deterministic here so the screen,
+    non-active BOM components, save snapshots and the report all agree."""
+    method = json.get("cadPricingMethod") or "By Difficulty"
+    if not json.get("cadMethodTouched"):
+        try:
+            rule_in = float(json.get("totalRuleInches") or 0)
+        except (TypeError, ValueError):
+            rule_in = 0.0
+        method = "By Inches of Rule" if rule_in > 0 else "By Difficulty"
+    return method
+
+
 def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
                       layout: Dict[str, Any], asmp: Dict[str, Any]) -> Dict[str, Any]:
     prepress_treat_raw = json.get("prepressTreatment", "Auto")
@@ -193,7 +208,7 @@ def build_prod_inputs(json: Dict[str, Any], route_result: Dict[str, Any],
         "saberCuts": json.get("saberCuts", "1"),
         "saberBlanksOut": json.get("saberBlanksOut", "1"),
         "saberPcsPerBlank": layout["pcsPerSheet"],
-        "cadPricingMethod": json.get("cadPricingMethod", "By Difficulty"),
+        "cadPricingMethod": _resolve_cad_method(json),
         "cadDifficulty": json.get("cadDifficulty", "Standard"),
         "totalRuleInches": json.get("totalRuleInches", "0"),
         "perfPct": json.get("perfPct", "0"),

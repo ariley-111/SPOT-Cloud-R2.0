@@ -207,6 +207,10 @@ async def create_quote(body: QuoteCreate, user: User = Depends(get_current_user)
         sent_at=_now() if body.status == "sent" else None,
     )
     await db[COL_QUOTES].insert_one(quote.model_dump())
+    try:
+        await _snapshot_report_rows(quote.model_dump(), user)
+    except Exception:  # noqa: BLE001 — snapshot failure must never block a save
+        pass
     return quote
 
 
@@ -249,6 +253,10 @@ async def update_quote(quote_id: str, body: QuoteCreate, user: User = Depends(ge
         if existing:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Owned by another user — use Take Over first")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
+    try:
+        await _snapshot_report_rows(result, user)
+    except Exception:  # noqa: BLE001 — snapshot failure must never block a save
+        pass
     return Quote(**result)
 
 
@@ -488,7 +496,7 @@ _MP_ITEM_KEYS = [
     "qtys", "selSlot", "flute", "boardGrade", "outsideLiner", "insideLiner", "medium",
     "fscEnabled", "fscFee", "buyMinBoard", "boardSubstitution",
     "printReq", "printMode", "printSides", "whiteInk", "colorsFront", "colorsBack",
-    "routeOverride", "cadDifficulty", "cadPricingMethod", "totalRuleInches",
+    "routeOverride", "cadDifficulty", "cadPricingMethod", "cadMethodTouched", "totalRuleInches",
     "perfPct", "productMats", "saber", "saberCuts", "saberBlanksOut",
     "handStripping", "perimeterStripping", "strippingComplexity",
     "handGluing", "jointsPerPiece", "gluingComplexity",
@@ -569,6 +577,7 @@ def _simple_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Di
         "colorsFront": state.get("colorsFront"), "colorsBack": state.get("colorsBack"),
         **({"routeOverride": ro} if ro and ro != "Auto" else {}),
         "cadDifficulty": state.get("cadDifficulty"), "cadPricingMethod": state.get("cadPricingMethod"),
+        "cadMethodTouched": bool(state.get("cadMethodTouched")),
         "totalRuleInches": state.get("totalRuleInches"), "perfPct": state.get("perfPct"),
         "productMats": state.get("productMats"),
         "saber": state.get("saber"), "saberCuts": state.get("saberCuts"),
@@ -615,52 +624,87 @@ def _iquote_delta(state: Dict[str, Any], spot_total: float) -> Dict[str, Any]:
     return {"iQuote $": round(iq, 2), "Δ $": delta, "Δ %": round(delta / iq * 100, 1)}
 
 
+async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, Any]]:
+    """Price a saved quote EXACTLY like the UI and return its report rows."""
+    from routes.engine_routes import calculate_all, calculate_multi_part
+    state = q.get("state") or {}
+    rows: List[Dict[str, Any]] = []
+    is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
+    try:
+        if is_mp:
+            # buildMpPayload-equivalent payload, then read the SLOTS aggregation
+            # (what the Quote Table / right rail show) — NOT componentPricing,
+            # which prices each component independently.
+            data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
+            bom = state.get("bomItems") or []
+            by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
+            per_job = (state.get("freightScope") == "Per Job")
+            for slot in (data.get("slots") or []):
+                for pc in (slot.get("perComponent") or []):
+                    if pc.get("error"):
+                        continue
+                    ist = by_id.get(pc.get("itemId") or "", {})
+                    rows.append(_report_row(
+                        q, state, pc.get("desc"), ist, pc,
+                        quote_total=(slot.get("sellTotal") if per_job else None),
+                        per_job_freight=per_job))
+        else:
+            data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)
+            desc = state.get("itemDesc") or "Item"
+            for rr in (data.get("results") or []):
+                if rr.get("error"):
+                    continue
+                rows.append(_report_row(q, state, desc, state, rr))
+    except Exception as e:  # noqa: BLE001 — a bad quote must not break save/export
+        rows.append({**{c: "" for c in _REPORT_COLUMNS},
+                     "SPOT Estimate #": q.get("est_num") or q.get("id"),
+                     "iQuote #": state.get("iquoteNum") or "",
+                     "Component": f"ENGINE ERROR: {type(e).__name__}: {e}"})
+    return rows
+
+
+async def _snapshot_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, Any]]:
+    """SAVE-TIME COST SNAPSHOT: freeze the priced numbers into the quote doc so
+    the report simply reads them back — no recalculation drift possible."""
+    rows = await _compute_report_rows(q, user)
+    await db[COL_QUOTES].update_one(
+        {"id": q.get("id")},
+        {"$set": {"report_rows": rows, "report_rows_at": _now()}})
+    return rows
+
+
+def _refresh_row_meta(row: Dict[str, Any], q: Dict[str, Any]) -> Dict[str, Any]:
+    """Overlay fields editable AFTER save (test-flag PATCH: iQuote #/$, Job flag,
+    project name) onto a stored snapshot row at export time."""
+    state = q.get("state") or {}
+    qt = row.get("Quote Total")
+    qt = qt if isinstance(qt, (int, float)) else 0.0
+    return {**row,
+            "SPOT Estimate #": q.get("est_num") or row.get("SPOT Estimate #") or "",
+            "iQuote #": state.get("iquoteNum") or "",
+            "Became a Job": "Yes" if state.get("iquoteWon") else "No",
+            "Project Name": state.get("custRef") or "",
+            **_iquote_delta(state, qt)}
+
+
 @quotes_router.get("/_report/testing.xlsx")
 async def testing_report(user: User = Depends(get_current_user)) -> StreamingResponse:
-    """TEMPORARY: export every quote flagged 'good for testing' to .xlsx with a
-    per-component cost breakdown for side-by-side comparison with the legacy
-    system. Re-runs the pricing engine per quote so numbers match the app."""
+    """Export every quote flagged 'good for testing' to .xlsx with a per-component
+    cost breakdown. Rows come from the SAVE-TIME SNAPSHOT stored on each quote
+    (exactly the numbers priced when it was saved); quotes saved before the
+    snapshot feature are priced once on demand and the result stored."""
     import openpyxl
     from openpyxl.styles import Font, PatternFill
-    from routes.engine_routes import calculate_all, calculate_multi_part
 
     cursor = db[COL_QUOTES].find({"state.goodForTesting": True}, {"_id": 0}).sort("est_num", 1)
     quotes = [d async for d in cursor]
 
     rows: List[Dict[str, Any]] = []
     for q in quotes:
-        state = q.get("state") or {}
-        is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
-        try:
-            if is_mp:
-                # Price EXACTLY like the UI: buildMpPayload-equivalent payload, then
-                # read the SLOTS aggregation (what the Quote Table / right rail show)
-                # — NOT componentPricing, which prices each component independently.
-                data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
-                bom = state.get("bomItems") or []
-                by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
-                per_job = (state.get("freightScope") == "Per Job")
-                for slot in (data.get("slots") or []):
-                    for pc in (slot.get("perComponent") or []):
-                        if pc.get("error"):
-                            continue
-                        ist = by_id.get(pc.get("itemId") or "", {})
-                        rows.append(_report_row(
-                            q, state, pc.get("desc"), ist, pc,
-                            quote_total=(slot.get("sellTotal") if per_job else None),
-                            per_job_freight=per_job))
-            else:
-                data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)
-                desc = state.get("itemDesc") or "Item"
-                for rr in (data.get("results") or []):
-                    if rr.get("error"):
-                        continue
-                    rows.append(_report_row(q, state, desc, state, rr))
-        except Exception as e:  # noqa: BLE001 — a bad quote shouldn't kill the whole export
-            rows.append({**{c: "" for c in _REPORT_COLUMNS},
-                         "SPOT Estimate #": q.get("est_num") or q.get("id"),
-                         "iQuote #": state.get("iquoteNum") or "",
-                         "Component": f"ENGINE ERROR: {type(e).__name__}: {e}"})
+        stored = q.get("report_rows")
+        if not stored:  # legacy quote saved before snapshots — self-heal once
+            stored = await _snapshot_report_rows(q, user)
+        rows.extend(_refresh_row_meta(r, q) for r in stored)
 
     wb = openpyxl.Workbook()
     ws = wb.active
