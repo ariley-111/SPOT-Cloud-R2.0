@@ -94,7 +94,7 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
   // TEMPORARY — testing/comparison flag helpers.
   const flagBody = (over = {}) => ({
     good_for_testing: !!s.goodForTesting, iquote_num: s.iquoteNum || "",
-    became_job: !!s.iquoteWon, iquote_total: parseFloat(s.iquoteTotal) || null, ...over,
+    became_job: !!s.iquoteWon, ...over,
   });
   const onToggleTestFlag = async (checked) => {
     setField("goodForTesting", checked);
@@ -190,14 +190,6 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
             onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, flagBody({ good_for_testing: true })).catch(() => {}); }}
             placeholder="iQuote #" className="sp-input"
             style={{ width: 76, fontSize: 11, padding: "3px 6px", marginRight: 2 }} />
-        )}
-        {s.goodForTesting && (
-          <input data-testid="toolbar-iquote-total" value={s.iquoteTotal || ""}
-            onChange={(e) => setField("iquoteTotal", e.target.value)}
-            onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, flagBody({ good_for_testing: true })).catch(() => {}); }}
-            placeholder="iQuote $" title="iQuote sell price — used to compute Δ$/Δ% in the testing report"
-            className="sp-input" type="number" min="0" step="0.01"
-            style={{ width: 84, fontSize: 11, padding: "3px 6px", marginRight: 2 }} />
         )}
         {s.goodForTesting && (
           <label data-testid="toolbar-became-job-label" title="Did this iQuote become a job?"

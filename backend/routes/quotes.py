@@ -167,6 +167,7 @@ async def list_quotes(
             {"est_num": rx}, {"customer_name": rx}, {"customer_code": rx},
             {"state.custName": rx}, {"state.custCode": rx}, {"state.custIdent": rx},
             {"state.custRef": rx}, {"state.itemDesc": rx}, {"state.estInitials": rx},
+            {"state.iquoteNum": rx},
         ]
         if name_ids:
             or_clauses.append({"owner_id": {"$in": name_ids}})
