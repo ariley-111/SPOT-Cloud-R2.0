@@ -22,8 +22,12 @@ from openpyxl.chart import BarChart, ScatterChart, Reference, Series
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.trendline import Trendline
 from collections import defaultdict
+import csv as _csv
+import os as _os
 
 IN_PATH = '/tmp/analysis/input.xlsx'
+WF_MARGIN_CSV = '/app/scripts/WFMargin.csv'  # 12-month historical wide-format job margins
+WF_EXCLUDE_JOBS = {228117}  # outsource digital material misallocated to single job
 OUT_PATH = '/tmp/analysis/SPOT_Exec_Summary_v2.xlsx'
 
 # ---------- Overrides ----------
@@ -1456,6 +1460,264 @@ for t in findings:
     cell.alignment = LEFT_WRAP
     ws.row_dimensions[row].height = 30
     row += 1
+
+
+# ============================================================
+# TAB 8: Historical Wide-Format Margin Analysis (12-month backlog)
+# ============================================================
+if _os.path.exists(WF_MARGIN_CSV):
+    wf_rows = []
+    with open(WF_MARGIN_CSV, encoding='utf-8-sig') as _fh:
+        for _r in _csv.DictReader(_fh):
+            try:
+                jid = int(str(_r.get('job_id', '')).strip())
+            except (TypeError, ValueError):
+                continue
+            if jid in WF_EXCLUDE_JOBS:
+                continue
+            wf_rows.append({
+                'job_id': jid,
+                'customer': _r.get('customer') or '',
+                'qty': _f(_r.get('Qty')),
+                'invoice': _f(_r.get('InvoiceAmt')),
+                'cost': _f(_r.get('TotalCost')),
+                'gm': _f(_r.get('GrossMargin')),
+                'gm_pct': _f(_r.get('GrossMarginPct')) * 100,
+            })
+
+    ws = wb.create_sheet('Historical WF Margin')
+    for col, w in enumerate([12, 8, 13, 13, 13, 10, 13, 40], 1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    ws['A1'] = 'Historical Wide-Format Margin Analysis - past 12 months'
+    ws['A1'].font = Font(bold=True, size=14, color='1F4E78')
+    ws.merge_cells('A1:H1')
+
+    excl_str = ', '.join(str(j) for j in sorted(WF_EXCLUDE_JOBS))
+    ws['A2'] = (f'{len(wf_rows)} produced wide-format jobs. Excludes job {excl_str} (outsource digital '
+                f'material misallocated to a single job - would distort loss pattern).')
+    ws['A2'].alignment = LEFT_WRAP
+    ws.merge_cells('A2:H2')
+    ws.row_dimensions[2].height = 32
+
+    # --- Headline stats ---
+    tot_inv = sum(r['invoice'] for r in wf_rows)
+    tot_cost = sum(r['cost'] for r in wf_rows)
+    tot_gm = sum(r['gm'] for r in wf_rows)
+    losers = [r for r in wf_rows if r['gm'] < 0]
+    tot_loss = sum(r['gm'] for r in losers)
+
+    row = 4
+    ws.cell(row=row, column=1, value='Headline numbers').font = Font(bold=True, size=12); row += 1
+    for label, val in [
+        ('Total jobs', len(wf_rows)),
+        ('Total invoice', tot_inv),
+        ('Total cost', tot_cost),
+        ('Gross margin ($)', tot_gm),
+        ('Gross margin (%)', f'{tot_gm/tot_inv*100:.1f}%'),
+        ('Jobs that LOST money', f'{len(losers)} of {len(wf_rows)} ({len(losers)/len(wf_rows)*100:.0f}%)'),
+        ('Total dollar losses', tot_loss),
+    ]:
+        ws.cell(row=row, column=1, value=label).font = Font(bold=True)
+        c = ws.cell(row=row, column=2, value=val)
+        if isinstance(val, (int, float)) and abs(val) > 100:
+            c.number_format = '"$"#,##0'
+            if val < 0:
+                c.font = Font(bold=True, color='C00000')
+        row += 1
+
+    # --- By qty bucket ---
+    def _qb(q):
+        if q < 100: return '< 100'
+        if q < 250: return '100-249'
+        if q < 500: return '250-499'
+        if q < 1000: return '500-999'
+        if q < 5000: return '1000-4999'
+        return '5000+'
+
+    buckets = defaultdict(lambda: {'n':0, 'inv':0, 'cost':0, 'gm':0, 'losers':0, 'loser_gm':0})
+    for r in wf_rows:
+        b = _qb(r['qty'])
+        d = buckets[b]
+        d['n'] += 1
+        d['inv'] += r['invoice']; d['cost'] += r['cost']; d['gm'] += r['gm']
+        if r['gm'] < 0:
+            d['losers'] += 1
+            d['loser_gm'] += r['gm']
+
+    row += 2
+    ws.cell(row=row, column=1, value='Margin by qty bucket').font = Font(bold=True, size=12); row += 1
+    hdrs = ['Qty bucket', 'Jobs', 'Invoice $', 'Cost $', 'GM $', 'GM %', 'Loss jobs', 'Losses $']
+    for c, h in enumerate(hdrs, 1):
+        cell = ws.cell(row=row, column=c, value=h)
+        cell.font = HEADER_FONT; cell.fill = HEADER_FILL; cell.border = BORDER; cell.alignment = CENTER
+    row += 1
+    order = ['< 100', '100-249', '250-499', '500-999', '1000-4999', '5000+']
+    bucket_chart_start = row
+    for b in order:
+        if b not in buckets: continue
+        d = buckets[b]
+        gm_pct = d['gm']/d['inv']*100 if d['inv'] else 0
+        vals = [b, d['n'], round(d['inv']), round(d['cost']), round(d['gm']),
+                f'{gm_pct:.1f}%',
+                f'{d["losers"]}/{d["n"]}',
+                round(d['loser_gm'])]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(row=row, column=c, value=v); cell.border = BORDER
+            if c in (3, 4, 5, 8) and isinstance(v, (int, float)):
+                cell.number_format = '"$"#,##0'
+                if isinstance(v, (int, float)) and v < 0:
+                    cell.font = Font(bold=True, color='C00000')
+            # Flag loss-zone buckets
+            if b in ('250-499', '500-999') and c == 6:
+                cell.font = Font(bold=True, color='C00000')
+        row += 1
+    bucket_chart_end = row - 1
+
+    # Chart data for GM% by bucket
+    row += 2
+    ws.cell(row=row, column=1, value='Chart data - GM % by bucket').font = Font(bold=True); row += 1
+    for c, h in enumerate(['Qty bucket', 'GM %'], 1):
+        cell = ws.cell(row=row, column=c, value=h)
+        cell.font = HEADER_FONT; cell.fill = HEADER_FILL
+    row += 1
+    c_start = row
+    for b in order:
+        if b not in buckets: continue
+        d = buckets[b]
+        ws.cell(row=row, column=1, value=b)
+        ws.cell(row=row, column=2, value=round(d['gm']/d['inv']*100, 1) if d['inv'] else 0)
+        row += 1
+    c_end = row - 1
+
+    ch = BarChart()
+    ch.type = 'col'; ch.style = 12
+    ch.title = 'GM % by qty bucket - loss zone is 250-999'
+    ch.y_axis.title = 'GM %'
+    ch.x_axis.title = 'Qty bucket'
+    data = Reference(ws, min_col=2, min_row=c_start-1, max_row=c_end, max_col=2)
+    cats = Reference(ws, min_col=1, min_row=c_start, max_row=c_end)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(cats)
+    ch.height = 9; ch.width = 18
+    ws.add_chart(ch, 'J' + str(bucket_chart_start - 1))
+
+    # Chart data for LOSSES $ by bucket
+    row += 2
+    ws.cell(row=row, column=1, value='Chart data - Losses $ by bucket').font = Font(bold=True); row += 1
+    for c, h in enumerate(['Qty bucket', 'Losses on losing jobs $'], 1):
+        cell = ws.cell(row=row, column=c, value=h)
+        cell.font = HEADER_FONT; cell.fill = HEADER_FILL
+    row += 1
+    c2_start = row
+    for b in order:
+        if b not in buckets: continue
+        d = buckets[b]
+        ws.cell(row=row, column=1, value=b)
+        ws.cell(row=row, column=2, value=round(-d['loser_gm']))  # positive number for chart clarity
+        row += 1
+    c2_end = row - 1
+    ch2 = BarChart()
+    ch2.type = 'col'; ch2.style = 12
+    ch2.title = 'Total dollar losses by qty bucket'
+    ch2.y_axis.title = 'Losses $ (positive scale)'
+    ch2.x_axis.title = 'Qty bucket'
+    data = Reference(ws, min_col=2, min_row=c2_start-1, max_row=c2_end, max_col=2)
+    cats = Reference(ws, min_col=1, min_row=c2_start, max_row=c2_end)
+    ch2.add_data(data, titles_from_data=True)
+    ch2.set_categories(cats)
+    ch2.height = 9; ch2.width = 18
+    ws.add_chart(ch2, 'J' + str(c_end + 3))
+
+    # --- SPOT sweet spot summary ---
+    row += 2
+    ws.cell(row=row, column=1, value='SPOT sweet spot - 250-999 qty range').font = Font(bold=True, size=12); row += 1
+    sweet = [r for r in wf_rows if 250 <= r['qty'] < 1000]
+    sweet_loss = [r for r in sweet if r['gm'] < 0]
+    sweet_inv = sum(r['invoice'] for r in sweet)
+    sweet_cost = sum(r['cost'] for r in sweet)
+    sweet_gm = sum(r['gm'] for r in sweet)
+    sweet_loss_gm = sum(r['gm'] for r in sweet_loss)
+    for label, val in [
+        ('Jobs in 250-999 qty', len(sweet)),
+        ('Losing jobs', f'{len(sweet_loss)} of {len(sweet)} ({len(sweet_loss)/len(sweet)*100:.0f}%)'),
+        ('Total invoice', sweet_inv),
+        ('Total cost', sweet_cost),
+        ('Combined GM', f'${sweet_gm:,.0f} ({sweet_gm/sweet_inv*100:.1f}%)'),
+        ('Losses in this range', sweet_loss_gm),
+        ('Recover 50% of losses = SPOT value/yr', -sweet_loss_gm * 0.5),
+        ('Recover 100% of losses = SPOT value/yr', -sweet_loss_gm),
+    ]:
+        ws.cell(row=row, column=1, value=label).font = Font(bold=True)
+        c = ws.cell(row=row, column=2, value=val)
+        if isinstance(val, (int, float)) and abs(val) > 100:
+            c.number_format = '"$"#,##0'
+            if val < 0:
+                c.font = Font(bold=True, color='C00000')
+            elif label.startswith('Recover'):
+                c.font = Font(bold=True, color='00B050')
+        row += 1
+
+    # --- Top 10 individual losses ---
+    row += 2
+    ws.cell(row=row, column=1, value='Top 10 individual losses').font = Font(bold=True, size=12); row += 1
+    hdrs = ['Job', 'Qty', 'Invoiced $', 'Cost $', 'Loss $', 'GM %', 'Customer']
+    for c, h in enumerate(hdrs, 1):
+        cell = ws.cell(row=row, column=c, value=h)
+        cell.font = HEADER_FONT; cell.fill = HEADER_FILL; cell.border = BORDER; cell.alignment = CENTER
+    row += 1
+    top_losses = sorted(wf_rows, key=lambda r: r['gm'])[:10]
+    for r in top_losses:
+        vals = [r['job_id'], int(r['qty']), round(r['invoice']), round(r['cost']),
+                round(r['gm']), f'{r["gm_pct"]:.0f}%', r['customer']]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(row=row, column=c, value=v); cell.border = BORDER
+            if c in (3, 4, 5) and isinstance(v, (int, float)):
+                cell.number_format = '"$"#,##0'
+                if v < 0:
+                    cell.font = Font(bold=True, color='C00000')
+        row += 1
+
+    # --- Customer concentration ---
+    row += 2
+    ws.cell(row=row, column=1, value='Top 10 customers by total dollar loss').font = Font(bold=True, size=12); row += 1
+    cust_loss = defaultdict(lambda: {'n':0, 'gm':0, 'inv':0, 'losers':0})
+    for r in wf_rows:
+        c_d = cust_loss[r['customer']]
+        c_d['n'] += 1; c_d['gm'] += r['gm']; c_d['inv'] += r['invoice']
+        if r['gm'] < 0: c_d['losers'] += 1
+    hdrs = ['Customer', 'Total Loss $', 'Losing/Total Jobs', 'Invoiced $']
+    for c, h in enumerate(hdrs, 1):
+        cell = ws.cell(row=row, column=c, value=h)
+        cell.font = HEADER_FONT; cell.fill = HEADER_FILL; cell.border = BORDER; cell.alignment = CENTER
+    row += 1
+    top_cust = sorted(cust_loss.items(), key=lambda kv: kv[1]['gm'])[:10]
+    for cust, d in top_cust:
+        vals = [cust, round(d['gm']), f'{d["losers"]}/{d["n"]}', round(d['inv'])]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(row=row, column=c, value=v); cell.border = BORDER
+            if c in (2, 4) and isinstance(v, (int, float)):
+                cell.number_format = '"$"#,##0'
+                if c == 2 and v < 0:
+                    cell.font = Font(bold=True, color='C00000')
+        row += 1
+
+    # --- Findings ---
+    row += 2
+    ws.cell(row=row, column=1, value='Key findings').font = Font(bold=True, size=12); row += 1
+    findings = [
+        f'{len(losers)} of {len(wf_rows)} wide-format jobs ({len(losers)/len(wf_rows)*100:.0f}%) lost money in the past 12 months.',
+        f'Total dollar losses: ${-tot_loss:,.0f}. Concentration in the 250-999 qty bucket: ${-sweet_loss_gm:,.0f}.',
+        f'The 250-999 qty band matches the SPOT test data zone where SPOT prices 20-40% higher than iQuote.',
+        f'Recovering half of the 250-999 losses via SPOT pricing = ${-sweet_loss_gm*0.5:,.0f}/year in margin.',
+        'Top 6 of 10 largest individual losses come from PCA Pennsylvania - worth a separate account-level review.',
+    ]
+    for t in findings:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        c = ws.cell(row=row, column=1, value=t)
+        c.alignment = LEFT_WRAP
+        ws.row_dimensions[row].height = 28
+        row += 1
 
 
 # ---------- Save ----------
