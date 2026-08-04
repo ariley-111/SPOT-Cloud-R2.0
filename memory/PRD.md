@@ -753,3 +753,11 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   from 8→9 columns (added `0.7fr` slot). Cell reads `it.state.iquoteNum`, shows `—` when empty/null,
   tabular-nums font for alignment, ellipsis on overflow. `data-testid="load-iquote-{id}"` on each
   cell for QA. Draft tab unchanged.
+
+### 2026-02-XX (fork) — iQuote # search client-side filter fix ✅
+- Follow-up to the backend numeric-iquote fix. User reported production still returned "No quotes
+  found" when typing the full iQuote # even though the number was visible in the list. Root cause:
+  `LoadQuoteModal.jsx` runs a **second client-side memo filter** on the fetched items, and its
+  match fields did not include `state.iquoteNum`. Backend returned the row, client hid it.
+- Fix: added `iqStr.includes(t)` to the `filtered` memo with `String(state.iquoteNum)` coercion so
+  it matches whether the field is stored as string or number. Type-agnostic.

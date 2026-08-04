@@ -187,6 +187,11 @@ export default function LoadQuoteModal({ onClose }) {
     if (!q.trim()) return true;
     const t = q.toLowerCase();
     const st = it.state || {};
+    // iQuote # may be stored as a string OR a number (legacy prod data).
+    // Coerce to string for the contains-check so the client-side filter matches
+    // whichever type the doc actually holds.
+    const iq = st.iquoteNum;
+    const iqStr = iq === undefined || iq === null ? "" : String(iq).toLowerCase();
     return (
       (it.est_num || "").toLowerCase().includes(t) ||
       (it.label || "").toLowerCase().includes(t) ||
@@ -195,7 +200,8 @@ export default function LoadQuoteModal({ onClose }) {
       (st.custRef || "").toLowerCase().includes(t) ||             // project name
       (st.itemDesc || "").toLowerCase().includes(t) ||            // item description
       (st.estInitials || "").toLowerCase().includes(t) ||         // estimating team
-      (it.owner_name || "").toLowerCase().includes(t)             // owner first name
+      (it.owner_name || "").toLowerCase().includes(t) ||          // owner first name
+      iqStr.includes(t)                                           // iQuote #
     );
   }), [items, q]);
 
