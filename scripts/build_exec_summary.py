@@ -50,6 +50,9 @@ SCENARIO_NOTES = {
         'SPOT D/C Tray was priced as saber + CAD - 3 cuts, 4 blanks out on a 60x120 sheet (unusual case).',
         'iQuote quoted both bobst AND zund for the same component.',
     ],
+    'RW-260730-153734': [
+        'Cento actual sold price is a PRE-INVOICE of $1,218.84 (near iQuote price), not a final invoice. Treat margin figures as directional.',
+    ],
 }
 
 # Job to (SPOT est #, iQuote #) mapping for the 3-way tab
@@ -63,6 +66,7 @@ JOB_MAP = {
     236943: ('RW-260722-082345', 223591),
     236869: ('RW-260730-155412', 223597),
     237252: ('RW-260724-113737', 223651),
+    237334: ('RW-260730-153734', 223837),
 }
 
 QTY_TOLERANCE = 1  # 500↔501, 918↔919 etc
