@@ -531,6 +531,8 @@ def _sanitize_image_for_anthropic(content: bytes, media_type: str, fname: str):
     can't be used. Passes supported, reasonably-sized images through untouched;
     re-encodes unsupported/oversized ones to PNG via Pillow. NEVER raises — a
     bad inline image must not abort the parse."""
+    _PIL_TO_MIME = {"JPEG": "image/jpeg", "PNG": "image/png",
+                    "GIF": "image/gif", "WEBP": "image/webp"}
     try:
         import io as _io
         from PIL import Image
@@ -538,9 +540,14 @@ def _sanitize_image_for_anthropic(content: bytes, media_type: str, fname: str):
         img.load()
         w, h = img.size
         oversized = max(w, h) > _ANTHROPIC_IMG_MAXPX
-        # Fast path: already-supported type at a sane size → send as-is.
-        if media_type in _ANTHROPIC_IMG_TYPES and not oversized:
-            return base64.standard_b64encode(content).decode("utf-8"), media_type
+        # Resolve the ACTUAL image format from bytes - never trust the declared
+        # media_type. Emails, renames, and forwards frequently mis-label images
+        # (e.g. a .png file that's really JPEG bytes), and Anthropic rejects the
+        # whole request with a 400 when the label and bytes disagree.
+        actual_mime = _PIL_TO_MIME.get(img.format or "", None)
+        # Fast path: bytes are already a supported type at a sane size → pass through.
+        if actual_mime and actual_mime in _ANTHROPIC_IMG_TYPES and not oversized:
+            return base64.standard_b64encode(content).decode("utf-8"), actual_mime
         if oversized:
             scale = _ANTHROPIC_IMG_MAXPX / float(max(w, h))
             img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
