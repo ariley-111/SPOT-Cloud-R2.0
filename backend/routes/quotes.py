@@ -169,6 +169,29 @@ async def list_quotes(
             {"state.custRef": rx}, {"state.itemDesc": rx}, {"state.estInitials": rx},
             {"state.iquoteNum": rx},
         ]
+        # iQuote # may be stored as a number in some legacy/prod docs (MongoDB
+        # $regex silently no-ops on numeric fields). Add numeric equality and a
+        # $toString regex fallback so partial numeric matches work regardless
+        # of stored type (string, int, or double).
+        term = q.strip()
+        if term.isdigit():
+            try:
+                or_clauses.append({"state.iquoteNum": int(term)})
+            except ValueError:
+                pass
+        try:
+            or_clauses.append({"state.iquoteNum": float(term)})
+        except ValueError:
+            pass
+        or_clauses.append({
+            "$expr": {
+                "$regexMatch": {
+                    "input": {"$toString": {"$ifNull": ["$state.iquoteNum", ""]}},
+                    "regex": re.escape(term),
+                    "options": "i",
+                }
+            }
+        })
         if name_ids:
             or_clauses.append({"owner_id": {"$in": name_ids}})
         query["$or"] = or_clauses

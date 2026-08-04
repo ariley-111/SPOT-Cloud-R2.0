@@ -733,3 +733,16 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   (job + polling) so it no longer hits the Cloudflare 520 gateway timeout, and the exact MSAL/Graph
   error string is surfaced in the email modal. Awaiting user's prod redeploy + retest to read the
   real Azure error (likely tenant/secret, Mail.Send consent, or ApplicationAccessPolicy).
+
+### 2026-02-XX (fork) — iQuote # search prod fix ✅
+- **P0 Load Quote iQuote # search failed in production** (worked in preview). Root cause: MongoDB
+  `$regex` silently skips non-string fields. Preview stored `state.iquoteNum` as strings, but many
+  legacy prod docs store it as a **number** (Int32/Double) since users typed digits into a numeric
+  input in older builds. Fix in `backend/routes/quotes.py::list_quotes`: augmented the `$or`
+  clauses so search works regardless of stored type —
+    1. keep the existing regex clause (strings),
+    2. add `{state.iquoteNum: int(term)}` when term is digits-only,
+    3. add `{state.iquoteNum: float(term)}` when term parses as a float,
+    4. add an `$expr` + `$toString` fallback for partial numeric matches on numeric-stored values.
+  Verified preview: string iQuote `12345` still matches; no regression on other q= fields.
+  Awaiting user's prod redeploy + retest (user example: `223864`).
