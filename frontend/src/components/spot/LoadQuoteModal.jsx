@@ -402,12 +402,13 @@ export default function LoadQuoteModal({ onClose }) {
           {/* Header row */}
           {tab === "saved" && (
             <div style={{
-              display: "grid", gridTemplateColumns: "1fr 1.3fr 0.85fr 1fr 1fr 1fr 0.95fr 200px",
+              display: "grid", gridTemplateColumns: "1fr 0.7fr 1.3fr 0.85fr 1fr 1fr 1fr 0.95fr 200px",
               gap: 8, padding: "6px 10px", borderBottom: "2px solid var(--spot-line)",
               fontSize: 10, fontWeight: 700, color: "var(--spot-text3)",
               textTransform: "uppercase", letterSpacing: ".06em",
             }}>
               <div>Est #</div>
+              <div>iQuote #</div>
               <div>Customer</div>
               <div>Owner</div>
               <div>Created</div>
@@ -423,7 +424,7 @@ export default function LoadQuoteModal({ onClose }) {
             return tab === "saved" ? (
               <div key={it.id} data-testid={`load-row-${it.id}`}
                 style={{
-                  display: "grid", gridTemplateColumns: "1fr 1.3fr 0.85fr 1fr 1fr 1fr 0.95fr 200px",
+                  display: "grid", gridTemplateColumns: "1fr 0.7fr 1.3fr 0.85fr 1fr 1fr 1fr 0.95fr 200px",
                   gap: 8, padding: "8px 10px",
                   borderBottom: "1px solid var(--spot-line)", alignItems: "center",
                   background: "transparent", transition: "background .12s",
@@ -445,6 +446,15 @@ export default function LoadQuoteModal({ onClose }) {
                       <Paperclip size={11} /> {it.file_count}
                     </span>
                   )}
+                </div>
+                <div data-testid={`load-iquote-${it.id}`}
+                  style={{ fontSize: 12, color: "var(--spot-text2)", fontVariantNumeric: "tabular-nums",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={(it.state || {}).iquoteNum != null ? String((it.state || {}).iquoteNum) : ""}>
+                  {(() => {
+                    const v = (it.state || {}).iquoteNum;
+                    return v === undefined || v === null || v === "" ? "—" : String(v);
+                  })()}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--spot-text2)", overflow: "hidden",
                   textOverflow: "ellipsis", whiteSpace: "nowrap" }}

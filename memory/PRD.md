@@ -746,3 +746,10 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
     4. add an `$expr` + `$toString` fallback for partial numeric matches on numeric-stored values.
   Verified preview: string iQuote `12345` still matches; no regression on other q= fields.
   Awaiting user's prod redeploy + retest (user example: `223864`).
+
+### 2026-02-XX (fork) — Load Quote list: iQuote # column ✅
+- Added a dedicated **iQuote #** column between Est # and Customer in the Saved Quotes tab of
+  the Load Quote modal (`frontend/src/components/spot/LoadQuoteModal.jsx`). Grid template updated
+  from 8→9 columns (added `0.7fr` slot). Cell reads `it.state.iquoteNum`, shows `—` when empty/null,
+  tabular-nums font for alignment, ellipsis on overflow. `data-testid="load-iquote-{id}"` on each
+  cell for QA. Draft tab unchanged.
