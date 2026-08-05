@@ -761,3 +761,15 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   match fields did not include `state.iquoteNum`. Backend returned the row, client hid it.
 - Fix: added `iqStr.includes(t)` to the `filtered` memo with `String(state.iquoteNum)` coercion so
   it matches whether the field is stored as string or number. Type-agnostic.
+
+### 2026-02-XX (fork) — Test checkbox: promote to job-level ✅
+- User reported: Test checkbox on a Multi-Part quote appears checked on one component
+  and unchecked when they click a different component. Screenshots confirmed on prod.
+- Root cause in `frontend/src/lib/mpSchema.js`: `goodForTesting`, `iquoteNum`, `iquoteWon`
+  were not in `JOB_LEVEL_KEYS`, so schema treated them as **item-level**. `switchBomItem`
+  runs `gatherItemState` (snapshot outgoing) then `applyItemStateTo` (load incoming, reset-
+  first) — the reset-first step blanked those flags on every MP tab switch.
+- Fix: added the three keys to `JOB_LEVEL_KEYS`. They now stay at quote-level, are never
+  copied into any component's state, and are never touched when switching components.
+  Toolbar reads top-level state, so the checkbox is now stable across all component tabs
+  in a Multi-Part quote. Simple quotes were never affected (no switching).
