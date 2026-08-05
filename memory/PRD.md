@@ -773,3 +773,19 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   copied into any component's state, and are never touched when switching components.
   Toolbar reads top-level state, so the checkbox is now stable across all component tabs
   in a Multi-Part quote. Simple quotes were never affected (no switching).
+
+### 2026-02-XX (fork) — Test flag: heal legacy quotes on load ✅
+- Follow-up: user reported the fix worked for NEW test-flagged quotes but LEGACY quotes
+  (already saved under the buggy schema) still lost the checkbox on component switch.
+  Reason: those quotes have `goodForTesting: true` stored INSIDE the specific `bomItems[i].state`
+  where it was first checked, not at the top level. My earlier fix stops writing it to component
+  states going forward, but doesn't retroactively fix already-saved data.
+- Fix in `healLoadedState`:
+    1. **Hoist** — if top-level `goodForTesting`/`iquoteWon` is falsy, OR across every
+       `bomItems[i].state`; if top-level `iquoteNum` is empty, take the first non-empty
+       component value. Result: box is checked at load-time whichever component the value
+       was originally saved under.
+    2. **Purge** — strip `goodForTesting`/`iquoteNum`/`iquoteWon` from every `bomItems[i].state`
+       after hoisting, so the next save has one source of truth at the top level and unchecking
+       actually sticks.
+  Applies on both initial fetch and `loadIntoTab` (Load Quote modal).

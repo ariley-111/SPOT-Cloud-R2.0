@@ -112,7 +112,32 @@ export function healLoadedState(s) {
   if (s.custIdent !== undefined) merged.custIdent = s.custIdent || "";
   if (Array.isArray(s.miscCharges)) merged.miscCharges = [...s.miscCharges];
   const bomItems = s.bomItems.map((b, i) => (i === idx ? { ...b, state: merged } : b));
-  return { ...s, bomItems };
+  const out = { ...s, bomItems };
+  // Hoist testing/comparison flags to the quote level for legacy saves that
+  // stored them inside a specific component's state (pre-2026-02 fix when
+  // these keys were incorrectly item-level). Union across all components:
+  //   goodForTesting/iquoteWon: OR of top-level + any component
+  //   iquoteNum: first non-empty (top-level wins, else scan components)
+  const bomStates = bomItems.map((b) => b?.state || {});
+  if (!out.goodForTesting) {
+    out.goodForTesting = bomStates.some((st) => !!st.goodForTesting) || false;
+  }
+  if (!out.iquoteWon) {
+    out.iquoteWon = bomStates.some((st) => !!st.iquoteWon) || false;
+  }
+  if (!out.iquoteNum) {
+    const found = bomStates.find((st) => st.iquoteNum && String(st.iquoteNum).trim());
+    if (found) out.iquoteNum = found.iquoteNum;
+  }
+  // Purge the flags from every component's state so the next save doesn't
+  // persist stale per-component copies (which would re-hoist a "true" the
+  // user just unchecked). The quote-level top has the sole source of truth.
+  out.bomItems = bomItems.map((b) => {
+    if (!b?.state) return b;
+    const { goodForTesting: _gft, iquoteNum: _iqn, iquoteWon: _iqw, ...rest } = b.state;
+    return { ...b, state: rest };
+  });
+  return out;
 }
 
 export function makeBomItem(opts = {}) {
