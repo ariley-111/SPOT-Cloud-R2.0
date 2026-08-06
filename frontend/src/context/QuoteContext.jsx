@@ -524,11 +524,29 @@ export function QuoteProvider({ children }) {
     const id = "local-" + Math.random().toString(36).slice(2, 10);
     setTabs((cur) => {
       const taken = new Set(cur.map((t) => t.state?.estNum).filter(Boolean));
+      // Strip persistence-identity fields so the duplicated tab is a BRAND-NEW
+      // quote on save. Bug: `active.state.quoteId` bled through, causing manual
+      // Save to call updateQuote(originalId) — silently overwriting the source
+      // quote and leaving no duplicate record. Also clear status (back to
+      // draft), pricingVersionId (re-price on current rates), iquoteNum /
+      // iquoteWon / goodForTesting (belong to the source), viewOnly and
+      // quoteBecameJobDate (source-only metadata).
+      const {
+        quoteId: _qid, quoteStatus: _qst, pricingVersionId: _pv,
+        iquoteNum: _iqn, iquoteWon: _iqw, goodForTesting: _gft,
+        viewOnly: _vo, quoteBecameJobDate: _qbjd,
+        ...cleanState
+      } = active.state || {};
       const tab = {
         id,
         persisted: false,
         label: `${active.label} (copy)`,
-        state: { ...active.state, estNum: initials ? uniqueEstNum(initials, taken) : "" },
+        state: {
+          ...cleanState,
+          estNum: initials ? uniqueEstNum(initials, taken) : "",
+          estNumAuto: true,
+          quoteStatus: "draft",
+        },
         updatedAt: Date.now(),
       };
       return [...cur, tab];

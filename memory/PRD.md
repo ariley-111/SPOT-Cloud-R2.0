@@ -816,3 +816,18 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   per-component count) as the `Qty` column, matching iQuote semantics for direct row-level
   comparison. Individual mode was always correct (its rows already carried per-component
   raw pcs). Die tier-aggregate and Quote Total tier-total changes retained.
+
+### 2026-02-XX (fork) — Duplicate Quote save bug ✅ P0
+- User reports duplicating a saved quote (tab-bar "Duplicate"), editing, then hitting Save
+  results in the "new" quote being nowhere to be found. Root cause in
+  `frontend/src/context/QuoteContext.jsx::duplicateTab`: cloned `active.state` verbatim,
+  which carried the ORIGINAL quote's `quoteId`. Tab was flagged `persisted:false`, but the
+  manual-Save path in `Toolbar.jsx::onSave` reads `s.quoteId` (still populated) → `isUpdate=true`
+  → calls `updateQuote(originalId, editedBody)`, silently overwriting the source and never
+  creating a new record. The est# also got replaced with the new one, making the source
+  even harder to find after re-search.
+- Fix: strip persistence-identity fields (`quoteId`, `quoteStatus`, `pricingVersionId`,
+  `iquoteNum`, `iquoteWon`, `goodForTesting`, `viewOnly`, `quoteBecameJobDate`) when
+  duplicating, force new estNum, `estNumAuto:true`, `quoteStatus:"draft"`. Now Save creates
+  a genuinely new quote row.
+- ⚠️ Preview-only. Redeploy to prod.
