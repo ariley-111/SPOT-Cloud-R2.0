@@ -451,12 +451,18 @@ def _rule_in(v: Any) -> float:
 def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
                 ist: Dict[str, Any], r: Dict[str, Any],
                 quote_total: Optional[float] = None,
-                per_job_freight: bool = False) -> Dict[str, Any]:
+                per_job_freight: bool = False,
+                raw_qty_override: Optional[int] = None,
+                tier_die_override: Optional[float] = None) -> Dict[str, Any]:
     print_on = (ist.get("printReq") or ist.get("printRequired") or "Yes") == "Yes"
     strip_on = ist.get("handStripping") == "Yes"
     glue_on = ist.get("handGluing") == "Yes"
     tape_on = ist.get("tape") == "Yes"
     qty = r.get("qty") or 0
+    # Report `Qty` should always be the RAW stored set qty (no pcs-per-set
+    # multiplication) so it matches iQuote's `Quantity` column for direct
+    # side-by-side comparison. Multi-Part supplies this via raw_qty_override.
+    display_qty = raw_qty_override if raw_qty_override is not None else qty
     try:
         tstrips = float(ist.get("tapeStrips") or 0)
         tlen = float(ist.get("tapeStripLength") or 0)
@@ -474,7 +480,7 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Project Name": state.get("custRef") or "",
         "Quote Type": state.get("quoteType") or "Simple",
         "Component": comp_desc or "",
-        "Qty": qty,
+        "Qty": display_qty,
         # Board/dims come from the ENGINE RESULT for THIS component — the actual
         # board it was priced on, never another component's mirror.
         "One-Up W": round(float(r.get("oneUpW")), 3) if r.get("oneUpW") else "",
@@ -509,7 +515,8 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         # Quote Table / right-rail). Per-item freight = line + embedded.
         "Freight": (_n(r.get("allocatedFreight")) if per_job_freight
                     else _n(r.get("freightLine")) + _n(r.get("freightEmbed"))),
-        "Die": _n(r.get("dieLineCost")) + _n(r.get("dieEmbedded")),
+        "Die": (round(float(tier_die_override), 2) if tier_die_override is not None
+                else _n(r.get("dieLineCost")) + _n(r.get("dieEmbedded"))),
         "Prepress": _n(r.get("prepressLineCost")) + _n(r.get("prepressEmbedded")),
         "Proofs": _n(r.get("proofLineCost")) + _n(r.get("proofEmbedded")),
         "Misc": _n(r.get("miscLineCost")),
@@ -519,9 +526,10 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
         "Margin $": _n(r.get("gmDollar")),
         "Margin %": round(float(r.get("gmPct") or 0) * 100, 1),
         "Sell Total": _n(r.get("itemSell")),
-        # Quote Total mirrors the rail's One-Time Line Items rollup: Per-Job
-        # freight mode → job/order total for the tier; otherwise the component's
-        # own sell + its one-time line charges.
+        # Quote Total = whole-quote sell for this qty tier (matches iQuote's
+        # TotalEstimatePrice, repeated per row within the tier). Multi-Part
+        # supplies slot.sellTotal via `quote_total`; Simple falls through to
+        # the component's own sellTotal (already the whole quote).
         "Quote Total": _n(r.get("sellTotal")) if quote_total is None else round(float(quote_total), 2),
         **_iquote_delta(state, _n(r.get("sellTotal")) if quote_total is None else round(float(quote_total), 2)),
     }
@@ -714,16 +722,51 @@ async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, 
             data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
             bom = state.get("bomItems") or []
             by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
+            # Map itemId → raw set qty from the component's own stored qtys, so
+            # Individual mode preserves per-component qty divergence while
+            # Matched Set uses the same set qty across all components.
+            pricing_mode = state.get("pricingMode") or "Matched Set"
+            top_qtys_state = state.get("qtys") or []
             per_job = (state.get("freightScope") == "Per Job")
             for slot in (data.get("slots") or []):
-                for pc in (slot.get("perComponent") or []):
+                slot_idx = slot.get("slot")
+                # Slot-level roll-ups so per-component report rows can display
+                # the whole-quote figures at this qty tier (matches iQuote's
+                # TotalEstimatePrice repeated per row + right-rail Die aggregate).
+                per_comp = slot.get("perComponent") or []
+                tier_die = _n(slot.get("dieLineCost")) + sum(_n(pc.get("dieEmbedded")) for pc in per_comp)
+                tier_total = slot.get("sellTotal")
+                # Raw set qty for this slot (Matched Set uses top-level qtys[slot];
+                # Individual uses the component's own qtys[slot] — see below).
+                try:
+                    top_raw_qty = int(top_qtys_state[slot_idx]) if (
+                        slot_idx is not None and slot_idx < len(top_qtys_state)
+                        and top_qtys_state[slot_idx] not in (None, "")) else None
+                except (TypeError, ValueError):
+                    top_raw_qty = None
+                for pc in per_comp:
                     if pc.get("error"):
                         continue
                     ist = by_id.get(pc.get("itemId") or "", {})
+                    # Individual mode: prefer the component's own raw qty at this
+                    # slot; fall back to the set qty. Matched Set: set qty applies
+                    # uniformly.
+                    if pricing_mode == "Individual":
+                        iqs = ist.get("qtys") or []
+                        try:
+                            raw_qty = int(iqs[slot_idx]) if (
+                                slot_idx is not None and slot_idx < len(iqs)
+                                and iqs[slot_idx] not in (None, "")) else top_raw_qty
+                        except (TypeError, ValueError):
+                            raw_qty = top_raw_qty
+                    else:
+                        raw_qty = top_raw_qty
                     rows.append(_report_row(
                         q, state, pc.get("desc"), ist, pc,
-                        quote_total=(slot.get("sellTotal") if per_job else None),
-                        per_job_freight=per_job))
+                        quote_total=tier_total,
+                        per_job_freight=per_job,
+                        raw_qty_override=raw_qty,
+                        tier_die_override=tier_die))
         else:
             data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)
             desc = state.get("itemDesc") or "Item"

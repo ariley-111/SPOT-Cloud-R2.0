@@ -789,3 +789,21 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
        after hoisting, so the next save has one source of truth at the top level and unchecking
        actually sticks.
   Applies on both initial fetch and `loadIntoTab` (Load Quote modal).
+
+### 2026-02-XX (fork) — Testing report row shape: align to iQuote per-tier ✅
+- User asked to reshape the Testing Comparison export so rows line up with iQuote's structure
+  (per-product cost columns + `TotalEstimatePrice` repeated per row within a qty tier). Backing
+  fix in `backend/routes/quotes.py`:
+    1. `Qty` column now always shows the RAW stored set qty (no pcs-per-set multiplication).
+       Matched Set → `state.qtys[slot]`. Individual → each component's own `state.qtys[slot]`,
+       falling back to the top-level slot qty. Simple mode unchanged (already raw).
+    2. `Die` column in Multi-Part now shows the TIER AGGREGATE
+       (`slot.dieLineCost + Σ pc.dieEmbedded`), i.e. every component row within a qty tier shows
+       the same die = the right-rail Die shown in the UI. Auto-applied Crest dies (1380/comp)
+       aggregate correctly (9 comps → 12,420). Simple mode unchanged.
+    3. `Quote Total` column in Multi-Part now ALWAYS = `slot.sellTotal` (the whole-quote sell for
+       that qty tier), regardless of freight scope. Direct analog of iQuote `TotalEstimatePrice`.
+       Simple mode unchanged (already the whole quote).
+- Verified via preview export: MP quotes produce one row per (component × qty tier) with
+  per-component Material/Print/Cutting/Handwork/Sell Total and tier-level Qty/Die/Quote Total.
+- Snapshots refresh on next fresh export (endpoint always recomputes).
