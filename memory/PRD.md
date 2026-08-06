@@ -807,3 +807,12 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - Verified via preview export: MP quotes produce one row per (component × qty tier) with
   per-component Material/Print/Cutting/Handwork/Sell Total and tier-level Qty/Die/Quote Total.
 - Snapshots refresh on next fresh export (endpoint always recomputes).
+
+### 2026-02-XX (fork) — Report Qty column: use per-component pcs count (revert) ✅
+- Previous change tried to force `Qty` to raw set qty; that broke Multi-Part reads because
+  a Matched Set at set qty=1 with pcsPerSet [1,1,2] showed 1,1,1 (uniform) instead of
+  1,1,2 (per-component pcs), while iQuote's `Quantity` column stores per-product production
+  pcs. Reverted `_compute_report_rows` MP loop to pass `pc.qty` (engine's pcs-multiplied
+  per-component count) as the `Qty` column, matching iQuote semantics for direct row-level
+  comparison. Individual mode was always correct (its rows already carried per-component
+  raw pcs). Die tier-aggregate and Quote Total tier-total changes retained.

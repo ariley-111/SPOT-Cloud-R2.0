@@ -722,50 +722,26 @@ async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, 
             data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
             bom = state.get("bomItems") or []
             by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
-            # Map itemId → raw set qty from the component's own stored qtys, so
-            # Individual mode preserves per-component qty divergence while
-            # Matched Set uses the same set qty across all components.
-            pricing_mode = state.get("pricingMode") or "Matched Set"
-            top_qtys_state = state.get("qtys") or []
             per_job = (state.get("freightScope") == "Per Job")
             for slot in (data.get("slots") or []):
-                slot_idx = slot.get("slot")
+                per_comp = slot.get("perComponent") or []
                 # Slot-level roll-ups so per-component report rows can display
                 # the whole-quote figures at this qty tier (matches iQuote's
                 # TotalEstimatePrice repeated per row + right-rail Die aggregate).
-                per_comp = slot.get("perComponent") or []
                 tier_die = _n(slot.get("dieLineCost")) + sum(_n(pc.get("dieEmbedded")) for pc in per_comp)
                 tier_total = slot.get("sellTotal")
-                # Raw set qty for this slot (Matched Set uses top-level qtys[slot];
-                # Individual uses the component's own qtys[slot] — see below).
-                try:
-                    top_raw_qty = int(top_qtys_state[slot_idx]) if (
-                        slot_idx is not None and slot_idx < len(top_qtys_state)
-                        and top_qtys_state[slot_idx] not in (None, "")) else None
-                except (TypeError, ValueError):
-                    top_raw_qty = None
                 for pc in per_comp:
                     if pc.get("error"):
                         continue
                     ist = by_id.get(pc.get("itemId") or "", {})
-                    # Individual mode: prefer the component's own raw qty at this
-                    # slot; fall back to the set qty. Matched Set: set qty applies
-                    # uniformly.
-                    if pricing_mode == "Individual":
-                        iqs = ist.get("qtys") or []
-                        try:
-                            raw_qty = int(iqs[slot_idx]) if (
-                                slot_idx is not None and slot_idx < len(iqs)
-                                and iqs[slot_idx] not in (None, "")) else top_raw_qty
-                        except (TypeError, ValueError):
-                            raw_qty = top_raw_qty
-                    else:
-                        raw_qty = top_raw_qty
+                    # Qty column = engine's per-component pcs count (= set_qty ×
+                    # pcsPerSet in Matched Set, or the component's own row qty in
+                    # Individual). Matches iQuote's `Quantity` per product, so
+                    # every row is directly comparable between the two exports.
                     rows.append(_report_row(
                         q, state, pc.get("desc"), ist, pc,
                         quote_total=tier_total,
                         per_job_freight=per_job,
-                        raw_qty_override=raw_qty,
                         tier_die_override=tier_die))
         else:
             data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)
