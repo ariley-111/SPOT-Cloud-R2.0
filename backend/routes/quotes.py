@@ -433,6 +433,34 @@ _REPORT_COLUMNS = [
     "iQuote $", "Δ $", "Δ %",
 ]
 
+# BUMP THIS STRING every time the report semantics change so the "Build Info"
+# sheet immediately reveals whether prod is running the latest code. If a user
+# reports the report is still "wrong" after a redeploy, open the Build Info
+# tab first — if the tag doesn't match the one in this source file, prod is on
+# stale code and the redeploy didn't actually publish.
+_REPORT_BUILD_TAG = "2026-02-report-v3-qty-pcs-tierdie-tiersell"
+
+
+def _append_build_info_sheet(wb) -> None:
+    """Attach a small 'Build Info' sheet to a testing-report workbook so users
+    can verify at a glance which code version produced the export.
+    Semantics we currently guarantee (per _REPORT_BUILD_TAG):
+      • Qty column       = per-component pcs (set_qty × pcsPerSet)
+      • Die column (MP)  = tier-aggregate  (slot.dieLineCost + Σ dieEmbedded)
+      • Quote Total (MP) = slot.sellTotal  (whole-quote sell for the tier)
+    """
+    from openpyxl.styles import Font
+    meta = wb.create_sheet("Build Info")
+    meta["A1"] = "Report Build Tag"; meta["B1"] = _REPORT_BUILD_TAG
+    meta["A2"] = "Generated (UTC)";  meta["B2"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    meta["A3"] = "Qty column";       meta["B3"] = "per-component pcs (set_qty × pcsPerSet)"
+    meta["A4"] = "Die column (MP)";  meta["B4"] = "tier-aggregate (slot.dieLineCost + Σ dieEmbedded)"
+    meta["A5"] = "Quote Total (MP)"; meta["B5"] = "slot.sellTotal (whole-quote sell at tier)"
+    for r in range(1, 6):
+        meta.cell(row=r, column=1).font = Font(bold=True)
+    meta.column_dimensions["A"].width = 22
+    meta.column_dimensions["B"].width = 60
+
 
 def _n(x) -> float:
     try:
@@ -826,6 +854,8 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     for i, col in enumerate(_REPORT_COLUMNS, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = max(11, min(24, len(col) + 3))
 
+    _append_build_info_sheet(wb)
+
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -928,6 +958,8 @@ async def testing_report_from_json(
     ws.freeze_panes = "A2"
     for i, col in enumerate(_REPORT_COLUMNS, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = max(11, min(24, len(col) + 3))
+
+    _append_build_info_sheet(wb)
 
     buf = BytesIO()
     wb.save(buf)
