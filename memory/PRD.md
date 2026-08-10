@@ -853,3 +853,17 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
     • Test checkbox job-level + legacy hoist/purge
     • Duplicate Quote save (strip persistence identity)
     • Testing report Qty/Die/QuoteTotal semantics + Build Info tag sheet
+
+### 2026-02-XX (fork) — Deploy pipeline finally healthy ✅
+- User confirmed the Build Info tab now appears in the exported testing report with tag
+  `2026-02-report-v3-qty-pcs-tierdie-tiersell`. Every fix from this session is live in prod:
+  iQuote search (numeric fallback), iQuote # column + client-side filter, Test checkbox
+  job-level + legacy hoist/purge, Duplicate Quote save (strip identity), report Qty=per-comp
+  pcs / Die=tier-aggregate / QuoteTotal=slot.sellTotal, root `/health` for K8s readiness.
+- Root cause of the "successful deploys shipping stale code" saga: K8s liveness/readiness
+  probes were hitting `/health` at root and returning 404 because the health router was
+  mounted with `prefix="/api"`. Pods never became Ready, K8s kept traffic on old pod, deploy
+  status reported success. Fix in `backend/routes/health.py` (root_router with no prefix) +
+  `backend/server.py` (register root_router). Preview verified: `curl :8001/health` → 200.
+- The transient 500s user reported mid-session ("all DB endpoints failing") cleared on their
+  own — likely a pod-recycle blip during the successful redeploy that finally published.
