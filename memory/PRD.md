@@ -867,3 +867,16 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   `backend/server.py` (register root_router). Preview verified: `curl :8001/health` → 200.
 - The transient 500s user reported mid-session ("all DB endpoints failing") cleared on their
   own — likely a pod-recycle blip during the successful redeploy that finally published.
+
+### 2026-02-XX (fork) — Report qty heal + Saved-tab drafts filter ✅
+- **Report qty heal** in `_mp_engine_payload` (`backend/routes/quotes.py`): reconstruct the true
+  set-qtys from each bomItem's `state.qtys[i] / pcsPerSet`, take the MIN across components
+  (a corrupted component can only shift its own qtys UP), and use that as the engine's
+  top-level `qtys`. Detects and repairs legacy corruption where the top-level `state.qtys`
+  got saved as the pre-multiplied max-pcsPerSet version (Duplicate-Quote-bug era). Reports
+  now produce correct Qty column regardless of stored corruption. `_REPORT_BUILD_TAG` bumped
+  to `2026-02-report-v4-qty-heal`. Smoke-tested with a corrupted-state fixture: `state.qtys`
+  stored as `[2,1000,2000,4000]` still produces the correct `[1,1,2]` at slot 0.
+- **Saved tab drafts filter** in `LoadQuoteModal.jsx`: `filtered` memo now excludes rows
+  whose lifecycle `status === "draft"` (or `state.quoteStatus === "draft"`) when the Saved
+  tab is active. Draft rows remain visible on the Drafts tab as before.

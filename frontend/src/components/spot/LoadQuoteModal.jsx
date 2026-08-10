@@ -184,6 +184,12 @@ export default function LoadQuoteModal({ onClose }) {
   }, [tab, scope]);
 
   const filtered = useMemo(() => items.filter((it) => {
+    // Saved Quotes tab must exclude items whose lifecycle status is still
+    // "draft" — those are quotes-collection rows that were persisted but never
+    // finalized. They belong on the Drafts tab visually.
+    if (tab === "saved" && (it.status || it.state?.quoteStatus) === "draft") {
+      return false;
+    }
     if (!q.trim()) return true;
     const t = q.toLowerCase();
     const st = it.state || {};
@@ -203,7 +209,7 @@ export default function LoadQuoteModal({ onClose }) {
       (it.owner_name || "").toLowerCase().includes(t) ||          // owner first name
       iqStr.includes(t)                                           // iQuote #
     );
-  }), [items, q]);
+  }), [items, q, tab]);
 
   const myUserId = currentUser?.id;
 
