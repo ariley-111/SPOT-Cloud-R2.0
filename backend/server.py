@@ -44,6 +44,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def no_cache_api_responses(request, call_next):
+    """Force browsers to never cache /api/* responses. This prevents the
+    long-standing "I just redeployed but the app still shows old data"
+    problem where downloads (Excel reports) and JSON responses were
+    served from the browser's disk cache after a deploy."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Routers
 app.include_router(health_routes.router)
 app.include_router(health_routes.root_router)
