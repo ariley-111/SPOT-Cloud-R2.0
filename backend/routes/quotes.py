@@ -438,7 +438,7 @@ _REPORT_COLUMNS = [
 # reports the report is still "wrong" after a redeploy, open the Build Info
 # tab first — if the tag doesn't match the one in this source file, prod is on
 # stale code and the redeploy didn't actually publish.
-_REPORT_BUILD_TAG = "2026-02-report-v4-qty-heal"
+_REPORT_BUILD_TAG = "2026-02-report-v5-deploy-force"
 
 
 def _append_build_info_sheet(wb) -> None:

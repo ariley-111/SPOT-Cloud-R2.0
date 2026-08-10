@@ -63,5 +63,17 @@ async def root_health():
     """K8s liveness/readiness probe target. Must live at root (no /api prefix)
     so the pod is marked Ready and the platform routes traffic to the new
     revision. Returns a light payload — do not add DB lookups here or the
-    probe will flap under load."""
-    return {"status": "ok", "service": "SPOT Cloud", "version": SPOT_CLOUD_VERSION}
+    probe will flap under load. Includes report build tag so curling /health
+    from the deployed URL tells us instantly whether the new image shipped."""
+    report_tag = None
+    try:
+        from routes.quotes import _REPORT_BUILD_TAG  # type: ignore
+        report_tag = _REPORT_BUILD_TAG
+    except Exception:
+        pass
+    return {
+        "status": "ok",
+        "service": "SPOT Cloud",
+        "version": SPOT_CLOUD_VERSION,
+        "report_build_tag": report_tag,
+    }
