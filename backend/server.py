@@ -46,6 +46,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(health_routes.router)
+app.include_router(health_routes.root_router)
 app.include_router(auth_routes.router)
 app.include_router(auth_entra_routes.router)
 app.include_router(customers_routes.router)

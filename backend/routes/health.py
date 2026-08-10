@@ -4,6 +4,12 @@ from fastapi import APIRouter
 from engine import CALIBRATION_BASELINE
 
 router = APIRouter(prefix="/api", tags=["health"])
+# Kubernetes liveness/readiness probes hit `/health` (no /api prefix). Without
+# this a probe returns 404 → the new pod never becomes Ready → traffic keeps
+# going to the old pod even though the platform reports "deployment success".
+# That silent-stale-deploy failure mode is exactly what we hit; keep this route
+# in place unconditionally.
+root_router = APIRouter(tags=["health"])
 
 SPOT_CLOUD_VERSION = "0.2.0-phase2"
 _started_at = datetime.now(timezone.utc)
@@ -50,3 +56,12 @@ async def version():
 async def calibration_baseline():
     """Read-only display of the D-110 FINAL baseline. Locked target for engine parity."""
     return CALIBRATION_BASELINE
+
+
+@root_router.get("/health")
+async def root_health():
+    """K8s liveness/readiness probe target. Must live at root (no /api prefix)
+    so the pod is marked Ready and the platform routes traffic to the new
+    revision. Returns a light payload — do not add DB lookups here or the
+    probe will flap under load."""
+    return {"status": "ok", "service": "SPOT Cloud", "version": SPOT_CLOUD_VERSION}

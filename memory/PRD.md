@@ -831,3 +831,25 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   duplicating, force new estNum, `estNumAuto:true`, `quoteStatus:"draft"`. Now Save creates
   a genuinely new quote row.
 - ⚠️ Preview-only. Redeploy to prod.
+
+### 2026-02-XX (fork) — ROOT CAUSE of stale-deploy: missing /health at root ✅ P0
+- Every past "successful deploy" that shipped stale code is explained by K8s liveness/readiness
+  probes hitting `GET /health` (no /api prefix) at `127.0.0.1:8001` and getting 404 because the
+  health router was mounted with `prefix="/api"`. When a new pod's readiness probe never returns
+  2xx, Kubernetes does NOT flip traffic to that pod — the old pod keeps serving requests, and
+  the platform reports "deploy success" because the container did start. That is the silent-
+  stale-deploy failure the user has been fighting across multiple sessions (missing Build Info
+  sheet in prod exports confirmed).
+- Deploy log evidence: `INFO: 127.0.0.1:XXXX - "GET /health HTTP/1.0" 404 Not Found` (repeated
+  every 5s) + `nginx: connect() failed while connecting to upstream .../health`.
+- Fix: add a root-level `/health` handler in `backend/routes/health.py` (`root_router`, no
+  prefix) mounted alongside the existing `/api/health` router in `server.py`. Payload kept
+  intentionally lightweight (no DB lookups) so the probe cannot flap under load.
+- Verified locally: `curl http://localhost:8001/health` → 200 with JSON `{status:"ok", ...}`.
+  Both `/health` and `/api/health` respond correctly. Once the user redeploys, K8s will mark
+  the new pod Ready and every fix from this session finally reaches prod:
+    • iQuote search numeric fallback
+    • iQuote # column + client-side filter
+    • Test checkbox job-level + legacy hoist/purge
+    • Duplicate Quote save (strip persistence identity)
+    • Testing report Qty/Die/QuoteTotal semantics + Build Info tag sheet
