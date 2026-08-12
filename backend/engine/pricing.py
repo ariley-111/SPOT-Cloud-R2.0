@@ -316,7 +316,7 @@ GRADE_LINER_DEFAULTS = {
     "275": {"outer": 69, "inner": 69, "medium": 26},
     "350": {"outer": 90, "inner": 90, "medium": 26},
 }
-FLUTE_TAKEUP = {"B": 1.36, "C": 1.44, "E": 1.27}
+FLUTE_TAKEUP = {"B": 1.36, "C": 1.44, "E": 1.27, "E/B": 1.27}
 SKID_SIZES = {
     "S": {"label": "Small (40x48)", "w": 40, "l": 48, "weight": 75},
     "L": {"label": "Large (51x72)", "w": 51, "l": 72, "weight": 100},

@@ -6,8 +6,8 @@
  * pattern (legacy `updateAllFreight`, L4314).
  */
 
-const FLUTE_CALIPERS = { E: 0.0625, B: 0.125, C: 0.1875, "B/C": 0.236 };
-const FLUTE_TAKEUP = { B: 1.36, C: 1.44, E: 1.27 };
+const FLUTE_CALIPERS = { E: 0.0625, B: 0.125, C: 0.1875, "B/C": 0.236, "E/B": 0.0625 };
+const FLUTE_TAKEUP = { B: 1.36, C: 1.44, E: 1.27, "E/B": 1.27 };
 
 // Default liner basis weights (lbs/MSF) by Mullen grade.
 const GRADE_LINER_DEFAULTS = {

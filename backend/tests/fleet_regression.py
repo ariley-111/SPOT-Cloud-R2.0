@@ -213,6 +213,22 @@ def main() -> int:
         print(f"ERROR: xlsx not found at {XLSX_PATH}", file=sys.stderr)
         return 1
 
+    # Option-C freeze: this regression harness measures parity vs the D-110 FINAL
+    # baseline, which was calibrated with E-flute upcharge = $0/MSF. In R2.x we
+    # restored $3/MSF for E and added E/B at $6/MSF as a deliberate business
+    # decision. To keep the D-110 R² comparable, we temporarily zero out those
+    # upcharges here so the fleet re-runs under the same conditions the baseline
+    # was set under. This is a scientific-reproducibility knob, NOT a real
+    # pricing rollback — production pricing keeps the restored upcharges.
+    from engine.core import ENGINE as _ENGINE
+    _saved = {k: _ENGINE["flute_rules"][k]["flute_upcharge_per_msf"]
+              for k in _ENGINE["flute_rules"]}
+    _ENGINE["flute_rules"]["E"]["flute_upcharge_per_msf"] = 0
+    if "E/B" in _ENGINE["flute_rules"]:
+        _ENGINE["flute_rules"]["E/B"]["flute_upcharge_per_msf"] = 0
+    print("[fleet-regression] D-110 freeze active: E and E/B upcharges pinned to $0 "
+          "for R² comparison. Production values (E=$3, E/B=$6) unaffected.")
+
     print(f"Reading {XLSX_PATH} ...")
     rows = read_xlsx(XLSX_PATH)
     print(f"  rows: {len(rows)}")

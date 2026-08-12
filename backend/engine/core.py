@@ -83,8 +83,9 @@ ENGINE: Dict[str, Any] = {
     "flute_rules": {
         "B": {"wall_type": "singlewall", "flute_upcharge_per_msf": 0},
         "C": {"wall_type": "singlewall", "flute_upcharge_per_msf": 0},
-        "E": {"wall_type": "singlewall", "flute_upcharge_per_msf": 0},  # D-110: $3→$0
+        "E": {"wall_type": "singlewall", "flute_upcharge_per_msf": 3},  # restored from D-110's $0 back to $3
         "B/C": {"wall_type": "doublewall", "flute_upcharge_per_msf": 0},
+        "E/B": {"wall_type": "singlewall", "flute_upcharge_per_msf": 6},  # premium E-flute variant; reuses E's sheet library
     },
     "msf_tiers": [
         {"name": "0-9", "min": 0, "maxExclusive": 10},
@@ -347,7 +348,7 @@ for g in SHEET_GROUPS:
 # ═══════════════════════════════════════════════════════════════
 # CONSTANTS (verbatim L92-165)
 # ═══════════════════════════════════════════════════════════════
-FLUTE_CALIPERS = {"E": 0.0625, "B": 0.125, "C": 0.1875, "B/C": 0.236}
+FLUTE_CALIPERS = {"E": 0.0625, "B": 0.125, "C": 0.1875, "B/C": 0.236, "E/B": 0.0625}
 PRINT_SPEEDS = {"Gloss": 75, "Satin": 75, "OnQ Styrene": 50, "OnQ Lightbox": 40}
 CAD_SETUP = {"Simple": 8, "Standard": 25, "Complex": 22}
 CAD_FALLBACK = {"Simple": 2, "Standard": 2, "Complex": 4}

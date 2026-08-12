@@ -262,7 +262,7 @@ async def import_csv(rows: List[Dict[str, Any]], user_email: str,
 
 
 # ─── Validation ─────────────────────────────────────────────────────────
-_ALLOWED_FLUTES = {"E", "B", "C", "B/C", "EE", "EB"}
+_ALLOWED_FLUTES = {"E", "B", "C", "B/C", "E/B", "EE", "EB"}
 
 
 def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:

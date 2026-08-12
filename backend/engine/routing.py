@@ -21,6 +21,18 @@ from .core import (
 )
 
 
+# Some flute codes share a physical sheet library with another flute. Right now
+# E/B is a pricing variant of E-flute (same singlewall stock, higher upcharge),
+# so any sheet-library lookup keyed by flute must alias E/B → E. Keeping this
+# in ONE helper prevents each of the four APPROVED_SHEETS filter sites from
+# drifting out of sync as new flutes get added.
+_SHEET_FLUTE_ALIAS = {"E/B": "E"}
+
+
+def sheet_lookup_flute(flute: str) -> str:
+    return _SHEET_FLUTE_ALIAS.get(flute, flute)
+
+
 def select_bobst_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any],
                        total_qty: int, assumptions: Dict[str, Any]) -> Dict[str, Any]:
     """D-123 Bobst-only sheet selection — custom imposition with mill-min-buy scaling."""
@@ -175,9 +187,10 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
         use_medium = medium_override or board_spec["medium"]
         results = []
         fb_grade = get_grade_fallback(board_spec["boardGrade"])
+        _sf = sheet_lookup_flute(board_spec["flute"])
         for sh in APPROVED_SHEETS:
             grade_match = sh["g"] == board_spec["boardGrade"] or (fb_grade and sh["g"] == fb_grade)
-            if (sh["f"] != board_spec["flute"] or not grade_match or
+            if (sh["f"] != _sf or not grade_match or
                 sh["ol"] != board_spec["outsideLiner"] or sh["il"] != board_spec["insideLiner"] or
                 sh["md"] != use_medium):
                 continue
@@ -232,9 +245,10 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
     def get_available_mediums() -> Set[str]:
         meds = set()
         fb_grade = get_grade_fallback(board_spec["boardGrade"])
+        _sf = sheet_lookup_flute(board_spec["flute"])
         for sh in APPROVED_SHEETS:
             grade_match = sh["g"] == board_spec["boardGrade"] or (fb_grade and sh["g"] == fb_grade)
-            if (sh["f"] == board_spec["flute"] and grade_match and
+            if (sh["f"] == _sf and grade_match and
                 sh["ol"] == board_spec["outsideLiner"] and sh["il"] == board_spec["insideLiner"]):
                 meds.add(sh["md"])
         return meds
@@ -280,8 +294,9 @@ def auto_select_sheet(one_up_w: float, one_up_l: float, board_spec: Dict[str, An
     while upgrade_grade:
         upgrade_adder = active_grade_adders().get(upgrade_grade, 0)
         upg_results = []
+        _sf = sheet_lookup_flute(board_spec["flute"])
         for sh in APPROVED_SHEETS:
-            if (sh["f"] != board_spec["flute"] or sh["g"] != upgrade_grade or
+            if (sh["f"] != _sf or sh["g"] != upgrade_grade or
                 sh["ol"] != board_spec["outsideLiner"] or sh["il"] != board_spec["insideLiner"] or
                 sh["md"] != board_spec["medium"]):
                 continue
@@ -448,11 +463,12 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
             })
 
         # Candidates: stock sheets within Crest envelope
+        _sf = sheet_lookup_flute(board_spec["flute"])
         for sh in APPROVED_SHEETS:
             if sh["w"] > CREST_MAX_W or sh["l"] > CREST_MAX_L:
                 continue
             gm = sh["g"] == board_spec["boardGrade"] or (fb_grade and sh["g"] == fb_grade)
-            if (sh["f"] != board_spec["flute"] or not gm or
+            if (sh["f"] != _sf or not gm or
                 sh["ol"] != board_spec["outsideLiner"] or
                 sh["il"] != board_spec["insideLiner"] or sh["md"] != board_spec["medium"]):
                 continue

@@ -309,10 +309,12 @@ async def sheet_availability(
     """Return which outside/inside liners have approved stock sheets for the given
     grade/flute/medium combo. Used by the frontend to render the green stock-availability
     dot on liner tiles (legacy spot_r1_5.jsx L5983)."""
+    # E/B is a premium E-flute variant that shares E's stocked sheets — alias for lookup.
+    lookup_flute = "E" if flute == "E/B" else flute
     fb_grade = get_grade_fallback(boardGrade)
     ol_set, il_set = set(), set()
     for sh in APPROVED_SHEETS:
-        if sh["f"] != flute or sh["md"] != medium:
+        if sh["f"] != lookup_flute or sh["md"] != medium:
             continue
         if sh["g"] != boardGrade and not (fb_grade and sh["g"] == fb_grade):
             continue
@@ -333,14 +335,15 @@ async def grade_availability(
     Returns: {"stocked": [direct-stocked grades], "viaFallback": [ECT grades whose
               Mullen-equiv is stocked]}.
     """
+    lookup_flute = "E" if flute == "E/B" else flute
     direct, via_fb = set(), set()
     stocked = set()
     for sh in APPROVED_SHEETS:
-        if sh["f"] != flute or sh["md"] != medium:
+        if sh["f"] != lookup_flute or sh["md"] != medium:
             continue
         stocked.add(sh["g"])
     for sh in APPROVED_SHEETS:
-        if sh["f"] != flute or sh["md"] != medium:
+        if sh["f"] != lookup_flute or sh["md"] != medium:
             continue
         direct.add(sh["g"])
     # ECT → Mullen fallback: e.g. ECT 32 → 200#. If 200# is stocked, ECT 32 should

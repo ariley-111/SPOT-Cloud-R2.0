@@ -168,7 +168,7 @@ export function applyState(patch) {
 
 // ─── Lookup tables ──────────────────────────────────────────────
 export const BOX_STYLES   = ["RSC", "FOL", "D/C Tray", "Mailer", "5PF"];
-export const FLUTES       = ["B", "C", "E", "B/C"];
+export const FLUTES       = ["B", "C", "E", "B/C", "E/B"];
 
 // ─── Board grade lists — legacy parity (spot_r1_5.jsx L100-130) ───
 // Singlewall: B/C/E flutes pull from this list.

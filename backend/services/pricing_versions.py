@@ -124,7 +124,32 @@ async def ensure_initialized() -> str:
     active_id = await get_active_version_id() or base_id
     if active_id:
         await backfill_quotes(active_id)
+        await _sync_flute_rules_to_engine(active_id)
     return active_id
+
+
+async def _sync_flute_rules_to_engine(active_id: str) -> None:
+    """One-shot heal: the active pricing version's `flute_rules` was snapshotted
+    from an earlier ENGINE state (D-110: E upcharge $0, no E/B). When ENGINE
+    changes flute upcharges or adds a new flute (E/B), the DB snapshot lags and
+    /api/engine/manifest keeps returning the stale rules. This bumps the DB
+    snapshot to match code whenever the two diverge on flute_rules. All other
+    PRICING_KEYS (base_matrix, adders, etc.) stay untouched — those ARE
+    supplier-driven and must stay versioned."""
+    from engine.core import ENGINE
+    v = await get_version(active_id)
+    if not v or not v.get("config"):
+        return
+    live = ENGINE.get("flute_rules") or {}
+    stored = (v.get("config") or {}).get("flute_rules") or {}
+    if live == stored:
+        return
+    await db[COL_PRICING_VERSIONS].update_one(
+        {"id": active_id},
+        {"$set": {"config.flute_rules": live, "updated_at": _now()}},
+    )
+    logger.info(f"pricing_versions: synced flute_rules on active version {active_id} "
+                f"(stored={list(stored.keys())} -> live={list(live.keys())})")
 
 
 # ─── Create / activate (admin importer, Phase 2 uses these) ──────────────────
