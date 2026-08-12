@@ -24,10 +24,12 @@ async def health():
     # latest fixes or a stale image.
     features: list[str] = []
     col_count = 0
+    report_tag = None
     try:
-        from routes.quotes import _REPORT_COLUMNS  # type: ignore
+        from routes.quotes import _REPORT_COLUMNS, _REPORT_BUILD_TAG  # type: ignore
         col_count = len(_REPORT_COLUMNS)
         features = [c for c in _REPORT_COLUMNS if c in ("CAD Method", "Cutter Basis")]
+        report_tag = _REPORT_BUILD_TAG
     except Exception:
         pass
     return {
@@ -39,6 +41,7 @@ async def health():
         "phase": "Phase 2 — Backend APIs",
         "report_columns_new": features,  # empty → stale image, present → fresh
         "report_column_count": col_count,  # should be 45 with fix, 43 without
+        "report_build_tag": report_tag,  # fingerprint of the running code build
     }
 
 
