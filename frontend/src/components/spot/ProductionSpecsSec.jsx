@@ -336,6 +336,7 @@ export default function ProductionSpecsSec({ result }) {
               <div style={{ display: "flex", gap: 2 }}>
                 <Tile label="Film" active={s.tapeType === "Film" || s.tapeType === "Clear"}      onClick={() => setField("tapeType", "Film")} small tint="#14b8a6" data-testid="tile-tapetype-film" />
                 <Tile label="Foam" active={s.tapeType === "Foam" || s.tapeType === "Reinforced"} onClick={() => setField("tapeType", "Foam")} small tint="#14b8a6" data-testid="tile-tapetype-foam" />
+                <Tile label="Duraco Red" active={s.tapeType === "Duraco Red"} onClick={() => setField("tapeType", "Duraco Red")} small tint="#14b8a6" data-testid="tile-tapetype-duracored" />
               </div>
             </F>
           )}

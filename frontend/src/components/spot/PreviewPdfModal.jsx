@@ -117,7 +117,9 @@ export default function PreviewPdfModal({ onClose }) {
   if (s.fscEnabled) specBits.push("FSC");
   specBits.push(printShort(s));
   if (s.tape === "Yes") {
-    const tType = (s.tapeType === "Foam" || s.tapeType === "Reinforced") ? "Foam" : "Film";
+    const tType = s.tapeType === "Clear" ? "Film"
+      : s.tapeType === "Reinforced" ? "Foam"
+      : (s.tapeType || "Film");
     const nStrips = Number(s.tapeStrips || 1);
     const tLen = Number(s.tapeStripLength || 0);
     let tp = `${tType} ${nStrips} strip${nStrips === 1 ? "" : "s"}`;

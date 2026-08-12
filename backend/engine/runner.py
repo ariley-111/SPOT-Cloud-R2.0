@@ -28,6 +28,9 @@ ASMP_DEFAULTS: Dict[str, Any] = {
     "crestSetup": {"Standard": 45, "Advanced": 90}, "crestSpeed": 150, "crestAdvSpeedFactor": 0.8,
     "clearTapeCostPerFt": 0.03, "reinforcedTapeCostPerFt": 0.08,
     "tapeFootPerPiece": 2, "tapeCostPerInch": 0.00245, "tapeLaborRate": 30, "tapeStripsPerHour": 60, "side2PrintFactor": 0.6,
+    # Per-tape-type material rates ($/inch). Legacy `tapeCostPerInch` above stays
+    # as a fallback for quotes saved before this split. New quotes lookup by type.
+    "tapeCostPerInch_Film": 0.00502, "tapeCostPerInch_Foam": 0.0174459, "tapeCostPerInch_DuracoRed": 0.0153194,
     "cadDifficulty": "Standard", "totalRuleInches": "0", "under5MsfFee": 0, "cadPerfSpeedFactor": 0.4,
     "crestDieCost": 1200,
     "bobstRate": 350, "bobstSpeed": 3000, "bobstSetup": 45, "bobstMinCharge": 250, "bobstDieCost": 1800,

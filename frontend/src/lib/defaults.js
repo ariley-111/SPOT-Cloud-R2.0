@@ -89,7 +89,7 @@ export const DEFAULT_STATE = Object.freeze({
   gluingComplexity: "Standard",        // Simple|Standard|Complex
 
   tape: "No",
-  tapeType: "Film",                    // Film|Foam
+  tapeType: "Film",                    // Film | Foam | Duraco Red
   tapeStrips: "1",                     // # of strips per piece
   tapeStripLength: "0",                // strip length (inches)
 

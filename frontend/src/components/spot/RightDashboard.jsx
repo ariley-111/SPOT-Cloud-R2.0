@@ -1650,7 +1650,7 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         )}
         {detail && r.assemblyCost > 0 && (
           <SubRow label={s.tape === "Yes"
-            ? `Tape ${(s.tapeType === "Foam" || s.tapeType === "Reinforced") ? "Foam" : "Film"} · ${s.tapeStrips || 1} strip${Number(s.tapeStrips) === 1 ? "" : "s"} × ${s.tapeStripLength || 0}"`
+            ? `Tape ${s.tapeType === "Clear" ? "Film" : s.tapeType === "Reinforced" ? "Foam" : (s.tapeType || "Film")} · ${s.tapeStrips || 1} strip${Number(s.tapeStrips) === 1 ? "" : "s"} × ${s.tapeStripLength || 0}"`
             : `Glue ${labelize(s.gluingComplexity || "Standard")}, ${s.jointsPerPiece || 1} jt @ $23.00/hr`}
             value={fmtMoney(r.assemblyCost)} />
         )}

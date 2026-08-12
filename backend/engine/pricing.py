@@ -146,15 +146,30 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         assembly_cost = max((ord_qty * jppc * per_j / 60) * asmp.get("handGluingRate", 23),
                             asmp.get("handGluingMinCharge", 0))
     elif prod.get("tape") == "Yes":
-        # Tape = MATERIAL + LABOR (like every non-one-time cost in the app).
+        # Tape = MATERIAL + LABOR.
         #   material = total tape inches (qty × #strips × strip length) × $/inch
         #   labor    = strip applications (qty × #strips) / strips-per-hour × $/hr
-        # Legacy material rate ~$0.03/ft = $0.00245/in; labor 60 strips/hr @ $30/hr.
+        # Material rate depends on tape type:
+        #   Film       $0.00502/in    (aliases: Clear)
+        #   Foam       $0.0174459/in  (aliases: Reinforced)
+        #   Duraco Red $0.0153194/in
+        # Legacy quotes without a tapeType-specific rate fall back to
+        # `tapeCostPerInch` ($0.00245).
+        _TAPE_RATE_KEY = {
+            "Film": "tapeCostPerInch_Film",
+            "Clear": "tapeCostPerInch_Film",
+            "Foam": "tapeCostPerInch_Foam",
+            "Reinforced": "tapeCostPerInch_Foam",
+            "Duraco Red": "tapeCostPerInch_DuracoRed",
+        }
         strips = pn(prod.get("tapeStrips"))
         strip_len = pn(prod.get("tapeStripLength"))
         total_strips = ord_qty * strips
         total_inches = total_strips * strip_len
-        tape_material = total_inches * asmp.get("tapeCostPerInch", 0.00245)
+        _t_type = prod.get("tapeType") or "Film"
+        _rate_key = _TAPE_RATE_KEY.get(_t_type, "tapeCostPerInch")
+        _rate = pn(asmp.get(_rate_key, asmp.get("tapeCostPerInch", 0.00245)))
+        tape_material = total_inches * _rate
         labor_rate = asmp.get("tapeLaborRate", 30.0)
         strips_per_hr = asmp.get("tapeStripsPerHour", 60.0) or 60.0
         tape_labor = (total_strips / strips_per_hr) * labor_rate if strips_per_hr > 0 else 0
