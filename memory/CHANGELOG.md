@@ -1833,3 +1833,24 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Fixed userTypedRef → typedValRef leftover in EstimateInfoSec Enter handler
   (found by testing agent iteration 69).
 - Preview-only: needs one more redeploy (frontend heal + typeahead fix).
+
+### 2026-02-13 — Parser Review: Horizontal/Vertical Flip Corr toggle
+- Replaced the two separate `oneUpW` / `oneUpL` text-box asks in the Parser
+  Review modal with a single combined "1-Up Dimensions" card that renders
+  Width × Length inputs plus a ⇄ Flip Corr button — mirroring the main
+  Item Setup Flip Corr UX. When the parser flags corrugate direction as
+  low-confidence, estimators now swap both dimensions atomically in one
+  click instead of hand-editing both fields.
+- File touched: `frontend/src/components/spot/FilesSec.jsx` (visibleAsks
+  render loop). Renders once per scope (job / item idx) via a `renderedOrient`
+  Set so multi-part quotes get one card per component.
+- Convention preserved: Width is 1st dim, Length is 2nd dim. Flip button
+  writes both `edits[job:oneUpW]` and `edits[job:oneUpL]` in the same
+  setEdits call so state stays consistent and the "✓ set" indicator lights
+  up on either input.
+- Only surfaces when `isOrientationAsk(a)` returns true AND the ask key is
+  `oneUpW` or `oneUpL`. Other orientation-flagged asks (flute, grain, etc.)
+  still render as their standard editors with the existing warn styling.
+- Test IDs: `parse-ask-orient-card-{job|item-N}`,
+  `parse-ask-orient-w-{scope}`, `parse-ask-orient-l-{scope}`,
+  `parse-ask-orient-flip-{scope}`, `parse-ask-orient-badge-{scope}`.

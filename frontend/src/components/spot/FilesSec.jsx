@@ -1074,7 +1074,12 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {visibleAsks.map((a, i) => {
+                {(() => {
+                  // Track orientation-swap cards we've already rendered so we don't
+                  // emit both a oneUpW and a oneUpL card — a single Flip Corr card
+                  // (Width × Length + swap button) covers both edits atomically.
+                  const renderedOrient = new Set();
+                  return visibleAsks.map((a, i) => {
                   // Non-editable note (bare string ask or unrecognized field path).
                   if (!a.norm || !a.meta) {
                     const orientNote = isOrientationAsk(a);
@@ -1091,6 +1096,87 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                       </div>
                     );
                   }
+
+                  // Combined orientation card: when the parser flagged corrugate
+                  // direction (oneUpW / oneUpL), render ONE card with both dims
+                  // plus a "Flip Corr" button that swaps them atomically —
+                  // matching the main Item Setup Flip Corr UX.
+                  if (isOrientationAsk(a) && (a.norm.key === "oneUpW" || a.norm.key === "oneUpL")) {
+                    const groupId = a.norm.scope === "item" ? `orient-item-${a.norm.itemIdx}` : "orient-job";
+                    if (renderedOrient.has(groupId)) return null;
+                    renderedOrient.add(groupId);
+
+                    const wNorm = { scope: a.norm.scope, itemIdx: a.norm.itemIdx, key: "oneUpW" };
+                    const lNorm = { scope: a.norm.scope, itemIdx: a.norm.itemIdx, key: "oneUpL" };
+                    const wKey = ekey(wNorm);
+                    const lKey = ekey(lNorm);
+                    const wVal = askCurrentValue(wNorm);
+                    const lVal = askCurrentValue(lNorm);
+                    const editedW = wKey in edits;
+                    const editedL = lKey in edits;
+                    const compName = a.norm.scope === "item"
+                      ? (bomItems[a.norm.itemIdx]?.desc || `Item ${a.norm.itemIdx + 1}`) : null;
+                    const scopeId = a.norm.scope === "item" ? `item-${a.norm.itemIdx}` : "job";
+                    const onFlip = () => setEdits((cur) => ({
+                      ...cur,
+                      [wKey]: lVal == null ? "" : String(lVal),
+                      [lKey]: wVal == null ? "" : String(wVal),
+                    }));
+
+                    return (
+                      <div key={`orient-${scopeId}`} data-testid={`parse-ask-orient-card-${scopeId}`} style={{
+                        padding: "8px 10px",
+                        background: "rgba(245,158,11,0.10)",
+                        border: "1px solid #f59e0b",
+                        borderLeft: "3px solid #f59e0b",
+                        borderRadius: 4,
+                      }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                          <span style={{ fontWeight: 700, color: "var(--spot-text)", fontSize: 12 }}>1-Up Dimensions</span>
+                          <span style={{ fontSize: 10, color: "var(--spot-text3)" }}>Item Setup</span>
+                          <span data-testid={`parse-ask-orient-badge-${scopeId}`}
+                            title="Corrugate direction — the parser wasn't fully confident. Width is first, Length is second. Click Flip Corr to swap if the RFQ implies the opposite orientation."
+                            style={{ fontSize: 10, fontWeight: 800, color: "#b45309", background: "#f59e0b22",
+                            padding: "1px 6px", border: "1px solid #f59e0b", borderRadius: 3, letterSpacing: ".04em" }}>
+                            ⚠ VERIFY ORIENTATION</span>
+                          {compName && <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b",
+                            padding: "0 5px", border: "1px solid #f59e0b55", borderRadius: 2 }}>{compName}</span>}
+                          {(editedW || editedL) && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--spot-green)" }}>✓ set</span>}
+                        </div>
+                        {a.reason && <div style={{ fontSize: 11, color: "var(--spot-text2)", margin: "3px 0 6px" }}>{a.reason}</div>}
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <label style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 600 }}>Width</label>
+                            <input className="sp-input" type="number" step="0.0001" min="0"
+                              data-testid={`parse-ask-orient-w-${scopeId}`}
+                              value={wVal || ""} onChange={(e) => setEdit(wKey, e.target.value)}
+                              style={{ width: 110, borderColor: editedW ? "var(--spot-green)" : undefined }} />
+                          </div>
+                          <div style={{ fontSize: 14, color: "var(--spot-text3)", padding: "0 2px 6px" }}>×</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <label style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 600 }}>Length</label>
+                            <input className="sp-input" type="number" step="0.0001" min="0"
+                              data-testid={`parse-ask-orient-l-${scopeId}`}
+                              value={lVal || ""} onChange={(e) => setEdit(lKey, e.target.value)}
+                              style={{ width: 110, borderColor: editedL ? "var(--spot-green)" : undefined }} />
+                          </div>
+                          <button onClick={onFlip} data-testid={`parse-ask-orient-flip-${scopeId}`}
+                            title="Swap Width ↔ Length (changes corrugation direction — requires customer approval)"
+                            style={{
+                              all: "unset", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                              padding: "5px 8px", borderRadius: 4,
+                              color: "var(--spot-text3)",
+                              background: "transparent",
+                              border: "1px solid var(--spot-border)",
+                              whiteSpace: "nowrap", marginLeft: 4, marginBottom: 2,
+                            }}>
+                            ⇄ Flip Corr
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const k = ekey(a.norm);
                   const compName = a.norm.scope === "item"
                     ? (bomItems[a.norm.itemIdx]?.desc || `Item ${a.norm.itemIdx + 1}`) : null;
@@ -1130,7 +1216,8 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                       />
                     </div>
                   );
-                })}
+                });
+                })()}
               </div>
             </div>
           )}

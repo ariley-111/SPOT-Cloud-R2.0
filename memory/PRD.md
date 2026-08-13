@@ -880,3 +880,16 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 - **Saved tab drafts filter** in `LoadQuoteModal.jsx`: `filtered` memo now excludes rows
   whose lifecycle `status === "draft"` (or `state.quoteStatus === "draft"`) when the Saved
   tab is active. Draft rows remain visible on the Drafts tab as before.
+
+### 2026-02-13 (fork) — Parser Review: Flip Corr toggle for orientation asks ✅
+- **Feature**: In the Parser Review modal, when the AI flags corrugate direction
+  (`oneUpW` / `oneUpL`) as low-confidence, the two separate dimension text-box
+  asks are now consolidated into ONE combined "1-Up Dimensions" card that shows
+  Width × Length side-by-side plus a `⇄ Flip Corr` button — the same UX as the
+  main Item Setup Flip Corr. Clicking Flip swaps both edits atomically.
+- **File**: `frontend/src/components/spot/FilesSec.jsx` (`visibleAsks` render
+  loop, wrapped in IIFE with a `renderedOrient` Set to dedupe per-scope cards).
+- **Convention**: Width = 1st dim, Length = 2nd dim (matches ItemSetupSec).
+  Only fires when `isOrientationAsk(a) && (key === "oneUpW" || key === "oneUpL")`.
+- **Test IDs**: `parse-ask-orient-card-*`, `parse-ask-orient-w-*`,
+  `parse-ask-orient-l-*`, `parse-ask-orient-flip-*`, `parse-ask-orient-badge-*`.
