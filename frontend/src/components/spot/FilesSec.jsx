@@ -718,6 +718,14 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
     });
     const applyJobEditTo = (obj, key, rawVal) => {
       const k = canonField(key);
+      // Special-case: parser-review Print Mode "None" means "no print". Map
+      // it to printReq="No" and clear printMode so the applied quote lands
+      // with print correctly OFF (not "Satin, but None").
+      if (k === "printMode" && rawVal === "None") {
+        obj.printReq = "No";
+        obj.printMode = "";
+        return;
+      }
       const target = FIELD_MAP[k] || k;
       obj[target] = coerceEdit(k, rawVal);
     };
@@ -753,7 +761,12 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
         const es = { ...rawState };
         Object.keys(ie).forEach((k) => {
           if (["type", "pcsPerSet", "desc", "confidence"].includes(k)) return;
-          es[canonField(k)] = coerceEdit(k, ie[k]);
+          const ck = canonField(k);
+          // Print Mode "None" → printReq=No + clear printMode (mirror of job-level path above).
+          if (ck === "printMode" && ie[k] === "None") {
+            es.printReq = "No"; es.printMode = ""; return;
+          }
+          es[ck] = coerceEdit(k, ie[k]);
         });
         // Per-item state: coerce numeric strings, default qtys array, etc.
         const itemQtys = Array.isArray(es.qtys) ? es.qtys.map(String) : [];
@@ -1147,7 +1160,22 @@ function ReviewParseModal({ result, activeState, onClose, onApplySimple, onApply
                           ["pcsPerSet", bomItems[Number(mpTab)]?.pcsPerSet],
                           ["confidence", bomItems[Number(mpTab)]?.confidence],
                         ]);
-                return rowEntries.map(([k, v]) => {
+                // Only surface rows that still need attention. Fields the parser
+                // already extracted a value for are auto-applied silently; the
+                // estimator doesn't need to eyeball a wall of green checkmarks
+                // just to reach the handful of actual asks.
+                const attentionOnly = rowEntries.filter(([, v]) => isFieldNull(v));
+                if (attentionOnly.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={4} style={{ padding: 14, color: "var(--spot-text3)",
+                        fontSize: 12, fontStyle: "italic", textAlign: "center" }}>
+                        No missing fields on this {isMP && mpTab !== "job" ? "component" : "quote"} — parser filled everything. Click Apply to load it.
+                      </td>
+                    </tr>
+                  );
+                }
+                return attentionOnly.map(([k, v]) => {
                   const isNull = isFieldNull(v);
                   // Source key: top-level "k" for job tab; "bomItems[N].state.k" for item tab
                   const srcKey = !isMP || mpTab === "job"
@@ -1218,11 +1246,18 @@ function AskEditor({ meta, field, value, onChange, onPickCustomer, testid }) {
   if (meta.control === "select") {
     const isLiner = field === "outsideLiner" || field === "insideLiner";
     const optLabel = isLiner ? linerLabel : (o) => o;
+    // Print mode gets an extra "None" option in the parser-review dropdown
+    // that maps to printReq="No" on apply. Estimators kept marking print as
+    // Satin just to make the ask disappear — this gives them the correct
+    // out-of-the-box path.
+    const opts = field === "printMode"
+      ? [...(meta.options || []), "None"]
+      : (meta.options || []);
     return (
       <select className="sp-input" data-testid={testid} value={value || ""}
         onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 320 }}>
         <option value="">— choose —</option>
-        {(meta.options || []).map((o) => <option key={o} value={o}>{optLabel(o)}</option>)}
+        {opts.map((o) => <option key={o} value={o}>{optLabel(o)}</option>)}
       </select>
     );
   }
