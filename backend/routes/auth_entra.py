@@ -75,31 +75,32 @@ _STATE_MAX_AGE = 600  # 10 minutes — login should complete well within this
 
 
 def _settings() -> dict:
-    # ALLOWED_EMAIL_DOMAIN accepts a comma-separated list so we can honor the
-    # ongoing @spcoc.com → @standardprinting.com email migration. Estimators
-    # who still sign in with the legacy UPN need to be let through; Entra
-    # does NOT rewrite UPN based on tenant mail-routing, so both domains must
-    # be on this app's allowlist. Once every user has been rotated to the new
-    # domain in Entra, drop spcoc.com from the env var.
-    raw_domains = os.environ.get("ALLOWED_EMAIL_DOMAIN",
-                                 "standardprinting.com,spcoc.com")
+    # Resolve every SSO setting through the integrations overlay so admins
+    # can edit them from Admin Console → Integrations → Microsoft Entra SSO
+    # without a redeploy. Fallback chain: DB override → .env → default.
+    from services.integrations import get_effective
+
+    def _pick(key: str, default: str = "") -> str:
+        return (get_effective(key) or os.environ.get(key, default) or default).strip()
+
+    raw_domains = _pick("ALLOWED_EMAIL_DOMAIN", "standardprinting.com,spcoc.com")
     allowed = {d.strip().lower().lstrip("@") for d in raw_domains.split(",") if d.strip()}
     return {
-        "tenant_id": os.environ.get("ENTRA_TENANT_ID", "").strip(),
-        "client_id": os.environ.get("ENTRA_CLIENT_ID", "").strip(),
-        "client_secret": os.environ.get("ENTRA_CLIENT_SECRET", "").strip(),
+        "tenant_id": _pick("ENTRA_TENANT_ID"),
+        "client_id": _pick("ENTRA_CLIENT_ID"),
+        "client_secret": _pick("ENTRA_CLIENT_SECRET"),
         "app_base_url": os.environ.get("APP_BASE_URL", "").rstrip("/"),
         "allowed_domains": allowed,
         "admin_emails": {
             e.strip().lower()
-            for e in os.environ.get("SSO_ADMIN_EMAILS", "").split(",")
+            for e in _pick("SSO_ADMIN_EMAILS", "").split(",")
             if e.strip()
         },
         # Object ID (GUID) of the "SPOT Quoting System Management" Entra group.
         # Members of this group get role=admin (Admin Console + Board Engine visible).
         # Non-members can still sign in — they just land in estimator UI. Leave
         # blank to disable the group gate (legacy behavior: SSO_ADMIN_EMAILS only).
-        "mgmt_group_id": os.environ.get("ENTRA_MGMT_GROUP_ID", "").strip(),
+        "mgmt_group_id": _pick("ENTRA_MGMT_GROUP_ID"),
     }
 
 

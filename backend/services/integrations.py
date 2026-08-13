@@ -57,6 +57,31 @@ INTEGRATIONS: List[Dict[str, str]] = [
      "env": "IGNITION_SYNC_KEY", "label": "Ignition Sync Key (Bearer)",
      "hint": "Long-lived key Ignition sends as 'Authorization: Bearer <key>'. Rotatable.",
      "type": "secret"},
+    # Microsoft Entra SSO — sign-in and authorization
+    {"provider": "entra", "key": "ENTRA_TENANT_ID",
+     "env": "ENTRA_TENANT_ID", "label": "Entra Tenant ID",
+     "hint": "Directory (tenant) ID GUID from Azure Portal → App Registration.",
+     "type": "text"},
+    {"provider": "entra", "key": "ENTRA_CLIENT_ID",
+     "env": "ENTRA_CLIENT_ID", "label": "Entra Client ID",
+     "hint": "Application (client) ID GUID from the same App Registration.",
+     "type": "text"},
+    {"provider": "entra", "key": "ENTRA_CLIENT_SECRET",
+     "env": "ENTRA_CLIENT_SECRET", "label": "Entra Client Secret",
+     "hint": "Client secret value from App Registration → Certificates & secrets.",
+     "type": "secret"},
+    {"provider": "entra", "key": "ENTRA_MGMT_GROUP_ID",
+     "env": "ENTRA_MGMT_GROUP_ID", "label": "SPOT Management Group Object ID",
+     "hint": "Object ID (GUID) of the 'SPOT Quoting System Management' Entra security group. Members get Admin Console + Board Engine access. Requires 'groups' claim enabled on the App Registration (Token Configuration → Add groups claim → Security groups).",
+     "type": "text"},
+    {"provider": "entra", "key": "ALLOWED_EMAIL_DOMAIN",
+     "env": "ALLOWED_EMAIL_DOMAIN", "label": "Allowed Email Domain(s)",
+     "hint": "Comma-separated list of domains permitted to sign in. Default: standardprinting.com,spcoc.com — drop spcoc.com once UPN migration is complete.",
+     "type": "text"},
+    {"provider": "entra", "key": "SSO_ADMIN_EMAILS",
+     "env": "SSO_ADMIN_EMAILS", "label": "Admin Email Allowlist",
+     "hint": "Comma-separated emails that always get role=admin regardless of group membership (bootstrap escape hatch).",
+     "type": "text"},
 ]
 
 # Provider metadata for the UI status pills
@@ -69,6 +94,8 @@ PROVIDER_META = {
                   "required_keys": []},  # Info only
     "ignition":  {"label": "Ignition Customer Sync", "color": "#f97316",
                   "required_keys": ["IGNITION_SYNC_KEY"]},
+    "entra":     {"label": "Microsoft Entra SSO",    "color": "#0078d4",
+                  "required_keys": ["ENTRA_TENANT_ID", "ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET"]},
 }
 
 # In-memory cache of effective values. Loaded once at startup + on every set.
