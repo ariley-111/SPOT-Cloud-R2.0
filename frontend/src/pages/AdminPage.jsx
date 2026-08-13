@@ -1840,24 +1840,31 @@ const btnSmall = { ...btnStyle, fontSize: 10, padding: "3px 8px" };
 // analytical reports (round-2 iQuote vs SPOT comparison, customer-level
 // pricing drift, etc.) will land as additional cards on this tab.
 function ReportsPanel() {
-  const [busy, setBusy] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [testingBusy, setTestingBusy] = React.useState(false);
+  const [testingMsg, setTestingMsg] = React.useState("");
+  const [analysisBusy, setAnalysisBusy] = React.useState(false);
+  const [analysisMsg, setAnalysisMsg] = React.useState("");
+  const [dateFrom, setDateFrom] = React.useState(twoWeeksAgo);
+  const [dateTo, setDateTo] = React.useState(today);
+  const [statusFilter, setStatusFilter] = React.useState("saved");
 
-  const downloadTestingReport = async () => {
+  const downloadReport = async (url, filenamePrefix, setBusy, setMsg) => {
     setBusy(true); setMsg("");
     try {
       const token = localStorage.getItem("spot_token") || "";
-      const resp = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/quotes/_report/testing.xlsx`,
+      const resp = await fetch(`${process.env.REACT_APP_BACKEND_URL}${url}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
       const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
+      const bloburl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
+      a.href = bloburl;
       const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "").replace(/-/g, "");
-      a.download = `spot-testing-report-${ts}.xlsx`;
+      a.download = `${filenamePrefix}-${ts}.xlsx`;
       document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(bloburl);
       setMsg("✓ Report downloaded");
     } catch (e) {
       setMsg(`✗ ${e.message || e}`);
@@ -1866,6 +1873,32 @@ function ReportsPanel() {
     }
   };
 
+  const downloadTestingReport = () =>
+    downloadReport("/api/quotes/_report/testing.xlsx", "spot-testing-report",
+      setTestingBusy, setTestingMsg);
+
+  const downloadAnalysisReport = () => {
+    const qs = new URLSearchParams({
+      status_filter: statusFilter,
+      ...(dateFrom ? { date_from: dateFrom } : {}),
+      ...(dateTo   ? { date_to:   dateTo   } : {}),
+    }).toString();
+    return downloadReport(`/api/quotes/_report/analysis.xlsx?${qs}`, "spot-analysis-report",
+      setAnalysisBusy, setAnalysisMsg);
+  };
+
+  const cardStyle = {
+    background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
+    borderRadius: 6, padding: 16,
+  };
+  const titleStyle = { fontSize: 13, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6 };
+  const descStyle = { fontSize: 11, color: "var(--spot-text3)", lineHeight: 1.55, marginBottom: 14 };
+  const labelStyle = { fontSize: 10, color: "var(--spot-text3)", textTransform: "uppercase",
+    letterSpacing: ".06em", fontWeight: 700, display: "block", marginBottom: 3 };
+  const inputStyle = { width: "100%", padding: "5px 8px", fontSize: 12,
+    background: "var(--spot-bg)", color: "var(--spot-text)",
+    border: "1px solid var(--spot-border)", borderRadius: 4 };
+
   return (
     <div data-testid="admin-reports">
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "var(--spot-text)" }}>
@@ -1873,31 +1906,80 @@ function ReportsPanel() {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
         gap: 14, maxWidth: 1000 }}>
-        {/* Testing / Comparison Report */}
-        <div style={{ background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
-          borderRadius: 6, padding: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6 }}>
-            SPOT ↔ iQuote Testing Report
-          </div>
-          <div style={{ fontSize: 11, color: "var(--spot-text3)", lineHeight: 1.55, marginBottom: 14 }}>
-            Exports every quote flagged as "Test" (top-right toolbar checkbox) with
-            iQuote #, iQuote Option, and full pricing breakdown. Powers the round-1
-            three-way analysis (iQuote vs SPOT vs Actual). All flagged quotes since
-            the beginning of time are included — filter by date in Excel if needed.
+
+        {/* Testing / Comparison Report — round-1 (three-way with actuals) */}
+        <div style={cardStyle}>
+          <div style={titleStyle}>SPOT ↔ iQuote Testing Report (Round 1)</div>
+          <div style={descStyle}>
+            Every quote flagged as <b>Test</b> (top-right toolbar checkbox) with
+            iQuote #, iQuote Option, and full per-component cost breakdown.
+            Powers the three-way analysis (iQuote vs SPOT vs Actual). No date
+            filter — every flagged quote since the beginning of time is included.
           </div>
           <button data-testid="admin-report-testing-btn" onClick={downloadTestingReport}
-            disabled={busy}
-            style={{ ...btnStyle, background: busy ? "var(--spot-bg3)" : "var(--spot-accent)",
-              color: busy ? "var(--spot-text3)" : "#fff", opacity: busy ? 0.7 : 1 }}>
-            {busy ? "Building…" : "Download .xlsx"}
+            disabled={testingBusy}
+            style={{ ...btnStyle, background: testingBusy ? "var(--spot-bg3)" : "var(--spot-accent)",
+              color: testingBusy ? "var(--spot-text3)" : "#fff", opacity: testingBusy ? 0.7 : 1 }}>
+            {testingBusy ? "Building…" : "Download .xlsx"}
           </button>
-          {msg && (
+          {testingMsg && (
             <div style={{ marginTop: 10, fontSize: 11,
-              color: msg.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)" }}>
-              {msg}
+              color: testingMsg.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)" }}>
+              {testingMsg}
             </div>
           )}
         </div>
+
+        {/* Analysis Report — round-2 (sell-only, filterable) */}
+        <div style={cardStyle}>
+          <div style={titleStyle}>SPOT ↔ iQuote Analysis Report (Round 2)</div>
+          <div style={descStyle}>
+            Exec-facing sell-price comparison. Only quotes marked as <b>Test</b>
+            in the estimator toolbar are included. Every SPOT component with
+            its iQuote crosswalk keys, spec context (board / liners / sheet /
+            print mode / route) and the whole-quote total. No cost breakdown,
+            no actuals — pure iQuote-sell vs SPOT-sell for the requested date
+            slice and status.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div>
+              <span style={labelStyle}>Date from (updated_at)</span>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                data-testid="analysis-date-from" style={inputStyle} />
+            </div>
+            <div>
+              <span style={labelStyle}>Date to</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                data-testid="analysis-date-to" style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <span style={labelStyle}>Quote status</span>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                data-testid="analysis-status-filter" style={inputStyle}>
+                <option value="saved">Saved only (default)</option>
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="won">Won</option>
+                <option value="lost">Lost</option>
+                <option value="hold">Hold</option>
+                <option value="all">All statuses</option>
+              </select>
+            </div>
+          </div>
+          <button data-testid="admin-report-analysis-btn" onClick={downloadAnalysisReport}
+            disabled={analysisBusy}
+            style={{ ...btnStyle, background: analysisBusy ? "var(--spot-bg3)" : "var(--spot-accent)",
+              color: analysisBusy ? "var(--spot-text3)" : "#fff", opacity: analysisBusy ? 0.7 : 1 }}>
+            {analysisBusy ? "Building…" : "Download .xlsx"}
+          </button>
+          {analysisMsg && (
+            <div style={{ marginTop: 10, fontSize: 11,
+              color: analysisMsg.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)" }}>
+              {analysisMsg}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

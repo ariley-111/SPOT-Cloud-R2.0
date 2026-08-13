@@ -67,11 +67,21 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
     if (!s.estNum && !s.custName && !s.itemDesc) {
       pushToast("Add an estimate # or customer first", "warn"); return;
     }
-    // Test flag → iQuote Option required. This is the round-2 analysis join
-    // key; forgetting it drops the quote out of the SPOT↔iQuote crosswalk.
-    if (s.goodForTesting && !(s.iquoteOption || "").trim()) {
-      pushToast("iQuote Option is required when Test is checked — paste the iQuote option description under Project Name", "warn");
-      return;
+    // Test flag → iQuote # AND iQuote Option are both required. These are
+    // the crosswalk join keys for the round-2 SPOT↔iQuote analysis; missing
+    // either one drops the quote out of the report and makes it impossible
+    // to reconcile SPOT's quote to the corresponding iQuote option.
+    if (s.goodForTesting) {
+      const missing = [];
+      if (!(s.iquoteNum || "").toString().trim()) missing.push("iQuote #");
+      if (!(s.iquoteOption || "").trim()) missing.push("iQuote Option");
+      if (missing.length) {
+        pushToast(
+          `${missing.join(" and ")} required when Test is checked — fill it in the toolbar / under Project Name`,
+          "warn",
+        );
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -191,11 +201,22 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
           Test
         </label>
         {s.goodForTesting && (
-          <input data-testid="toolbar-iquote-num" value={s.iquoteNum || ""}
-            onChange={(e) => setField("iquoteNum", e.target.value)}
-            onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, flagBody({ good_for_testing: true })).catch(() => {}); }}
-            placeholder="iQuote #" className="sp-input"
-            style={{ width: 76, fontSize: 11, padding: "3px 6px", marginRight: 2 }} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+            <input data-testid="toolbar-iquote-num" value={s.iquoteNum || ""}
+              onChange={(e) => setField("iquoteNum", e.target.value)}
+              onBlur={() => { if (quoteId) setQuoteTestFlag(quoteId, flagBody({ good_for_testing: true })).catch(() => {}); }}
+              placeholder="iQuote #" className="sp-input"
+              title={!(s.iquoteNum || "").toString().trim()
+                ? "Required — this quote is flagged as Test"
+                : "iQuote quote #"}
+              style={{
+                width: 76, fontSize: 11, padding: "3px 6px", marginRight: 2,
+                border: !(s.iquoteNum || "").toString().trim()
+                  ? "1.5px solid var(--spot-err, #ef4444)" : undefined,
+                background: !(s.iquoteNum || "").toString().trim()
+                  ? "rgba(239,68,68,0.06)" : undefined,
+              }} />
+          </div>
         )}
         {s.goodForTesting && (
           <label data-testid="toolbar-became-job-label" title="Did this iQuote become a job?"

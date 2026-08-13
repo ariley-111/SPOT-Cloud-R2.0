@@ -1,6 +1,7 @@
 """Quote drafts (the 'tabs') + saved quotes."""
 from __future__ import annotations
 import re
+import logging
 from io import BytesIO
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -10,6 +11,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from db import db, COL_QUOTE_DRAFTS, COL_QUOTES, COL_USERS, COL_AUDIT_LOG
+
+logger = logging.getLogger("spot.quotes")
 from models.schemas import (
     Quote, QuoteCreate, QuoteDraft, QuoteDraftCreate, QuoteDraftUpdate, User,
     AuditLogEntry,
@@ -911,6 +914,142 @@ async def testing_report(user: User = Depends(get_current_user)) -> StreamingRes
     # downloaded as the SAME name, so users kept opening a stale earlier copy
     # from Downloads and thought the report was wrong/missing columns.
     fname = f"spot-testing-report-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"',
+                 "Cache-Control": "no-store"},
+    )
+
+
+# Columns for the round-2 Analysis Report — order matches the user's spec.
+# Deliberately shorter than the testing/comparison report (no cost breakdown,
+# no diagnostics) — this feed powers the exec-facing iQuote-vs-SPOT analysis
+# that just needs matching keys + spec context + one bottom-line quote total.
+_ANALYSIS_REPORT_COLUMNS = [
+    "SPOT Estimate #", "iQuote Estimate #", "Became a Job",
+    "Project Name", "Customer", "iQuote Option",
+    "Qty", "Width", "Length", "Board", "Liners", "Sheet",
+    "Print Mode", "Route", "Quote Total",
+]
+
+
+@quotes_router.get("/_report/analysis.xlsx")
+async def analysis_report(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status_filter: str = "saved",
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Round-2 Analysis Report — iQuote vs SPOT sell-only comparison.
+
+    Scope: quotes flagged as `Test` in the toolbar (state.goodForTesting=true).
+    That flag is the estimator's signal that a corresponding iQuote exists to
+    compare against — filtering here keeps the report free of unrelated
+    day-to-day quotes.
+
+    Filters (all optional):
+      • `status_filter`: "saved" (default), "draft", "sent", "won", "lost",
+        "hold", or "all" (skip status filter entirely).
+      • `date_from` / `date_to`: ISO date (YYYY-MM-DD) inclusive-bounds
+        applied to `updated_at`.
+
+    One row per SPOT component. Multi-Part quotes emit one row per tier per
+    component (same shape as the testing report); the Quote Total column
+    carries the whole-quote sell for that tier so pivots by SPOT Estimate #
+    give the correct portfolio number.
+    """
+    if user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    import openpyxl
+    from openpyxl.styles import Font
+
+    # Only quotes flagged for testing — the Test checkbox is the estimator's
+    # signal that this SPOT quote has a corresponding iQuote to compare against.
+    # Anything else is noise for the analysis and would tank the join rate.
+    query: Dict[str, Any] = {"state.goodForTesting": True}
+    if status_filter and status_filter.lower() != "all":
+        query["status"] = status_filter.lower()
+    # updated_at is stored as ISO 8601 string; string range comparison works
+    # because ISO 8601 is lexicographically ordered. `date_to` gets the full
+    # day by extending to end-of-day so a user picking "2026-02-28" as `date_to`
+    # doesn't drop quotes updated later that same day.
+    if date_from or date_to:
+        rng: Dict[str, str] = {}
+        if date_from:
+            rng["$gte"] = f"{date_from}T00:00:00"
+        if date_to:
+            rng["$lte"] = f"{date_to}T23:59:59.999999"
+        query["updated_at"] = rng
+
+    cursor = db[COL_QUOTES].find(query, {"_id": 0}).sort("updated_at", -1)
+    quotes = [d async for d in cursor]
+
+    rows: List[Dict[str, Any]] = []
+    for q in quotes:
+        state = q.get("state") or {}
+        # Customer name: prefer top-level customer_name (canonical, set on save);
+        # fall back to state.custName (draft-only quotes may lack the top-level).
+        cust = q.get("customer_name") or state.get("custName") or ""
+        try:
+            full = await _compute_report_rows(q, user)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"analysis_report: skip quote {q.get('id')}: {e}")
+            continue
+        for r in full:
+            rows.append({
+                "SPOT Estimate #": r.get("SPOT Estimate #", ""),
+                "iQuote Estimate #": r.get("iQuote #", ""),
+                "Became a Job": r.get("Became a Job", ""),
+                "Project Name": r.get("Project Name", ""),
+                "Customer": cust,
+                "iQuote Option": r.get("iQuote Option", ""),
+                "Qty": r.get("Qty", ""),
+                "Width": r.get("One-Up W", ""),
+                "Length": r.get("One-Up L", ""),
+                "Board": r.get("Board", ""),
+                "Liners": r.get("Liners", ""),
+                "Sheet": r.get("Sheet", ""),
+                "Print Mode": r.get("Print Mode", ""),
+                "Route": r.get("Route", ""),
+                "Quote Total": r.get("Quote Total", ""),
+            })
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Analysis"
+    ws.append(_ANALYSIS_REPORT_COLUMNS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        ws.append([row.get(c, "") for c in _ANALYSIS_REPORT_COLUMNS])
+    ws.freeze_panes = "A2"
+    for i, col in enumerate(_ANALYSIS_REPORT_COLUMNS, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = max(11, min(28, len(col) + 3))
+
+    # Small metadata sheet — makes it obvious which slice of the DB this file
+    # represents 2 months from now when someone opens it in a folder.
+    meta = wb.create_sheet("Filters")
+    meta.append(["Setting", "Value"])
+    meta.append(["Scope", "Only quotes with Test flag = ON"])
+    meta.append(["Status filter", status_filter])
+    meta.append(["Date from", date_from or "(no lower bound)"])
+    meta.append(["Date to", date_to or "(no upper bound)"])
+    meta.append(["Quotes matched", len(quotes)])
+    meta.append(["Rows emitted", len(rows)])
+    meta.append(["Generated (UTC)", datetime.now(timezone.utc).isoformat()])
+    meta.append(["Generated by", user.email])
+    for cell in meta[1]:
+        cell.font = Font(bold=True)
+    meta.column_dimensions["A"].width = 22
+    meta.column_dimensions["B"].width = 40
+
+    _append_build_info_sheet(wb)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"spot-analysis-report-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
