@@ -1,6 +1,7 @@
 /* eslint-disable */
 import React from "react";
 import { useQuote } from "../../context/QuoteContext";
+import { useAuth } from "../../context/AuthContext";
 import Sec, { F } from "./Sec";
 import Tile, { Num } from "./Tile";
 import { fmtNum } from "../../lib/format";
@@ -435,6 +436,11 @@ function RatePanel({ title, color, rows, dataTestId }) {
  *    • Approved Sheets summary chips (spec → count) */
 export function BoardEngineSec({ result }) {
   const { sec, toggleSec, active } = useQuote();
+  const { user } = useAuth();
+  // Hide the whole panel from non-admin users. Board Engine exposes the
+  // pricing base_matrix / adders which are considered admin-only insight —
+  // regular estimators should see the priced outcome, not the levers behind it.
+  if (user?.role !== "admin") return null;
   const r = result || {};
   const pinnedVersionId = active?.state?.pricingVersionId || null;
   const [manifest, setManifest] = React.useState(null);

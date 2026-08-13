@@ -74,6 +74,32 @@ export default function EstimateInfoSec() {
           <input className="sp-input" value={s.custRef || ""}
             data-testid="input-project-name"
             onChange={(e) => setField("custRef", e.target.value)} />
+          {(() => {
+            // Required iff the quote is flagged for the testing/comparison
+            // report — iQuote Option is the crosswalk join key with iQuote.
+            const missing = !!s.goodForTesting && !((s.iquoteOption || "").trim());
+            return (
+              <>
+                <input className="sp-input" value={s.iquoteOption || ""}
+                  data-testid="input-iquote-option"
+                  placeholder={s.goodForTesting ? "iQuote Option — required for Test quotes" : "iQuote Option (paste from iQuote)"}
+                  title="Paste the iQuote option description here. Used by the round-2 analysis to 1:1 match SPOT quotes against the corresponding iQuote option — leave blank if there's no iQuote."
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    border: missing ? "1.5px solid var(--spot-err, #ef4444)" : undefined,
+                    background: missing ? "rgba(239,68,68,0.06)" : undefined,
+                  }}
+                  onChange={(e) => setField("iquoteOption", e.target.value)} />
+                {missing && (
+                  <div data-testid="iquote-option-required-msg"
+                    style={{ marginTop: 3, fontSize: 10.5, color: "var(--spot-err, #ef4444)", fontWeight: 600 }}>
+                    Required — this quote is flagged as Test
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </F>
       </div>
 

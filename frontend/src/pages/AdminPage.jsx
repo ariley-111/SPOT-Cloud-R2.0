@@ -20,6 +20,7 @@ import {
 } from "../api/spot";
 
 const TAB_LABELS = {
+  reports:      "Reports",
   rate:         "Rates",
   gm_tier:      "GM Curve",
   sell_tier:    "Sell Curve",
@@ -38,13 +39,13 @@ const TAB_LABELS = {
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
-const TAB_ORDER = ["rate", "gm_tier", "sell_tier", "grade_adder", "difficulty", "board_pricing",
+const TAB_ORDER = ["reports", "rate", "gm_tier", "sell_tier", "grade_adder", "difficulty", "board_pricing",
                    "sheets", "customers", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
   const { user } = useAuth();
   const { refreshActiveVersion } = useQuote();
-  const [tab, setTab] = useState("rate");
+  const [tab, setTab] = useState("reports");
   const [data, setData] = useState(null);
   const [cats, setCats] = useState(null);
   const [calib, setCalib] = useState(null);
@@ -186,6 +187,7 @@ export default function AdminPage({ onClose }) {
             {tab === "usage" && <UsagePanel />}
             {tab === "audit" && <AuditPanel />}
             {tab === "calibration" && <CalibrationPanel data={calib} />}
+            {tab === "reports" && <ReportsPanel />}
           </>
         )}
       </div>
@@ -1829,3 +1831,74 @@ const btnStyle = {
   border: "1px solid var(--spot-border)",
 };
 const btnSmall = { ...btnStyle, fontSize: 10, padding: "3px 8px" };
+
+
+// ─── Reports ─────────────────────────────────────────────────────────────
+// The Testing Report used to live as a toolbar button on the estimator page.
+// It's been moved here (admin-only) because (a) it's an admin/analysis
+// artifact, not part of the day-to-day quoting flow, and (b) future
+// analytical reports (round-2 iQuote vs SPOT comparison, customer-level
+// pricing drift, etc.) will land as additional cards on this tab.
+function ReportsPanel() {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  const downloadTestingReport = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const token = localStorage.getItem("spot_token") || "";
+      const resp = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/quotes/_report/testing.xlsx`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "").replace(/-/g, "");
+      a.download = `spot-testing-report-${ts}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      setMsg("✓ Report downloaded");
+    } catch (e) {
+      setMsg(`✗ ${e.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div data-testid="admin-reports">
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "var(--spot-text)" }}>
+        Reports
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
+        gap: 14, maxWidth: 1000 }}>
+        {/* Testing / Comparison Report */}
+        <div style={{ background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
+          borderRadius: 6, padding: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--spot-text)", marginBottom: 6 }}>
+            SPOT ↔ iQuote Testing Report
+          </div>
+          <div style={{ fontSize: 11, color: "var(--spot-text3)", lineHeight: 1.55, marginBottom: 14 }}>
+            Exports every quote flagged as "Test" (top-right toolbar checkbox) with
+            iQuote #, iQuote Option, and full pricing breakdown. Powers the round-1
+            three-way analysis (iQuote vs SPOT vs Actual). All flagged quotes since
+            the beginning of time are included — filter by date in Excel if needed.
+          </div>
+          <button data-testid="admin-report-testing-btn" onClick={downloadTestingReport}
+            disabled={busy}
+            style={{ ...btnStyle, background: busy ? "var(--spot-bg3)" : "var(--spot-accent)",
+              color: busy ? "var(--spot-text3)" : "#fff", opacity: busy ? 0.7 : 1 }}>
+            {busy ? "Building…" : "Download .xlsx"}
+          </button>
+          {msg && (
+            <div style={{ marginTop: 10, fontSize: 11,
+              color: msg.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)" }}>
+              {msg}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

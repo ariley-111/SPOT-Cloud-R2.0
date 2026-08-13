@@ -47,7 +47,7 @@ export const JOB_LEVEL_KEYS = new Set([
   // testing/comparison flags — these describe the QUOTE as a whole, not any
   // one component (fix 2026-02: previously fell through to item-level, so
   // switching MP components appeared to "clear" the Test checkbox).
-  "goodForTesting", "iquoteNum", "iquoteWon",
+  "goodForTesting", "iquoteNum", "iquoteWon", "iquoteOption",
 ]);
 
 /** Keys that DO belong to a single component. Derived from DEFAULT_STATE − JOB_LEVEL_KEYS. */

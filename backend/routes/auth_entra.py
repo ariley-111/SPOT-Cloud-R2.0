@@ -22,7 +22,18 @@ Required env vars (set per environment in Admin Console → Integrations later):
   - APP_BASE_URL                e.g. https://spot-estimator.preview.emergentagent.com
                                 (this is the same host the redirect URI uses)
   - ALLOWED_EMAIL_DOMAIN        default: standardprinting.com
-  - SSO_ADMIN_EMAILS            comma-separated, lowercased
+  - SSO_ADMIN_EMAILS            comma-separated, lowercased. Bootstrap admin
+                                allowlist — email match → admin regardless of
+                                group membership.
+  - ENTRA_MGMT_GROUP_ID         Optional. Object ID (GUID) of the "SPOT Quoting
+                                System Management" Entra security group. When
+                                set, users in this group land as admin (Admin
+                                Console + Board Engine visible); everyone else
+                                is estimator. IMPORTANT: the Entra app
+                                registration must be configured to include the
+                                `groups` claim in ID tokens for this to work.
+                                Portal → App Registration → Token Configuration
+                                → Add groups claim → Security groups.
   - SSO_REQUIRED                "true" disables password login
 
 The redirect URI you must register in Entra:
@@ -70,6 +81,11 @@ def _settings() -> dict:
             for e in os.environ.get("SSO_ADMIN_EMAILS", "").split(",")
             if e.strip()
         },
+        # Object ID (GUID) of the "SPOT Quoting System Management" Entra group.
+        # Members of this group get role=admin (Admin Console + Board Engine visible).
+        # Non-members can still sign in — they just land in estimator UI. Leave
+        # blank to disable the group gate (legacy behavior: SSO_ADMIN_EMAILS only).
+        "mgmt_group_id": os.environ.get("ENTRA_MGMT_GROUP_ID", "").strip(),
     }
 
 
@@ -182,6 +198,24 @@ async def entra_callback(request: Request):
             f"Sign-in restricted to @{s['allowed_domain']} accounts. ({email} not allowed.)",
         )
 
+    # ─── Determine admin authorization ───
+    # Precedence:
+    #   1. Email in SSO_ADMIN_EMAILS  → admin (bootstrap escape hatch)
+    #   2. Entra group membership     → admin iff mgmt group in claims["groups"]
+    #   3. Neither → estimator
+    # Entra returns group Object IDs in the `groups` claim only if the app
+    # registration explicitly requests groups membership. If ENTRA_MGMT_GROUP_ID
+    # is unset we skip the group check entirely (legacy behavior: everyone who
+    # signs in is estimator unless their email is on the admin allowlist).
+    _groups = claims.get("groups") or []
+    _in_mgmt_group = bool(s["mgmt_group_id"] and s["mgmt_group_id"] in _groups)
+    _is_admin_email = email in s["admin_emails"]
+    _sso_role = "admin" if (_is_admin_email or _in_mgmt_group) else "estimator"
+    logger.info(
+        "SSO login: email=%s admin_email=%s in_mgmt_group=%s → role=%s (groups_returned=%d)",
+        email, _is_admin_email, _in_mgmt_group, _sso_role, len(_groups),
+    )
+
     # ─── Upsert user ───
     name = (claims.get("name") or email.split("@", 1)[0]).strip()
     entra_oid = claims.get("oid") or claims.get("sub")
@@ -189,31 +223,31 @@ async def entra_callback(request: Request):
 
     existing = await db[COL_USERS].find_one({"email": email})
     if existing:
-        # Preserve existing role/name. Just stamp provider + last_login + oid.
+        # Sync SSO role each login so revoking group membership takes effect
+        # on the next sign-in without an admin having to touch the DB.
         update = {
             "$set": {
                 "auth_provider": "entra",
                 "entra_oid": entra_oid,
                 "last_login": now_iso,
+                "role": _sso_role,
+                "in_mgmt_group": _in_mgmt_group,
             }
         }
-        # If this email is in the admin-bootstrap list and somehow isn't admin, promote.
-        if email in s["admin_emails"] and existing.get("role") != "admin":
-            update["$set"]["role"] = "admin"
         await db[COL_USERS].update_one({"email": email}, update)
         user_doc = await db[COL_USERS].find_one({"email": email}, {"_id": 0})
     else:
-        role = "admin" if email in s["admin_emails"] else "estimator"
         user = User(
             email=email,
             name=name,
-            role=role,
+            role=_sso_role,
             password_hash="",  # SSO users have no password
         )
         doc = user.model_dump()
         doc["auth_provider"] = "entra"
         doc["entra_oid"] = entra_oid
         doc["last_login"] = now_iso
+        doc["in_mgmt_group"] = _in_mgmt_group
         await db[COL_USERS].insert_one(doc)
         user_doc = doc
 

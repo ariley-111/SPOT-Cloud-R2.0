@@ -67,6 +67,12 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
     if (!s.estNum && !s.custName && !s.itemDesc) {
       pushToast("Add an estimate # or customer first", "warn"); return;
     }
+    // Test flag → iQuote Option required. This is the round-2 analysis join
+    // key; forgetting it drops the quote out of the SPOT↔iQuote crosswalk.
+    if (s.goodForTesting && !(s.iquoteOption || "").trim()) {
+      pushToast("iQuote Option is required when Test is checked — paste the iQuote option description under Project Name", "warn");
+      return;
+    }
     setSaving(true);
     try {
       const body = {
@@ -200,10 +206,8 @@ export default function Toolbar({ openModal, onOpenAdmin, onOpenBomBuilder }) {
             Job?
           </label>
         )}
-        <button data-testid="toolbar-test-report" onClick={onTestReport} className="sp-tb-ghost" style={ghost}
-          title="Export all quotes flagged for testing to .xlsx">
-          <Download size={15} strokeWidth={2} /> Report
-        </button>
+        {/* Testing/Comparison Report export moved to Admin Console → Reports tab (2026-02).
+            Reason: it's an admin/analysis artifact, not part of day-to-day quoting. */}
         <button data-testid="toolbar-load" onClick={() => openModal("load")} className="sp-tb-ghost" style={ghost} title="Load a saved quote">
           <FolderOpen size={15} strokeWidth={2} /> Load
         </button>

@@ -147,6 +147,10 @@ export const DEFAULT_STATE = Object.freeze({
   iquoteNum: "",                       // TEMPORARY — matching iQuote quote #
   iquoteWon: false,                    // TEMPORARY — did the iQuote become a job?
   iquoteTotal: "",                     // TEMPORARY — iQuote sell price for delta comparison
+  iquoteOption: "",                    // Paste the iQuote option description here so the
+                                       // round-2 analysis can 1:1 match SPOT ↔ iQuote when
+                                       // an iQuote has multiple options and project name
+                                       // alone is ambiguous.
   dueDate: "",
   shipTo: "",
 });

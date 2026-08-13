@@ -422,7 +422,7 @@ async def set_test_flag(quote_id: str, body: TestFlagRequest,
 # When a row's Total Cost doesn't match the UI, these columns pinpoint whether
 # the engine and UI disagreed on the CAD method.
 _REPORT_COLUMNS = [
-    "SPOT Estimate #", "iQuote #", "Became a Job", "Project Name", "Quote Type", "Component", "Qty",
+    "SPOT Estimate #", "iQuote #", "iQuote Option", "Became a Job", "Project Name", "Quote Type", "Component", "Qty",
     "One-Up W", "One-Up L", "Board", "Liners", "Sheet",
     "Material Cost", "Print Mode", "Print Cost", "Route", "Route Hours", "Difficulty",
     "Inches of Rule", "Perf %", "CAD Method", "Cutter Basis", "Cutting Cost",
@@ -504,6 +504,7 @@ def _report_row(q: Dict[str, Any], state: Dict[str, Any], comp_desc: str,
     return {
         "SPOT Estimate #": q.get("est_num") or "",
         "iQuote #": state.get("iquoteNum") or "",
+        "iQuote Option": state.get("iquoteOption") or "",
         "Became a Job": "Yes" if state.get("iquoteWon") else "No",
         "Project Name": state.get("custRef") or "",
         "Quote Type": state.get("quoteType") or "Simple",
@@ -851,6 +852,7 @@ def _refresh_row_meta(row: Dict[str, Any], q: Dict[str, Any]) -> Dict[str, Any]:
     return {**row,
             "SPOT Estimate #": q.get("est_num") or row.get("SPOT Estimate #") or "",
             "iQuote #": state.get("iquoteNum") or "",
+            "iQuote Option": state.get("iquoteOption") or "",
             "Became a Job": "Yes" if state.get("iquoteWon") else "No",
             "Project Name": state.get("custRef") or "",
             **_iquote_delta(state, qt)}
