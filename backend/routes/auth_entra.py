@@ -8,7 +8,7 @@ sees our internal JWT (same one /api/auth/login issues). Flow:
   3. User authenticates with Microsoft
   4. Microsoft 302s back to GET /api/auth/entra/callback?code=...&state=...
   5. We exchange code for tokens via MSAL ConfidentialClientApplication
-  6. Validate ID token + email domain (@standardprinting.com only)
+  6. Validate ID token + email domain (allowed list; see ALLOWED_EMAIL_DOMAIN)
   7. Upsert MongoDB user. New users default to estimator unless email is in
      the SSO_ADMIN_EMAILS bootstrap list, then admin.
   8. Issue internal JWT (identical shape to make_token in auth.py)
@@ -21,7 +21,12 @@ Required env vars (set per environment in Admin Console → Integrations later):
   - ENTRA_CLIENT_SECRET
   - APP_BASE_URL                e.g. https://spot-estimator.preview.emergentagent.com
                                 (this is the same host the redirect URI uses)
-  - ALLOWED_EMAIL_DOMAIN        default: standardprinting.com
+  - ALLOWED_EMAIL_DOMAIN        comma-separated list of allowed sign-in
+                                domains (e.g. `standardprinting.com,spcoc.com`).
+                                Default is both — reflects the ongoing UPN
+                                migration off @spcoc.com. Once every user has
+                                been rotated in Entra, drop spcoc.com from
+                                the env var.
   - SSO_ADMIN_EMAILS            comma-separated, lowercased. Bootstrap admin
                                 allowlist — email match → admin regardless of
                                 group membership.
@@ -70,12 +75,21 @@ _STATE_MAX_AGE = 600  # 10 minutes — login should complete well within this
 
 
 def _settings() -> dict:
+    # ALLOWED_EMAIL_DOMAIN accepts a comma-separated list so we can honor the
+    # ongoing @spcoc.com → @standardprinting.com email migration. Estimators
+    # who still sign in with the legacy UPN need to be let through; Entra
+    # does NOT rewrite UPN based on tenant mail-routing, so both domains must
+    # be on this app's allowlist. Once every user has been rotated to the new
+    # domain in Entra, drop spcoc.com from the env var.
+    raw_domains = os.environ.get("ALLOWED_EMAIL_DOMAIN",
+                                 "standardprinting.com,spcoc.com")
+    allowed = {d.strip().lower().lstrip("@") for d in raw_domains.split(",") if d.strip()}
     return {
         "tenant_id": os.environ.get("ENTRA_TENANT_ID", "").strip(),
         "client_id": os.environ.get("ENTRA_CLIENT_ID", "").strip(),
         "client_secret": os.environ.get("ENTRA_CLIENT_SECRET", "").strip(),
         "app_base_url": os.environ.get("APP_BASE_URL", "").rstrip("/"),
-        "allowed_domain": os.environ.get("ALLOWED_EMAIL_DOMAIN", "standardprinting.com").lower(),
+        "allowed_domains": allowed,
         "admin_emails": {
             e.strip().lower()
             for e in os.environ.get("SSO_ADMIN_EMAILS", "").split(",")
@@ -192,10 +206,11 @@ async def entra_callback(request: Request):
         return _bounce_with_error(s["app_base_url"], "No email claim returned by Entra")
 
     domain = email.split("@", 1)[1]
-    if domain != s["allowed_domain"]:
+    if domain not in s["allowed_domains"]:
+        allowed_pretty = " or ".join(f"@{d}" for d in sorted(s["allowed_domains"]))
         return _bounce_with_error(
             s["app_base_url"],
-            f"Sign-in restricted to @{s['allowed_domain']} accounts. ({email} not allowed.)",
+            f"Sign-in restricted to {allowed_pretty} accounts. ({email} not allowed.)",
         )
 
     # ─── Determine admin authorization ───

@@ -110,11 +110,17 @@ async def auth_config() -> dict:
     """Public — frontend reads this on the login screen to know whether to
     render the Entra button and/or hide the password form."""
     # Defer import to avoid a circular dep at module-import time.
-    from routes.auth_entra import is_sso_configured
+    from routes.auth_entra import is_sso_configured, _settings as _sso_settings
+    _sso = _sso_settings()
+    _allowed = sorted(_sso["allowed_domains"])
     return {
         "sso_enabled": is_sso_configured(),
         "sso_required": os.environ.get("SSO_REQUIRED", "false").lower() == "true",
-        "allowed_domain": os.environ.get("ALLOWED_EMAIL_DOMAIN", "standardprinting.com"),
+        # New: list of every domain we accept. `allowed_domain` (singular) is
+        # kept for backward compat with older frontends — it's the primary
+        # (first, alphabetically-sorted) domain.
+        "allowed_domains": _allowed,
+        "allowed_domain": _allowed[0] if _allowed else "standardprinting.com",
     }
 
 
