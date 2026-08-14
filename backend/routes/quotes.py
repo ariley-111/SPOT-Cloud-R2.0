@@ -930,7 +930,7 @@ _ANALYSIS_REPORT_COLUMNS = [
     "SPOT Estimate #", "iQuote Estimate #", "Became a Job",
     "Project Name", "Customer", "iQuote Option",
     "Qty", "Width", "Length", "Board", "Liners", "Sheet",
-    "Print Mode", "Route", "Quote Total",
+    "Print Mode", "Route", "Component Total", "Quote Total",
 ]
 
 
@@ -1012,6 +1012,13 @@ async def analysis_report(
                 "Sheet": r.get("Sheet", ""),
                 "Print Mode": r.get("Print Mode", ""),
                 "Route": r.get("Route", ""),
+                # Component Total = this component's own sell at this tier
+                # (itemSell). For Multi-Part Individual quotes — same component
+                # priced with variations (CAD vs die, print vs no-print, etc.) —
+                # this is what the estimator needs to see side-by-side. For
+                # Matched Set quotes, it's each component's contribution to the
+                # kit at that qty tier.
+                "Component Total": r.get("Sell Total", ""),
                 "Quote Total": r.get("Quote Total", ""),
             })
 

@@ -1854,3 +1854,17 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Test IDs: `parse-ask-orient-card-{job|item-N}`,
   `parse-ask-orient-w-{scope}`, `parse-ask-orient-l-{scope}`,
   `parse-ask-orient-flip-{scope}`, `parse-ask-orient-badge-{scope}`.
+
+### 2026-02-13 — Analysis Report: per-component Component Total column
+- Added a new **Component Total** column to `/api/quotes/_report/analysis.xlsx`
+  (positioned right before Quote Total). Value = `r["Sell Total"]` = the
+  component's own sell at that qty tier (engine's `itemSell`).
+- Why: for Multi-Part Individual quotes the same component is often priced
+  multiple ways (CAD vs die-cut, printed vs plain, different qtys) and the
+  estimator/exec needed to see each variant's sell side-by-side with iQuote,
+  not just the whole-quote roll-up. For Matched Sets it lets each component's
+  contribution to the kit be pivoted separately.
+- File: `backend/routes/quotes.py` — `_ANALYSIS_REPORT_COLUMNS` + row builder
+  in `analysis_report()`. Verified end-to-end: HTTP 200, workbook parses,
+  header includes both `Component Total` and `Quote Total`, sample row
+  populated with `2623.30` / `2623.30` on a single-component test quote.
