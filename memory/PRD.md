@@ -893,3 +893,37 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
   Only fires when `isOrientationAsk(a) && (key === "oneUpW" || key === "oneUpL")`.
 - **Test IDs**: `parse-ask-orient-card-*`, `parse-ask-orient-w-*`,
   `parse-ask-orient-l-*`, `parse-ask-orient-flip-*`, `parse-ask-orient-badge-*`.
+
+### 2026-02-13 (fork) — Pricing: back-date + retroactive re-pin ✅
+- **effective_date override on import**: Added `effective_date` Form param to
+  `POST /api/admin/pricing/import`. Handles supplier lists whose date is
+  inside a header cell (e.g. "Effective: 8-15-26") rather than in the sheet
+  tab name — also enables back-dating an import to a historical go-live.
+- **Retro re-pin endpoint**: `POST /api/admin/pricing/versions/{id}/repin`
+  with `dry_run`, `since`, `include_drafts`, `exclude_won`, `exclude_sent`.
+  Dry-run returns per-quote OLD vs NEW sell computed via `_compute_report_rows`
+  with `state.pricingVersionId` swapped — so the price impact is auditable
+  BEFORE committing. Live mode writes new `pricing_version_id`, logs a
+  `pricing_version_repin` audit entry with totals + updated counts.
+- **Freeze-contract escape hatch**: Saved quotes are frozen to the pricing
+  version active at save time by design. The re-pin endpoint is the
+  intentional escape hatch when a supplier list needs to apply retroactively
+  to quotes saved during the gap between effective_date and activation.
+- **Verified in preview** on 2026-08-15 supplier list (+5.5% uniform across
+  172 cells): dry-run predicted quote SA-260813-121003 $2415.21 → $2436.07
+  (+0.86%); write matched exactly; raw board cell (SW 200# 0-9 MSF)
+  109.6737 → 115.70575 = +5.500% as expected. Material line moved only
+  +4.14% because it includes non-board components (makeready base, adders,
+  embedded freight) that stayed flat — expected calc behavior.
+- **Files touched**: `backend/routes/admin_pricing.py` (import override +
+  new /repin route). No engine or model changes.
+
+### Production rollout recipe (for the 2026-08-15 board update)
+1. Redeploy so both endpoints are live in prod.
+2. `POST /api/admin/pricing/import` with `file`, `label=2026-08-15`,
+   `effective_date=2026-08-15`.
+3. Admin → Pricing UI: review the diff.
+4. `POST /api/admin/pricing/versions/{id}/activate` — flips ACTIVE.
+5. `POST /api/admin/pricing/versions/{id}/repin?dry_run=true` — review delta.
+6. `POST /api/admin/pricing/versions/{id}/repin?dry_run=false` — commit.
+7. Hard-refresh + spot-check one re-pinned quote.
