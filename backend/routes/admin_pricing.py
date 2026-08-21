@@ -10,10 +10,12 @@ activation flips the displayed rates instantly — the preview-vs-prod spot-chec
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
+from db import db, COL_QUOTES, COL_QUOTE_DRAFTS, COL_AUDIT_LOG
 from models.schemas import User
 from routes.auth import require_admin
 from services import pricing_versions as pv
@@ -144,3 +146,163 @@ async def delete_draft(version_id: str, _admin: User = Depends(require_admin)) -
     if not ok:
         raise HTTPException(404, "Pricing version not found")
     return {"ok": True}
+
+
+async def _quote_total_sell(q: Dict[str, Any], version_id: Optional[str], user: User) -> float:
+    """Price a saved quote against `version_id` (by injecting into a state copy)
+    and return its whole-quote sell at the FIRST qty tier (== iQuote's headline
+    price). Reuses the same code path the report uses so this validator never
+    drifts from what the report/UI shows."""
+    from routes.quotes import _compute_report_rows
+    q2 = {**q, "state": {**(q.get("state") or {}), "pricingVersionId": version_id}}
+    rows = await _compute_report_rows(q2, user)
+    for r in rows:
+        qt = r.get("Quote Total")
+        try:
+            return round(float(qt or 0), 2)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+@router.post("/versions/{version_id}/repin")
+async def repin_quotes(
+    version_id: str,
+    since: Optional[str] = None,
+    dry_run: bool = True,
+    include_drafts: bool = True,
+    exclude_won: bool = False,
+    exclude_sent: bool = False,
+    admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Re-pin quotes to `version_id` so a newly-activated pricing version applies
+    retroactively to quotes saved before it went active. Freeze-contract escape
+    hatch — use with intent.
+
+    Query params:
+      • `since` (YYYY-MM-DD): only touch quotes with `created_at >= since`.
+        Defaults to the target version's `effective_date`.
+      • `dry_run` (default True): report what would change, but don't write.
+        Returns per-quote old→new sell so the price impact is auditable BEFORE
+        the re-pin lands.
+      • `include_drafts` (default True): also re-pin unsaved drafts.
+      • `exclude_won`, `exclude_sent`: guard against silently changing prices
+        on quotes the customer has already seen.
+
+    Response includes a per-quote table with:
+      est_num · customer · created_at · from_version_label · old_sell · new_sell
+      · delta · delta_pct
+    plus aggregate totals so a UI can show a summary before confirming."""
+    target = await pv.get_version(version_id)
+    if not target:
+        raise HTTPException(404, f"Pricing version {version_id!r} not found")
+    eff_since = since or target.get("effective_date")
+    if not eff_since:
+        raise HTTPException(400, "No `since` provided and target version has no effective_date")
+    since_iso_lo = f"{eff_since}T00:00:00"
+
+    # Build a label map so the response is human-readable.
+    all_versions = await pv.list_versions()
+    vlabel = {v["id"]: v.get("label") for v in all_versions}
+
+    collections: List[str] = [COL_QUOTES]
+    if include_drafts:
+        collections.append(COL_QUOTE_DRAFTS)
+
+    base_q: Dict[str, Any] = {
+        "created_at": {"$gte": since_iso_lo},
+        "pricing_version_id": {"$ne": version_id},
+    }
+    if exclude_won:
+        base_q["status"] = {"$nin": ["won"]}
+    if exclude_sent:
+        # Compose with a prior $nin if present.
+        cur = base_q.get("status")
+        blocked = set((cur or {}).get("$nin") or []) | {"sent"}
+        base_q["status"] = {"$nin": list(blocked)}
+
+    affected: List[Dict[str, Any]] = []
+    for col in collections:
+        cursor = db[col].find(base_q, {"_id": 0})
+        async for doc in cursor:
+            from_vid = doc.get("pricing_version_id")
+            row: Dict[str, Any] = {
+                "collection": col,
+                "id": doc.get("id"),
+                "est_num": doc.get("est_num"),
+                "customer": doc.get("customer_name") or (doc.get("state") or {}).get("custName"),
+                "created_at": doc.get("created_at"),
+                "status": doc.get("status"),
+                "from_version_id": from_vid,
+                "from_version_label": vlabel.get(from_vid),
+            }
+            # Compute old vs new sell — best-effort; a bad quote must not block
+            # the whole re-pin dry run.
+            try:
+                row["old_sell"] = await _quote_total_sell(doc, from_vid, admin)
+            except Exception as e:  # noqa: BLE001
+                row["old_sell"] = None
+                row["price_error"] = f"old: {type(e).__name__}: {e}"
+            try:
+                row["new_sell"] = await _quote_total_sell(doc, version_id, admin)
+            except Exception as e:  # noqa: BLE001
+                row["new_sell"] = None
+                row["price_error"] = (row.get("price_error") or "") + f" new: {type(e).__name__}: {e}"
+            if row.get("old_sell") is not None and row.get("new_sell") is not None:
+                row["delta"] = round(row["new_sell"] - row["old_sell"], 2)
+                row["delta_pct"] = (round(100 * row["delta"] / row["old_sell"], 2)
+                                    if row["old_sell"] else None)
+            affected.append(row)
+
+    # Aggregates for the confirm dialog.
+    priced = [r for r in affected if r.get("old_sell") is not None and r.get("new_sell") is not None]
+    tot_old = round(sum(r["old_sell"] for r in priced), 2)
+    tot_new = round(sum(r["new_sell"] for r in priced), 2)
+    tot_delta = round(tot_new - tot_old, 2)
+    tot_delta_pct = round(100 * tot_delta / tot_old, 3) if tot_old else None
+
+    updated_counts: Dict[str, int] = {}
+    if not dry_run:
+        for col in collections:
+            res = await db[col].update_many(base_q, {"$set": {"pricing_version_id": version_id}})
+            updated_counts[col] = res.modified_count
+        await db[COL_AUDIT_LOG].insert_one({
+            "type": "pricing_version_repin",
+            "version_id": version_id,
+            "version_label": target.get("label"),
+            "since": eff_since,
+            "collections": collections,
+            "include_drafts": include_drafts,
+            "exclude_won": exclude_won,
+            "exclude_sent": exclude_sent,
+            "affected_count": len(affected),
+            "updated_counts": updated_counts,
+            "total_old_sell": tot_old,
+            "total_new_sell": tot_new,
+            "total_delta": tot_delta,
+            "user": admin.email,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    return {
+        "dry_run": dry_run,
+        "target_version_id": version_id,
+        "target_version_label": target.get("label"),
+        "effective_date": target.get("effective_date"),
+        "since": eff_since,
+        "collections": collections,
+        "filters": {
+            "include_drafts": include_drafts,
+            "exclude_won": exclude_won,
+            "exclude_sent": exclude_sent,
+        },
+        "count": len(affected),
+        "updated_counts": updated_counts,
+        "totals": {
+            "old_sell": tot_old,
+            "new_sell": tot_new,
+            "delta": tot_delta,
+            "delta_pct": tot_delta_pct,
+        },
+        "quotes": affected,
+    }
