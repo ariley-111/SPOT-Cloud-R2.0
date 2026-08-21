@@ -1914,3 +1914,20 @@ Keeps cloud's compact layout but adds legacy functionality.
   updates BOTH fields in the $set (was only doc-level before).
 - **Invariant verified**: 0 drift across the entire DB after the heal;
   0 drift after every save path exercised.
+
+### 2026-02-13 — Admin UI: Re-pin button + Import effective-date field
+- Added **↻ Re-pin quotes** button to the active pricing version's detail
+  panel (`AdminPage.jsx :: VersionDetail`). Opens a modal with a full
+  dry-run preview (count, old/new totals, per-quote table with old→new sell
+  and Δ$/%Δ%). Confirm-by-typing `REPIN` gate + optional
+  Skip-won / Skip-sent checkboxes.
+- Added **Effective date** field to the Import Pricing modal so back-dating
+  is a native UI flow (no more curl-with-form-param workaround for supplier
+  sheets whose date lives in a header cell rather than the tab name).
+- Wired API client: `adminPricingRepin(id, {dry_run, exclude_won, exclude_sent})`
+  and extended `adminPricingImport` with `effective_date`.
+- Test IDs: `pricing-repin-btn`, `repin-preview-modal`, `repin-stat-*`,
+  `repin-row-N`, `repin-confirm-input`, `repin-apply-btn`,
+  `import-pricing-effective-date`.
+- Ships in the next deploy so prod estimators never need a terminal to
+  execute the retro re-pin workflow.

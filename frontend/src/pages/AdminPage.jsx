@@ -13,7 +13,7 @@ import {
   adminGetSheets, adminAddSheet, adminEditSheet, adminDisableSheet, adminEnableSheet,
   adminExportSheetsCsv, adminImportSheetsCsv,
   adminPricingVersions, adminPricingGetVersion, adminPricingImport,
-  adminPricingActivate, adminPricingDeleteDraft,
+  adminPricingActivate, adminPricingDeleteDraft, adminPricingRepin,
   listQuoteAudit,
   getCustomerSyncStatus,
   listCustomers,
@@ -1043,6 +1043,31 @@ function BoardPricingPanel({ flash }) {
     finally { setBusy(false); }
   };
 
+  // Re-pin flow: dry-run first (loads impact preview into a modal), then the
+  // user hits "Apply re-pin" in the modal to execute. Freeze-contract escape
+  // hatch, so we make the two-step opt-in explicit.
+  const [repinPreview, setRepinPreview] = React.useState(null);
+  const [repinBusy, setRepinBusy] = React.useState(false);
+  const previewRepin = async (id) => {
+    setBusy(true);
+    try {
+      const r = await adminPricingRepin(id, { dry_run: true });
+      setRepinPreview({ ...r, version_id: id });
+    } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+    finally { setBusy(false); }
+  };
+  const applyRepin = async (opts) => {
+    if (!repinPreview) return;
+    setRepinBusy(true);
+    try {
+      const r = await adminPricingRepin(repinPreview.version_id, { dry_run: false, ...opts });
+      flash(`✓ Re-pinned ${r.count} quote(s) to ${r.target_version_label}`);
+      setRepinPreview(null);
+      await openVersion(repinPreview.version_id);
+    } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+    finally { setRepinBusy(false); }
+  };
+
   return (
     <div data-testid="board-pricing-panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -1089,11 +1114,13 @@ function BoardPricingPanel({ flash }) {
           {!sel && <div style={{ color: "var(--spot-text3)", fontSize: 12, paddingTop: 20 }}>
             Select a version to see its rate changes, or import a new price list.</div>}
           {sel && <VersionDetail data={sel} activeId={activeId} busy={busy}
-            onActivate={activate} onDiscard={discard} />}
+            onActivate={activate} onDiscard={discard} onRepin={previewRepin} />}
         </div>
       </div>
 
       {showImport && <ImportPricingModal onClose={() => setShowImport(false)} onImported={onImported} />}
+      {repinPreview && <RepinPreviewModal preview={repinPreview} busy={repinBusy}
+        onClose={() => setRepinPreview(null)} onApply={applyRepin} />}
     </div>
   );
 }
@@ -1109,7 +1136,7 @@ function PricingStatusPill({ status, isActive }) {
     background: bg, padding: "2px 6px", borderRadius: 3 }} data-testid="pricing-status-pill">{label}</span>;
 }
 
-function VersionDetail({ data, activeId, busy, onActivate, onDiscard }) {
+function VersionDetail({ data, activeId, busy, onActivate, onDiscard, onRepin }) {
   const v = data.version;
   const diff = data.diff;
   const warnings = data.warnings || [];
@@ -1133,6 +1160,14 @@ function VersionDetail({ data, activeId, busy, onActivate, onDiscard }) {
             style={{ ...btnStyle, background: "var(--spot-green)", color: "#fff", borderColor: "var(--spot-green)" }}>
             {busy ? "Activating…" : "Activate"}</button>}
           {isActive && <span style={{ fontSize: 11, color: "var(--spot-green)", fontWeight: 700, alignSelf: "center" }}>● Live now</span>}
+          {isActive && onRepin && v.effective_date && (
+            <button onClick={() => onRepin(v.id)} disabled={busy} data-testid="pricing-repin-btn"
+              title={`Retro-apply this pricing to every quote created on/after ${v.effective_date}`}
+              style={{ ...btnStyle, background: "var(--spot-blue, #2563eb)", color: "#fff",
+                borderColor: "var(--spot-blue, #2563eb)" }}>
+              {busy ? "Loading…" : `↻ Re-pin quotes ≥ ${v.effective_date}`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1192,13 +1227,17 @@ function VersionDetail({ data, activeId, busy, onActivate, onDiscard }) {
 function ImportPricingModal({ onClose, onImported }) {
   const [file, setFile] = React.useState(null);
   const [label, setLabel] = React.useState("");
+  const [effectiveDate, setEffectiveDate] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const submit = async () => {
     if (!file) return;
     setBusy(true); setErr("");
     try {
-      const r = await adminPricingImport(file, { label: label || undefined });
+      const r = await adminPricingImport(file, {
+        label: label || undefined,
+        effective_date: effectiveDate || undefined,
+      });
       onImported(r);
     } catch (e) { setErr(e?.response?.data?.detail || e.message); }
     finally { setBusy(false); }
@@ -1216,6 +1255,14 @@ function ImportPricingModal({ onClose, onImported }) {
         placeholder="Label (optional — defaults to the sheet date)" data-testid="import-pricing-label"
         style={{ width: "100%", padding: "5px 8px", fontSize: 12, boxSizing: "border-box",
           background: "var(--spot-bg2)", color: "var(--spot-text)",
+          border: "1px solid var(--spot-border)", borderRadius: 3, marginBottom: 10 }} />
+      <label style={{ fontSize: 11, color: "var(--spot-text3)", display: "block", marginBottom: 4 }}>
+        Effective date (optional — overrides date derived from sheet tab name; use for back-dating)
+      </label>
+      <input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)}
+        data-testid="import-pricing-effective-date"
+        style={{ width: "100%", padding: "5px 8px", fontSize: 12, boxSizing: "border-box",
+          background: "var(--spot-bg2)", color: "var(--spot-text)",
           border: "1px solid var(--spot-border)", borderRadius: 3, marginBottom: 12 }} />
       {err && <div style={{ color: "var(--spot-err)", fontSize: 11, marginBottom: 10 }} data-testid="import-pricing-err">{err}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -1228,6 +1275,121 @@ function ImportPricingModal({ onClose, onImported }) {
           {busy ? "Parsing…" : "Import & Review"}</button>
       </div>
     </ModalShell>
+  );
+}
+
+
+// Re-pin preview modal — dry-run impact table with an "Apply re-pin" button.
+// Shows every quote whose sell price will change (old → new) plus aggregate
+// totals, so the estimating team can eyeball the impact BEFORE committing.
+function RepinPreviewModal({ preview, busy, onClose, onApply }) {
+  const [excludeWon, setExcludeWon] = React.useState(false);
+  const [excludeSent, setExcludeSent] = React.useState(false);
+  const [confirmText, setConfirmText] = React.useState("");
+  const t = preview.totals || {};
+  const rows = preview.quotes || [];
+  const money = (n) => n == null ? "—" : `$${Number(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+  const pct = (n) => n == null ? "—" : `${n > 0 ? "+" : ""}${Number(n).toFixed(2)}%`;
+  const canApply = preview.count > 0 && confirmText.trim().toUpperCase() === "REPIN";
+  return (
+    <ModalShell title="Re-pin quotes to new pricing version" onClose={onClose} testid="repin-preview-modal">
+      <div style={{ fontSize: 12, color: "var(--spot-text2)", marginBottom: 10, lineHeight: 1.5 }}>
+        Retro-apply <b>{preview.target_version_label}</b> pricing to every quote (and draft)
+        created on or after <b>{preview.since}</b>. Below is a <b>dry-run preview</b> — nothing has
+        been written yet. Review the deltas, then type <code>REPIN</code> below to confirm.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12,
+        background: "var(--spot-bg2)", padding: 10, borderRadius: 4, border: "1px solid var(--spot-border)" }}>
+        <StatCell label="Quotes affected" value={preview.count} testid="repin-stat-count" />
+        <StatCell label="Total old sell" value={money(t.old_sell)} testid="repin-stat-old" />
+        <StatCell label="Total new sell" value={money(t.new_sell)} testid="repin-stat-new" />
+        <StatCell label="Delta" value={`${money(t.delta)}  (${pct(t.delta_pct)})`}
+          testid="repin-stat-delta"
+          color={t.delta > 0 ? "var(--spot-green)" : t.delta < 0 ? "var(--spot-err)" : undefined} />
+      </div>
+
+      {rows.length > 0 ? (
+        <div style={{ maxHeight: 320, overflow: "auto", border: "1px solid var(--spot-border)",
+          borderRadius: 4, marginBottom: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead><tr style={{ position: "sticky", top: 0, background: "var(--spot-bg2)" }}>
+              {["Est #", "Customer", "Created", "From", "Old", "New", "Δ$", "Δ%"].map((h) => (
+                <th key={h} style={{ textAlign: (["Old","New","Δ$","Δ%"].includes(h)) ? "right" : "left",
+                  padding: "6px 10px", borderBottom: "1px solid var(--spot-border)",
+                  color: "var(--spot-text3)", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} data-testid={`repin-row-${i}`} style={{ borderBottom: "1px solid var(--spot-border)" }}>
+                  <td style={{ padding: "4px 10px", fontFamily: "monospace" }}>{r.est_num || r.id?.slice(0,8)}</td>
+                  <td style={{ padding: "4px 10px" }}>{r.customer || "—"}</td>
+                  <td style={{ padding: "4px 10px", color: "var(--spot-text3)" }}>{(r.created_at||"").slice(0,10)}</td>
+                  <td style={{ padding: "4px 10px", color: "var(--spot-text3)" }}>{r.from_version_label || "—"}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", fontFamily: "monospace" }}>{money(r.old_sell)}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", fontFamily: "monospace" }}>{money(r.new_sell)}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", fontFamily: "monospace",
+                    color: r.delta > 0 ? "var(--spot-green)" : r.delta < 0 ? "var(--spot-err)" : undefined }}>{money(r.delta)}</td>
+                  <td style={{ padding: "4px 10px", textAlign: "right", fontFamily: "monospace",
+                    color: r.delta > 0 ? "var(--spot-green)" : r.delta < 0 ? "var(--spot-err)" : undefined }}>{pct(r.delta_pct)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ padding: 20, textAlign: "center", color: "var(--spot-text3)", fontSize: 12,
+          background: "var(--spot-bg2)", borderRadius: 4, marginBottom: 12 }} data-testid="repin-empty">
+          No quotes match — everything created on/after {preview.since} is already on {preview.target_version_label}.
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 14, marginBottom: 12, fontSize: 11, color: "var(--spot-text2)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+          <input type="checkbox" checked={excludeWon} onChange={(e) => setExcludeWon(e.target.checked)}
+            data-testid="repin-exclude-won" /> Skip won quotes
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+          <input type="checkbox" checked={excludeSent} onChange={(e) => setExcludeSent(e.target.checked)}
+            data-testid="repin-exclude-sent" /> Skip sent quotes
+        </label>
+      </div>
+
+      {preview.count > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: "var(--spot-text3)", display: "block", marginBottom: 4 }}>
+            Type <b>REPIN</b> to confirm you want to re-pin these {preview.count} quote(s).
+          </label>
+          <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)}
+            data-testid="repin-confirm-input" placeholder="REPIN"
+            style={{ width: "100%", padding: "5px 8px", fontSize: 12, boxSizing: "border-box",
+              background: "var(--spot-bg2)", color: "var(--spot-text)",
+              border: "1px solid var(--spot-border)", borderRadius: 3 }} />
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button onClick={onClose} style={btnStyle} data-testid="repin-cancel-btn">Cancel</button>
+        <button onClick={() => onApply({ exclude_won: excludeWon, exclude_sent: excludeSent })}
+          disabled={!canApply || busy} data-testid="repin-apply-btn"
+          style={{ ...btnStyle, background: canApply ? "var(--spot-blue, #2563eb)" : "var(--spot-bg3)",
+            color: canApply ? "#fff" : "var(--spot-text3)",
+            borderColor: canApply ? "var(--spot-blue, #2563eb)" : "var(--spot-border)",
+            cursor: canApply && !busy ? "pointer" : "not-allowed" }}>
+          {busy ? "Applying…" : `Apply re-pin (${preview.count})`}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function StatCell({ label, value, testid, color }) {
+  return (
+    <div data-testid={testid}>
+      <div style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: color || "var(--spot-text)", marginTop: 2 }}>{value}</div>
+    </div>
   );
 }
 

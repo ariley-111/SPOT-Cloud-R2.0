@@ -91,11 +91,12 @@ export const adminPricingVersions = () =>
   api.get("/admin/pricing/versions").then((r) => r.data);
 export const adminPricingGetVersion = (id) =>
   api.get(`/admin/pricing/versions/${encodeURIComponent(id)}`).then((r) => r.data);
-export const adminPricingImport = (file, { sheet, label, notes } = {}) => {
+export const adminPricingImport = (file, { sheet, label, effective_date, notes } = {}) => {
   const fd = new FormData();
   fd.append("file", file);
   if (sheet) fd.append("sheet", sheet);
   if (label) fd.append("label", label);
+  if (effective_date) fd.append("effective_date", effective_date);
   if (notes) fd.append("notes", notes);
   return api.post("/admin/pricing/import", fd,
     { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
@@ -104,6 +105,18 @@ export const adminPricingActivate = (id) =>
   api.post(`/admin/pricing/versions/${encodeURIComponent(id)}/activate`).then((r) => r.data);
 export const adminPricingDeleteDraft = (id) =>
   api.delete(`/admin/pricing/versions/${encodeURIComponent(id)}`).then((r) => r.data);
+// Retro re-pin: move all quotes with created_at >= effective_date onto this
+// version. Freeze-contract escape hatch — use `dry_run=true` first to preview
+// the impact (returns per-quote old/new sell + aggregate totals).
+export const adminPricingRepin = (id, { dry_run = true, exclude_won = false, exclude_sent = false } = {}) => {
+  const params = new URLSearchParams({
+    dry_run: dry_run ? "true" : "false",
+    exclude_won: exclude_won ? "true" : "false",
+    exclude_sent: exclude_sent ? "true" : "false",
+  });
+  return api.post(`/admin/pricing/versions/${encodeURIComponent(id)}/repin?${params}`)
+    .then((r) => r.data);
+};
 
 
 // Full Board Engine reference data — base matrix, liner/medium upgrades, flute
