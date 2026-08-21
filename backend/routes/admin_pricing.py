@@ -68,12 +68,18 @@ async def import_spreadsheet(
     file: UploadFile = File(...),
     sheet: Optional[str] = Form(None),
     label: Optional[str] = Form(None),
+    effective_date: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     admin: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Parse an uploaded board-price xlsx → create a DRAFT version (base_matrix
     only; adders carried forward from the active version) → return diff +
-    warnings for review. Does NOT activate."""
+    warnings for review. Does NOT activate.
+
+    `effective_date` (YYYY-MM-DD) overrides the auto-derivation from the sheet
+    name — useful when the supplier's date is inside the sheet (e.g. a header
+    cell like "Effective: 8-15-26") rather than in the tab name, and for
+    back-dating a version to a historical go-live date."""
     name = (file.filename or "").lower()
     if not name.endswith((".xlsx", ".xlsm")):
         raise HTTPException(400, "Please upload an .xlsx board-price spreadsheet")
@@ -99,9 +105,9 @@ async def import_spreadsheet(
     new_cfg = {**base_cfg, "base_matrix": new_bm}
 
     draft = await pv.create_version(
-        label=label or parsed["label"],
+        label=label or (effective_date or parsed["label"]),
         config=new_cfg,
-        effective_date=parsed["effective_date"],
+        effective_date=effective_date or parsed["effective_date"],
         change_summary=diff["summary"],
         source_file=file.filename,
         notes=notes,
