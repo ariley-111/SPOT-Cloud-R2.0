@@ -1868,3 +1868,26 @@ Keeps cloud's compact layout but adds legacy functionality.
   in `analysis_report()`. Verified end-to-end: HTTP 200, workbook parses,
   header includes both `Component Total` and `Quote Total`, sample row
   populated with `2623.30` / `2623.30` on a single-component test quote.
+
+### 2026-02-13 — Pricing import: effective_date override + retroactive re-pin endpoint
+- Added `effective_date` Form param to `POST /api/admin/pricing/import` so
+  supplier lists whose date lives INSIDE the sheet (header cells like
+  "Effective: 8-15-26") — not in the tab name — can be back-dated at import.
+- Added `POST /api/admin/pricing/versions/{id}/repin?dry_run=…` endpoint:
+  freeze-contract escape hatch that re-pins `pricing_version_id` on all quotes
+  (and optionally drafts) whose `created_at >= version.effective_date` to the
+  target version. Purpose: apply a newly-activated pricing list retroactively
+  to quotes saved during the gap between the effective date and activation.
+- Dry-run returns per-quote OLD vs NEW sell (via `_compute_report_rows` with
+  the version swapped in state.pricingVersionId) plus aggregate totals — so
+  the price impact is auditable BEFORE the write. Live mode logs a
+  `pricing_version_repin` audit entry including totals + updated counts.
+- Guardrails: `include_drafts`, `exclude_won`, `exclude_sent` query params.
+- Verified in preview: 2026-08-15 draft imported (+5.5% uniform across 172
+  cells vs 2026-06-15), activated, then repin executed → SA-260813-121003
+  pinned from 19d5f1c8 (2026-06-15) → 3c7b0323 (2026-08-15); expected sell
+  moved $2415.21 → $2436.07 (+$20.86 / +0.86%) as reported by the dry-run
+  validator BEFORE the write.
+- Files: `backend/routes/admin_pricing.py` (new endpoint + import override),
+  `services/pricing_versions.py` unchanged (existing create_version already
+  accepts effective_date param).
