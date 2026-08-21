@@ -264,7 +264,16 @@ async def repin_quotes(
     updated_counts: Dict[str, int] = {}
     if not dry_run:
         for col in collections:
-            res = await db[col].update_many(base_q, {"$set": {"pricing_version_id": version_id}})
+            # Update BOTH the doc-level pin AND the state-level mirror. The
+            # engine payload builders read `state.pricingVersionId` (that's
+            # what the frontend flows to the calc endpoints), while list/load
+            # views read the doc-level `pricing_version_id`. If we only touch
+            # one, the UI shows new rates on reload but reports still price on
+            # the old rates (or vice-versa). Keep them in lock-step.
+            res = await db[col].update_many(base_q, {"$set": {
+                "pricing_version_id": version_id,
+                "state.pricingVersionId": version_id,
+            }})
             updated_counts[col] = res.modified_count
         await db[COL_AUDIT_LOG].insert_one({
             "type": "pricing_version_repin",

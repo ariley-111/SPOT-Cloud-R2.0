@@ -225,10 +225,16 @@ async def create_quote(body: QuoteCreate, user: User = Depends(get_current_user)
     # Pin the pricing version at save time (Board Pricing Freeze). A fresh save
     # pins to whatever is ACTIVE now; re-pricing later is only via Duplicate.
     pinned = body.pricing_version_id or await get_active_version_id()
+    # INVARIANT (server-truth): `state.pricingVersionId` MUST equal the doc-level
+    # `pricing_version_id`. The engine payload builders and reports read the
+    # state-level mirror; if it drifts, the UI (which overlays state.pricingVersionId
+    # from the doc on load) and the reports (which read the state as-stored)
+    # will price the same quote differently. Enforce on EVERY write.
+    state_with_pv = {**(body.state or {}), "pricingVersionId": pinned}
     quote = Quote(
         owner_id=user.id, est_num=body.est_num,
         customer_code=body.customer_code, customer_name=body.customer_name,
-        state=body.state, status=body.status, test_mode=body.test_mode,
+        state=state_with_pv, status=body.status, test_mode=body.test_mode,
         pricing_version_id=pinned,
         rate_snapshot=effective_snapshot(),
         sent_at=_now() if body.status == "sent" else None,
@@ -255,10 +261,18 @@ async def get_quote(quote_id: str, user: User = Depends(get_current_user)) -> Di
 @quotes_router.put("/{quote_id}", response_model=Quote)
 async def update_quote(quote_id: str, body: QuoteCreate, user: User = Depends(get_current_user)) -> Quote:
     """Update is still owner-locked. To edit a teammate's quote, use Take Over first."""
+    # INVARIANT enforcement: read the current doc-level pin and stamp it into
+    # the incoming state so state.pricingVersionId can never drift from
+    # pricing_version_id. Prevents the "UI shows new rates, reports show old"
+    # class of bug (2026-02-13 fork discovery).
+    existing_pv = await db[COL_QUOTES].find_one(
+        {"id": quote_id}, {"_id": 0, "pricing_version_id": 1})
+    pinned = (existing_pv or {}).get("pricing_version_id")
+    state_with_pv = {**(body.state or {}), "pricingVersionId": pinned} if pinned else (body.state or {})
     update = {
         "updated_at": _now(),
         "est_num": body.est_num,
-        "state": body.state,
+        "state": state_with_pv,
         "status": body.status,
         "customer_code": body.customer_code,
         "customer_name": body.customer_name,
@@ -326,18 +340,23 @@ async def copy_quote(quote_id: str, user: User = Depends(get_current_user)) -> Q
     src = await db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0})
     if not src:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
+    active_pv = await get_active_version_id()
     clone = Quote(
         owner_id=user.id,
         est_num=f"{src.get('est_num', '')}-COPY",
         customer_code=src.get("customer_code"),
         customer_name=src.get("customer_name"),
-        # Keep state.estNum in sync so the loaded tab shows the -COPY number
-        state={**(src.get("state") or {}), "estNum": f"{src.get('est_num', '')}-COPY"},
+        # Keep state.estNum in sync so the loaded tab shows the -COPY number,
+        # and re-stamp state.pricingVersionId to the NEW active pin — the doc
+        # and state MUST stay in lock-step (invariant).
+        state={**(src.get("state") or {}),
+               "estNum": f"{src.get('est_num', '')}-COPY",
+               "pricingVersionId": active_pv},
         status="draft",  # always start a copy as draft
         test_mode=src.get("test_mode", False),
         # Duplicate IS the re-price path: pin the clone to the ACTIVE version
         # so it picks up current board pricing (the original stays frozen).
-        pricing_version_id=await get_active_version_id(),
+        pricing_version_id=active_pv,
         # Re-price rates too — capture CURRENT live admin rates for the clone.
         rate_snapshot=effective_snapshot(),
     )
@@ -790,6 +809,26 @@ async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, 
     """Price a saved quote EXACTLY like the UI and return its report rows."""
     from routes.engine_routes import calculate_all, calculate_multi_part
     state = q.get("state") or {}
+    # Drift guard (2026-02-13): the engine payload builders read
+    # state.pricingVersionId, but a quote's canonical pin lives at doc level.
+    # If they drift, the UI (which overlays state from the doc on load) and
+    # reports (which read state as-stored) will price the same quote
+    # differently. Auto-heal at report time as a belt-and-suspenders backstop
+    # to the save-time invariant enforcement in create/update/copy quote.
+    doc_pv = q.get("pricing_version_id")
+    if doc_pv and state.get("pricingVersionId") != doc_pv:
+        logger.warning(
+            f"pricing_version_id drift on {q.get('est_num') or q.get('id')}: "
+            f"doc={doc_pv} state={state.get('pricingVersionId')} — healing to doc"
+        )
+        state = {**state, "pricingVersionId": doc_pv}
+        try:
+            await db[COL_QUOTES].update_one(
+                {"id": q.get("id")},
+                {"$set": {"state.pricingVersionId": doc_pv}},
+            )
+        except Exception:  # noqa: BLE001 — heal is best-effort; report must still emit
+            pass
     rows: List[Dict[str, Any]] = []
     is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
     try:

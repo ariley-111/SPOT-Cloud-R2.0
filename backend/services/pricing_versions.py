@@ -105,14 +105,39 @@ async def seed_baseline_if_missing() -> Optional[str]:
 
 async def backfill_quotes(version_id: str) -> int:
     """Pin every saved quote (and draft) that has no pricing_version_id to the
-    given version. Idempotent — only touches docs missing the field/value."""
+    given version. Idempotent — only touches docs missing the field/value.
+
+    Also heals `state.pricingVersionId` (the state-level mirror the engine
+    payload builders read) whenever it drifts from the doc-level pin — critical
+    for reports, which compute via `_compute_report_rows` and rely on the state
+    mirror to select the right pricing version."""
     if not version_id:
         return 0
     q = {"$or": [{"pricing_version_id": {"$exists": False}}, {"pricing_version_id": None}]}
     total = 0
     for col in (COL_QUOTES, COL_QUOTE_DRAFTS):
-        res = await db[col].update_many(q, {"$set": {"pricing_version_id": version_id}})
+        # Doc-level pin
+        res = await db[col].update_many(q, {"$set": {
+            "pricing_version_id": version_id,
+            "state.pricingVersionId": version_id,
+        }})
         total += res.modified_count
+        # Heal state-level drift on quotes that already had a doc-level pin
+        # but a stale/missing state mirror (e.g. quotes touched by the re-pin
+        # endpoint before it sync'd both fields, or older quotes that never
+        # had the state mirror written on save).
+        drift_cursor = db[col].find(
+            {"pricing_version_id": {"$ne": None}},
+            {"_id": 0, "id": 1, "pricing_version_id": 1, "state.pricingVersionId": 1},
+        )
+        async for d in drift_cursor:
+            doc_pv = d.get("pricing_version_id")
+            state_pv = (d.get("state") or {}).get("pricingVersionId")
+            if doc_pv and doc_pv != state_pv:
+                await db[col].update_one(
+                    {"id": d["id"]},
+                    {"$set": {"state.pricingVersionId": doc_pv}},
+                )
     if total:
         logger.info(f"pricing_versions: backfilled {total} quotes/drafts to {version_id}")
     return total

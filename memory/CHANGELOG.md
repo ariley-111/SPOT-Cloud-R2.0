@@ -1891,3 +1891,26 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Files: `backend/routes/admin_pricing.py` (new endpoint + import override),
   `services/pricing_versions.py` unchanged (existing create_version already
   accepts effective_date param).
+
+### 2026-02-13 — Pricing invariant enforcement: doc pin == state.pricingVersionId
+- **Latent bug uncovered**: reports have historically priced quotes against
+  the CURRENT active version, not the pinned version. Root cause: doc-level
+  `pricing_version_id` and nested `state.pricingVersionId` could drift because
+  save paths only wrote one, and the engine payload builders / reports read
+  the OTHER. The frontend hid this by overlaying state.pricingVersionId from
+  the doc on every load, so the UI looked correct while server-side reports
+  quietly used stale numbers.
+- **Fixed all 45 stale quotes/drafts** in preview via a one-off heal script.
+- **Enforced invariant at every save path** in `backend/routes/quotes.py`:
+  create_quote, update_quote, copy_quote now stamp
+  `state.pricingVersionId = pricing_version_id` server-side (ignores whatever
+  the FE sends — server-truth).
+- **Startup backfill in `services/pricing_versions.py::backfill_quotes`**
+  now writes both fields AND heals any residual drift on each boot.
+- **Report-time drift guard in `_compute_report_rows`**: auto-heals + logs a
+  warning if a mismatched quote is ever seen — belt-and-suspenders backstop
+  in case a new save path is added without following the invariant.
+- **Re-pin endpoint fix**: `POST /api/admin/pricing/versions/{id}/repin` now
+  updates BOTH fields in the $set (was only doc-level before).
+- **Invariant verified**: 0 drift across the entire DB after the heal;
+  0 drift after every save path exercised.
