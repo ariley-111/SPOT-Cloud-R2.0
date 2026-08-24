@@ -148,6 +148,29 @@ async def delete_draft(version_id: str, _admin: User = Depends(require_admin)) -
     return {"ok": True}
 
 
+@router.patch("/versions/{version_id}")
+async def update_version(
+    version_id: str,
+    body: Dict[str, Any],
+    admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Patch label / effective_date / notes on an existing version. Used to
+    heal an import that landed with a bad auto-derived label (e.g. tab named
+    "Sheet1" rather than a date) or where effective_date wasn't set. Does
+    NOT touch base_matrix / adders — pricing data stays untouched."""
+    try:
+        v = await pv.update_version_metadata(
+            version_id,
+            label=body.get("label"),
+            effective_date=body.get("effective_date"),
+            notes=body.get("notes"),
+            user_email=admin.email,
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True, "version": v}
+
+
 async def _quote_total_sell(q: Dict[str, Any], version_id: Optional[str], user: User) -> float:
     """Price a saved quote against `version_id` (by injecting into a state copy)
     and return its whole-quote sell at the FIRST qty tier (== iQuote's headline

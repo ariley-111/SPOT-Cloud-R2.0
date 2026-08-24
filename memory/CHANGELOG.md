@@ -1931,3 +1931,17 @@ Keeps cloud's compact layout but adds legacy functionality.
   `import-pricing-effective-date`.
 - Ships in the next deploy so prod estimators never need a terminal to
   execute the retro re-pin workflow.
+
+### 2026-02-13 — Pricing version: edit metadata endpoint + UI
+- Added `PATCH /api/admin/pricing/versions/{id}` — patch label / effective_date /
+  notes on an existing version without touching pricing data. Recovers imports
+  that landed with a bad auto-derived label (e.g. tab named "Sheet1") or
+  missing effective_date.
+- Added ✎ edit button next to the version label in `VersionDetail` (opens a
+  small modal with label + effective date inputs). Also displays the version's
+  effective_date next to the label so users can see at a glance whether the
+  re-pin button will appear.
+- Files: `backend/services/pricing_versions.py::update_version_metadata`,
+  `backend/routes/admin_pricing.py::update_version`, `frontend/src/api/spot.js::adminPricingUpdateVersion`,
+  `AdminPage.jsx::EditVersionMetadataModal`.
+- Ships in the next redeploy.

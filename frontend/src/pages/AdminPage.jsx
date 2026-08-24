@@ -14,6 +14,7 @@ import {
   adminExportSheetsCsv, adminImportSheetsCsv,
   adminPricingVersions, adminPricingGetVersion, adminPricingImport,
   adminPricingActivate, adminPricingDeleteDraft, adminPricingRepin,
+  adminPricingUpdateVersion,
   listQuoteAudit,
   getCustomerSyncStatus,
   listCustomers,
@@ -1068,6 +1069,23 @@ function BoardPricingPanel({ flash }) {
     finally { setRepinBusy(false); }
   };
 
+  // Edit label / effective_date on an existing version — heals imports that
+  // landed with a bad auto-derived label like "Sheet1" without needing a
+  // re-import.
+  const [editOpen, setEditOpen] = React.useState(false);
+  const editMetadata = async (patch) => {
+    if (!sel) return;
+    setBusy(true);
+    try {
+      await adminPricingUpdateVersion(sel.version.id, patch);
+      flash("✓ Version metadata updated");
+      setEditOpen(false);
+      await reload();
+      await openVersion(sel.version.id);
+    } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <div data-testid="board-pricing-panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -1114,13 +1132,16 @@ function BoardPricingPanel({ flash }) {
           {!sel && <div style={{ color: "var(--spot-text3)", fontSize: 12, paddingTop: 20 }}>
             Select a version to see its rate changes, or import a new price list.</div>}
           {sel && <VersionDetail data={sel} activeId={activeId} busy={busy}
-            onActivate={activate} onDiscard={discard} onRepin={previewRepin} />}
+            onActivate={activate} onDiscard={discard} onRepin={previewRepin}
+            onEdit={() => setEditOpen(true)} />}
         </div>
       </div>
 
       {showImport && <ImportPricingModal onClose={() => setShowImport(false)} onImported={onImported} />}
       {repinPreview && <RepinPreviewModal preview={repinPreview} busy={repinBusy}
         onClose={() => setRepinPreview(null)} onApply={applyRepin} />}
+      {editOpen && sel && <EditVersionMetadataModal version={sel.version} busy={busy}
+        onClose={() => setEditOpen(false)} onSave={editMetadata} />}
     </div>
   );
 }
@@ -1136,7 +1157,7 @@ function PricingStatusPill({ status, isActive }) {
     background: bg, padding: "2px 6px", borderRadius: 3 }} data-testid="pricing-status-pill">{label}</span>;
 }
 
-function VersionDetail({ data, activeId, busy, onActivate, onDiscard, onRepin }) {
+function VersionDetail({ data, activeId, busy, onActivate, onDiscard, onRepin, onEdit }) {
   const v = data.version;
   const diff = data.diff;
   const warnings = data.warnings || [];
@@ -1150,6 +1171,12 @@ function VersionDetail({ data, activeId, busy, onActivate, onDiscard, onRepin })
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div>
           <span style={{ fontSize: 15, fontWeight: 700, color: "var(--spot-text)" }}>{v.label}</span>
+          {onEdit && <button onClick={onEdit} data-testid="pricing-edit-metadata-btn"
+            title="Edit label / effective date (does not change pricing data)"
+            style={{ all: "unset", cursor: "pointer", marginLeft: 6, fontSize: 11,
+              color: "var(--spot-text3)", padding: "1px 5px", borderRadius: 3,
+              border: "1px solid var(--spot-border)" }}>✎ edit</button>}
+          {v.effective_date && <span style={{ fontSize: 11, color: "var(--spot-text3)", marginLeft: 8 }}>· eff {v.effective_date}</span>}
           {v.source_file && <span style={{ fontSize: 11, color: "var(--spot-text3)", marginLeft: 8 }}>· {v.source_file}</span>}
           {data.sheet_used && <span style={{ fontSize: 11, color: "var(--spot-text3)", marginLeft: 6 }}>· tab “{data.sheet_used}”</span>}
         </div>
@@ -1390,6 +1417,43 @@ function StatCell({ label, value, testid, color }) {
       <div style={{ fontSize: 10, color: "var(--spot-text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{label}</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: color || "var(--spot-text)", marginTop: 2 }}>{value}</div>
     </div>
+  );
+}
+
+// Small modal to patch label / effective_date on an existing version. Used
+// when an import auto-derived a bad label (e.g. "Sheet1") or forgot the
+// effective_date. Doesn't touch pricing data.
+function EditVersionMetadataModal({ version, busy, onClose, onSave }) {
+  const [label, setLabel] = React.useState(version.label || "");
+  const [effectiveDate, setEffectiveDate] = React.useState(version.effective_date || "");
+  const submit = () => onSave({ label: label || null, effective_date: effectiveDate || null });
+  return (
+    <ModalShell title="Edit pricing version metadata" onClose={onClose} testid="edit-version-metadata-modal">
+      <div style={{ fontSize: 11, color: "var(--spot-text3)", marginBottom: 12, lineHeight: 1.5 }}>
+        Rename the version and/or set its effective date. Pricing data is not touched.
+        Effective date drives the "Re-pin quotes ≥ …" button and future retro re-pin operations.
+      </div>
+      <label style={{ fontSize: 11, color: "var(--spot-text3)", display: "block", marginBottom: 4 }}>Label</label>
+      <input value={label} onChange={(e) => setLabel(e.target.value)}
+        data-testid="edit-version-label" placeholder="e.g. 2026-08-15"
+        style={{ width: "100%", padding: "5px 8px", fontSize: 12, boxSizing: "border-box",
+          background: "var(--spot-bg2)", color: "var(--spot-text)",
+          border: "1px solid var(--spot-border)", borderRadius: 3, marginBottom: 12 }} />
+      <label style={{ fontSize: 11, color: "var(--spot-text3)", display: "block", marginBottom: 4 }}>Effective date</label>
+      <input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)}
+        data-testid="edit-version-effective-date"
+        style={{ width: "100%", padding: "5px 8px", fontSize: 12, boxSizing: "border-box",
+          background: "var(--spot-bg2)", color: "var(--spot-text)",
+          border: "1px solid var(--spot-border)", borderRadius: 3, marginBottom: 14 }} />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button onClick={onClose} style={btnStyle} data-testid="edit-version-cancel">Cancel</button>
+        <button onClick={submit} disabled={busy} data-testid="edit-version-save"
+          style={{ ...btnStyle, background: "var(--spot-accent)", color: "#fff",
+            borderColor: "var(--spot-accent)" }}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 

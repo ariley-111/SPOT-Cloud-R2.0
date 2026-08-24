@@ -105,6 +105,11 @@ export const adminPricingActivate = (id) =>
   api.post(`/admin/pricing/versions/${encodeURIComponent(id)}/activate`).then((r) => r.data);
 export const adminPricingDeleteDraft = (id) =>
   api.delete(`/admin/pricing/versions/${encodeURIComponent(id)}`).then((r) => r.data);
+// Patch label / effective_date / notes on a version WITHOUT touching pricing
+// data. Used to heal imports that landed with a bad label (e.g. "Sheet1")
+// or a missing effective_date.
+export const adminPricingUpdateVersion = (id, patch) =>
+  api.patch(`/admin/pricing/versions/${encodeURIComponent(id)}`, patch).then((r) => r.data);
 // Retro re-pin: move all quotes with created_at >= effective_date onto this
 // version. Freeze-contract escape hatch — use `dry_run=true` first to preview
 // the impact (returns per-quote old/new sell + aggregate totals).

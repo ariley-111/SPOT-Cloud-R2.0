@@ -240,3 +240,39 @@ async def activate_version(version_id: str, user_email: Optional[str] = None) ->
     })
     logger.info(f"pricing_versions: activated {version_id} ({target.get('label')})")
     return await get_version(version_id)
+
+
+async def update_version_metadata(
+    version_id: str,
+    label: Optional[str] = None,
+    effective_date: Optional[str] = None,
+    notes: Optional[str] = None,
+    user_email: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Patch label / effective_date / notes on an existing version — used when
+    an import landed with a bad auto-derived label (e.g. tab named "Sheet1"
+    instead of a date) or when effective_date wasn't set at import time.
+    Does NOT touch the base_matrix or any pricing data."""
+    target = await get_version(version_id)
+    if not target:
+        raise ValueError(f"Pricing version {version_id!r} not found")
+    updates: Dict[str, Any] = {}
+    if label is not None:
+        updates["label"] = label
+    if effective_date is not None:
+        updates["effective_date"] = effective_date
+    if notes is not None:
+        updates["notes"] = notes
+    if not updates:
+        return target
+    await db[COL_PRICING_VERSIONS].update_one({"id": version_id}, {"$set": updates})
+    await db[COL_AUDIT_LOG].insert_one({
+        "type": "pricing_version_update_metadata",
+        "version_id": version_id,
+        "changes": updates,
+        "prev": {k: target.get(k) for k in updates},
+        "user": user_email,
+        "timestamp": _now(),
+    })
+    logger.info(f"pricing_versions: metadata updated on {version_id}: {list(updates)}")
+    return await get_version(version_id)
