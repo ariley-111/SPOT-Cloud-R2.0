@@ -1945,3 +1945,18 @@ Keeps cloud's compact layout but adds legacy functionality.
   `backend/routes/admin_pricing.py::update_version`, `frontend/src/api/spot.js::adminPricingUpdateVersion`,
   `AdminPage.jsx::EditVersionMetadataModal`.
 - Ships in the next redeploy.
+
+### 2026-02-13 — Bug fix: re-pin dry-run showing $0 delta on every row
+- Root cause: the drift-heal I added to `_compute_report_rows` earlier fought
+  the intentional override the dry-run needs. When `_quote_total_sell` set
+  `state.pricingVersionId = <NEW_version>` on a copy of the quote, the heal
+  saw doc_pv != state_pv, treated it as drift, and overrode state.pv back to
+  doc_pv — so BOTH old and new price computations used the same version and
+  the delta was always $0. Verified in prod screenshot: 29 quotes, $353,808.61
+  old total == $353,808.61 new total.
+- Fix: removed the report-time drift heal. It was redundant with the save-time
+  invariant (`create_quote`/`update_quote`/`copy_quote` all stamp state
+  from doc) and the startup backfill (`backfill_quotes` heals residual drift).
+- Verified in preview: re-pin dry-run on SA-260813-121003 (rolled back to
+  2026-06-15 for the test) now correctly shows old=$2415.21, new=$2436.07,
+  Δ=+$20.86 / +0.86%. Matches the value we computed manually.

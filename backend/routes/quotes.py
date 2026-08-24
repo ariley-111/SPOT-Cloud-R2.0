@@ -806,29 +806,15 @@ def _iquote_delta(state: Dict[str, Any], spot_total: float) -> Dict[str, Any]:
 
 
 async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, Any]]:
-    """Price a saved quote EXACTLY like the UI and return its report rows."""
+    """Price a saved quote EXACTLY like the UI and return its report rows.
+
+    Trust `state.pricingVersionId` as-passed — the save-time invariant in
+    create_quote/update_quote/copy_quote and the startup backfill keep it in
+    lock-step with the doc-level pin. The re-pin dry-run intentionally
+    overrides it to price a quote against a hypothetical version, so any
+    auto-heal here would fight that flow and produce $0 deltas."""
     from routes.engine_routes import calculate_all, calculate_multi_part
     state = q.get("state") or {}
-    # Drift guard (2026-02-13): the engine payload builders read
-    # state.pricingVersionId, but a quote's canonical pin lives at doc level.
-    # If they drift, the UI (which overlays state from the doc on load) and
-    # reports (which read state as-stored) will price the same quote
-    # differently. Auto-heal at report time as a belt-and-suspenders backstop
-    # to the save-time invariant enforcement in create/update/copy quote.
-    doc_pv = q.get("pricing_version_id")
-    if doc_pv and state.get("pricingVersionId") != doc_pv:
-        logger.warning(
-            f"pricing_version_id drift on {q.get('est_num') or q.get('id')}: "
-            f"doc={doc_pv} state={state.get('pricingVersionId')} — healing to doc"
-        )
-        state = {**state, "pricingVersionId": doc_pv}
-        try:
-            await db[COL_QUOTES].update_one(
-                {"id": q.get("id")},
-                {"$set": {"state.pricingVersionId": doc_pv}},
-            )
-        except Exception:  # noqa: BLE001 — heal is best-effort; report must still emit
-            pass
     rows: List[Dict[str, Any]] = []
     is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
     try:
