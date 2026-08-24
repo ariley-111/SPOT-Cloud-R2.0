@@ -1960,3 +1960,18 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Verified in preview: re-pin dry-run on SA-260813-121003 (rolled back to
   2026-06-15 for the test) now correctly shows old=$2415.21, new=$2436.07,
   Δ=+$20.86 / +0.86%. Matches the value we computed manually.
+
+### 2026-02-13 — Delete archived pricing versions
+- Relaxed `delete_version` to allow ARCHIVED versions, not just DRAFT.
+- **Orphan guard**: counts quotes + drafts pinned to the target version;
+  refuses with a clear error if any are still pinned (would break their
+  `resolve_config` at load/report time).
+- Guards remain: never delete the ACTIVE version, never delete BASELINE
+  (needed for legacy D-110 regression).
+- Audit log gets a `pricing_version_delete` entry on success.
+- UI: red **Delete** button appears in the version detail panel for any
+  archived non-baseline version. Confirm dialog is context-aware
+  (Discard for drafts, Delete for archived).
+- Use case that motivated this: heal a prod import that landed with a bad
+  auto-derived label ("Sheet1") by importing again with correct
+  label/effective_date, activating, then deleting the bad one.

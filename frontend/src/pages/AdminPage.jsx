@@ -1033,11 +1033,16 @@ function BoardPricingPanel({ flash }) {
   };
 
   const discard = async (id) => {
-    if (!window.confirm("Discard this draft pricing version?")) return;
+    const v = versions.find((x) => x.id === id);
+    const isArchived = v?.status === "archived";
+    const msg = isArchived
+      ? `Delete pricing version "${v.label}"? This is permanent. Will refuse if any quotes are still pinned to it.`
+      : "Discard this draft pricing version?";
+    if (!window.confirm(msg)) return;
     setBusy(true);
     try {
       await adminPricingDeleteDraft(id);
-      flash("Draft discarded");
+      flash(isArchived ? "✓ Version deleted" : "Draft discarded");
       setSel(null);
       await reload();
     } catch (e) { flash("✗ " + (e?.response?.data?.detail || e.message)); }
@@ -1183,6 +1188,13 @@ function VersionDetail({ data, activeId, busy, onActivate, onDiscard, onRepin, o
         <div style={{ display: "flex", gap: 8 }}>
           {isDraft && <button onClick={() => onDiscard(v.id)} disabled={busy} data-testid="pricing-discard-btn"
             style={{ ...btnStyle, color: "var(--spot-err)", borderColor: "var(--spot-err)" }}>Discard</button>}
+          {!isActive && !isDraft && !v.is_baseline && onDiscard && (
+            <button onClick={() => onDiscard(v.id)} disabled={busy} data-testid="pricing-delete-btn"
+              title="Delete this archived version (refuses if any quotes are still pinned to it)"
+              style={{ ...btnStyle, color: "var(--spot-err)", borderColor: "var(--spot-err)" }}>
+              Delete
+            </button>
+          )}
           {isDraft && <button onClick={() => onActivate(v.id)} disabled={busy} data-testid="pricing-activate-btn"
             style={{ ...btnStyle, background: "var(--spot-green)", color: "#fff", borderColor: "var(--spot-green)" }}>
             {busy ? "Activating…" : "Activate"}</button>}

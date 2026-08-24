@@ -214,13 +214,33 @@ async def create_version(label: str, config: Dict[str, Any], *,
 
 
 async def delete_version(version_id: str) -> bool:
-    """Delete a DRAFT version only — never active or baseline."""
+    """Delete a DRAFT or ARCHIVED version. Never active or baseline. Refuses
+    if any quotes/drafts are still pinned to it (they'd be orphaned) — the
+    caller should run the re-pin flow first."""
     v = await get_version(version_id)
     if not v:
         return False
-    if v.get("status") == "active" or v.get("is_baseline"):
-        raise ValueError("Cannot delete the active or baseline pricing version")
+    if v.get("status") == "active":
+        raise ValueError("Cannot delete the active pricing version")
+    if v.get("is_baseline"):
+        raise ValueError("Cannot delete the baseline pricing version")
+    # Orphan guard — cheap count across both collections
+    q_pinned = await db[COL_QUOTES].count_documents({"pricing_version_id": version_id})
+    d_pinned = await db[COL_QUOTE_DRAFTS].count_documents({"pricing_version_id": version_id})
+    if q_pinned + d_pinned > 0:
+        raise ValueError(
+            f"Cannot delete — {q_pinned} quote(s) and {d_pinned} draft(s) are still "
+            f"pinned to this version. Re-pin them onto a different version first."
+        )
     await db[COL_PRICING_VERSIONS].delete_one({"id": version_id})
+    await db[COL_AUDIT_LOG].insert_one({
+        "type": "pricing_version_delete",
+        "version_id": version_id,
+        "label": v.get("label"),
+        "prev_status": v.get("status"),
+        "timestamp": _now(),
+    })
+    logger.info(f"pricing_versions: deleted {version_id} ({v.get('label')})")
     return True
 
 
