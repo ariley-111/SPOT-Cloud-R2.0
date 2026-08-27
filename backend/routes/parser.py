@@ -98,6 +98,9 @@ async def _get_budget_doc() -> Dict[str, Any]:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db[COL_PARSER_BUDGET].insert_one(doc)
+        # insert_one mutates the dict by adding _id (ObjectId — not JSON safe).
+        # Strip before returning so the response never leaks an ObjectId.
+        doc.pop("_id", None)
     return doc
 
 

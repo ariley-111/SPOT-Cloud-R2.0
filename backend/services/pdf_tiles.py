@@ -23,7 +23,14 @@ logger = logging.getLogger("spot.parser.tiles")
 TARGET_DPI = 220        # render DPI for large sheets — high enough that a tenths
                         # decimal in a dimension callout (e.g. "1930.1") stays crisp
 MAX_EDGE = 1568         # keep each tile's long edge ≤ this (Anthropic optimum)
-LARGE_PAGE_IN = 17.0    # only tile pages whose long edge exceeds this (> tabloid)
+LARGE_PAGE_IN = 10.0    # tile any page whose long edge exceeds this. Lowered
+                        # from 17.0 (2026-02-13) after the TAV25-1220-R1 miss —
+                        # a standard Letter-landscape CAD (11×8.5) with a tiny
+                        # "CORRUGATION / horizontal" label in the bottom-left
+                        # corner was invisible at Anthropic's native ~142 DPI.
+                        # 10.0 catches Letter, Legal, Tabloid, and every larger
+                        # CAD — small corner labels get read at ~285 DPI in a
+                        # 2×2 tile grid instead of ~140 DPI native.
 OVERLAP = 0.10          # fraction of tile size to overlap so straddling parts survive
 MAX_TILES = 20          # hard cap on tiles per document (token/cost guard)
 

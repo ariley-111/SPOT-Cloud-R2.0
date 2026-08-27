@@ -1975,3 +1975,21 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Use case that motivated this: heal a prod import that landed with a bad
   auto-derived label ("Sheet1") by importing again with correct
   label/effective_date, activating, then deleting the bad one.
+
+### 2026-02-13 — Parser: high-DPI tiling for standard-size CADs
+- **Bug**: Parser missed a clear "CORRUGATION / horizontal" label in the
+  bottom-left of a Letter-size CAD (TAV25-1220-R1.pdf, 11×8.5 in). Root
+  cause: the PDF-tiling threshold was 17.0 in on the long edge, so only
+  Tabloid+ sheets got high-DPI zoom tiles. Letter/Legal fell through to
+  Anthropic's native rasterization at ~142 DPI, where small corner labels
+  are unreadable.
+- **Fix**: `LARGE_PAGE_IN: 17.0 → 10.0` in `services/pdf_tiles.py`. Now any
+  page with long edge > 10 in gets tiled into a 2×2 grid at ~285 DPI. This
+  covers Letter (both orientations), Legal, Tabloid, and every larger CAD.
+- **Verified**: The bottom-left tile of the exact failing CAD now shows the
+  "CORRUGATION" label + horizontal hatch diagram + "horizontal" word at
+  crystal-clear resolution — screenshot captured in preview.
+- Cost impact: ~4 extra tiles for a typical Letter CAD (still well under
+  the `MAX_TILES=20` per-doc budget). Parser knowledge already covers
+  detection of a boxed CORRUGATION swatch with directional word underneath
+  — the problem was purely resolution.
