@@ -833,18 +833,23 @@ async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, 
                 # TotalEstimatePrice repeated per row + right-rail Die aggregate).
                 tier_die = _n(slot.get("dieLineCost")) + sum(_n(pc.get("dieEmbedded")) for pc in per_comp)
                 tier_total = slot.get("sellTotal")
+                # Qty column = the SLOT's set qty (Matched Set) or the tier's
+                # order qty (Individual) — the same value across every row in
+                # a slot, so `(SPOT #, Qty)` groups correctly and each tier
+                # rolls up to one iQuote break-qty for comparison. Previously
+                # emitted per-component pcs (set_qty × pcsPerSet), which mixed
+                # 134 and 67 in the same tier and broke pivots (user report
+                # CD-260825-091053, Feb 2026).
+                tier_qty = slot.get("setQty") or slot.get("qty")
                 for pc in per_comp:
                     if pc.get("error"):
                         continue
                     ist = by_id.get(pc.get("itemId") or "", {})
-                    # Qty column = engine's per-component pcs count (= set_qty ×
-                    # pcsPerSet in Matched Set, or the component's own row qty in
-                    # Individual). Matches iQuote's `Quantity` per product, so
-                    # every row is directly comparable between the two exports.
                     rows.append(_report_row(
                         q, state, pc.get("desc"), ist, pc,
                         quote_total=tier_total,
                         per_job_freight=per_job,
+                        raw_qty_override=tier_qty,
                         tier_die_override=tier_die))
         else:
             data = await calculate_all(payload=_simple_engine_payload(state, q.get("id")), _u=user)

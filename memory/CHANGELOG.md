@@ -2009,3 +2009,23 @@ Keeps cloud's compact layout but adds legacy functionality.
 - Verified: 21/21 (SPOT #, Qty) groups in preview sum exactly to Quote Total.
 - Testing Report (`testing.xlsx`) untouched — that report is the granular
   per-component cost buildup, where Sell Total ≠ Quote Total is by design.
+
+### 2026-02-13 — Analysis Report: Qty column now the tier set qty (not per-component pcs)
+- Second half of the same user-reported bug: on Matched Set quotes the Qty
+  column mixed 134 and 67 in the same tier — pcsPerSet × set_qty for the
+  2-per-set components, set_qty for the 1-per-set ones. Broke pivots that
+  group by (SPOT #, Qty) — same tier landed in two buckets.
+- Root cause: `_compute_report_rows`'s MP branch was NOT passing
+  `raw_qty_override` to `_report_row`, so `display_qty` fell through to
+  `pc.qty` (= set_qty × pcsPerSet). `_report_row`'s own docstring said the
+  Qty column should be the RAW set qty and expected MP to pass the override,
+  but the caller never did.
+- Fix: pass `raw_qty_override=slot.setQty or slot.qty` in the MP branch.
+  Every row in a tier now shows the same Qty (the set qty for Matched Set,
+  the tier order qty for Individual). Individual quotes with per-component
+  qty variations still show each component's own qty because Individual
+  slots emit set_qty in `slot.qty` uniformly.
+- Verified: `preview` analysis report — all 13 quote+tier groups now show
+  a single Qty across rows, and Component Totals still sum exactly to
+  Quote Total (both fixes compose correctly).
+- Testing Report also benefits since it shares `_compute_report_rows`.
