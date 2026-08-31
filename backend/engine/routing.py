@@ -434,7 +434,14 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
         crest_speed = assumptions.get("crestSpeed", 150)
         crest_min = assumptions.get("crestMinCharge", 0)
         crest_setup_map = assumptions.get("crestSetup") or {}
-        crest_setup_min = (crest_setup_map.get("Standard", 45)
+        # Legacy parity: use the user's crestComplexity (Standard/Complex) to
+        # pick the setup-minutes entry. Cloud previously hard-coded "Standard"
+        # here, which under-costed Crest whenever the user chose Complex — a
+        # component set to Complex would still auto-route to Crest based on
+        # Standard-cost math, then get billed at Complex rates in the final
+        # quote. Matches spot_r1_5.jsx compareRoutes' crestComplexity handling.
+        _cc = (opts.get("crestComplexity") or "Standard")
+        crest_setup_min = (crest_setup_map.get(_cc, crest_setup_map.get("Standard", 45))
                            if isinstance(crest_setup_map, dict) else (crest_setup_map or 45))
         _pr_sh = inca_rate / 100
         _cr_sh = crest_rate / (crest_speed or 150)
@@ -516,7 +523,16 @@ def evaluate_routes(one_up_w: float, one_up_l: float, board_spec: Dict[str, Any]
             cr_press_hrs = (cr_pick["sheetsReq"] / print_speed) if print_on else 0
             cr_press = max(cr_press_hrs * inca_rate, inca_min) if print_on else 0
             c_setup = crest_setup_min / 60
-            eff_speed = crest_speed
+            # Legacy parity (spot_r1_5.jsx line 735 compareRoutes): "Advanced"
+            # Crest complexity slows the effective sheets/hour throughput by
+            # `crestAdvSpeedFactor` (default 0.8 = 20% slower). Cloud previously
+            # ignored complexity in the speed calc, under-costing Crest for
+            # Advanced quotes and picking it more aggressively than legacy.
+            if _cc == "Advanced":
+                _adv = pn(assumptions.get("crestAdvSpeedFactor")) or 0.8
+                eff_speed = crest_speed * _adv
+            else:
+                eff_speed = crest_speed
             cr_cut_hrs = c_setup + (cr_pick["sheetsReq"] / eff_speed if eff_speed > 0 else 0)
             cr_cut = max(cr_cut_hrs * crest_rate, crest_min)
             rule_in = pn(assumptions.get("totalRuleInches"))
@@ -597,6 +613,14 @@ def auto_route(cad_hrs: float, selected_sheet: Dict[str, Any], one_up_w: float, 
         "printMode": assumptions.get("printMode", "Satin"),
         "dieTreatment": assumptions.get("dieTreatment", "None"),
         "dieCost": assumptions.get("dieCost"),
+        # Legacy parity (spot_r1_5.jsx line 802 autoRoute) — Cloud was
+        # previously omitting this, so evaluate_routes always compared Crest
+        # setup at "Standard" difficulty even when the user set Complex, which
+        # under-costed Crest in the auto pick and let it beat CAD on borderline
+        # quotes that legacy would have routed to CAD. Fixed 2026-02-13 after
+        # a Mondelez Oreo Kit component (Button Hutch Print A) came in with
+        # Crest + $10,800 die when legacy would have picked CAD + $1,200 die.
+        "crestComplexity": assumptions.get("crestComplexity", "Standard"),
         "cadSelectedSheet": selected_sheet,
         "cadHrs": cad_hrs,
     }

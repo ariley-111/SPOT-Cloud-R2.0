@@ -2049,3 +2049,26 @@ Keeps cloud's compact layout but adds legacy functionality.
   if that quote were live, the user would already be seeing wrong numbers
   in the UI too — so any complaint would surface immediately, not silently.
 - Ships with next redeploy.
+
+### 2026-02-13 — Auto-route parity: crestComplexity + Advanced speed factor
+- User-reported: Mondelez Oreo Kit (CD-260825-091053) Cloud auto-picks Crest
+  for many components where legacy picks CAD. $10,800 total die charge on
+  the quote = 9 Crest-routed components × $1,200 default crestDieCost each.
+  Legacy would have picked CAD for most → no die charge at all.
+- Parity gaps fixed in `engine/routing.py`:
+  1. `auto_route` opts now includes `crestComplexity` from assumptions (was
+     missing — legacy passes it at spot_r1_5.jsx line 802).
+  2. `evaluate_routes` Crest-setup lookup now uses user's crestComplexity
+     instead of hard-coded "Standard" (matches legacy line 734).
+  3. Added `crestAdvSpeedFactor` (default 0.8) for "Advanced" complexity —
+     effective sheets/hour drops 20% (matches legacy line 735). Cloud
+     previously ignored complexity in speed calc, under-costing Advanced
+     Crest and picking it aggressively.
+- Deployer-confirmed on prod: no `crestDieCost` override, no user-entered
+  dieCost on the quote. $10,800 = 9 × $1,200 default × 12 components with
+  9 landing on Crest.
+- Contributing factor NOT a code bug: prod rate_overrides has
+  `cad_fallback.Complex = 6.0` (vs legacy baseline 4). 50% inflation of
+  Complex CAD hours/sheet pushes borderline quotes past the 8-hour
+  viability threshold and onto Crest. Admin should decide whether to
+  revert to 4.0 or keep at 6.0.
