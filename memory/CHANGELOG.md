@@ -3,6 +3,29 @@
 Append-only log of shipped features and fixes.
 
 
+## 2026-02-19 — Admin Utility: Matched Set Qty Batch-Heal
+- **User request:** "I would like to do (b)" — add the optional one-click Admin
+  endpoint to canonicalize corrupt Matched Set rows in the DB.
+- **Endpoint:** `POST /api/admin/matched-set/heal-qtys` (admin-only, via
+  `require_admin`). Walks `quote_drafts` + `quotes`, applies the same
+  Matched-Set state.qtys normalization as `mpSchema.healLoadedState` (Python
+  port), and writes back only when changed. Idempotent. Writes an
+  `audit_log` entry per run with counters + up to 200 healed ids.
+- **Admin UI:** New "Matched Set Qty Heal" card in the existing Reports tab
+  (Admin → Reports). Confirms before running; shows counters + last-error on
+  completion. Testids: `matched-set-heal-card`, `admin-matched-set-heal-btn`,
+  `admin-matched-set-heal-msg`, `admin-matched-set-heal-stats`.
+- **New files:** `/app/backend/routes/admin_matched_set.py`.
+- **Wired in:** `backend/server.py` (router include),
+  `frontend/src/api/spot.js` (`adminMatchedSetHealQtys`), `frontend/src/pages/AdminPage.jsx`.
+- **Verified in preview:** 1st run healed 10 docs (2 drafts + 8 quotes),
+  2nd run 15/15 unchanged (idempotent). Zero errors. Screenshot of live
+  Balconi/Hot Wheels quote in Preview confirms **top-block Quote Total =
+  $2,436.07** — canonical value stable across all 6 component tabs.
+- **PROD deploy note:** After redeploy, hit "Run heal now" once from Admin →
+  Reports to canonicalize the DB rows themselves (fully optional — the client
+  and report code paths already produce correct math for corrupt rows).
+
 ## 2026-02-19 — CRITICAL FIX: Matched Set kit total drifted per active BOM tab
 - **User report:** In Matched Set Multi-Part quotes, the top MATCHED SET block Quote Total,
   the Cost Buildup rail Quote Total, AND the Letter of Quote PDF Quote Summary total all

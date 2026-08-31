@@ -24,6 +24,7 @@ from routes import admin_rates as admin_rates_routes
 from routes import admin_integrations as admin_integrations_routes
 from routes import admin_sheets as admin_sheets_routes
 from routes import admin_pricing as admin_pricing_routes
+from routes import admin_matched_set as admin_matched_set_routes
 from routes import bom_templates as bom_templates_routes
 from routes.customers import ensure_customers_loaded
 from services.rate_overrides import load_overrides_from_db
@@ -76,6 +77,7 @@ app.include_router(admin_rates_routes.router)
 app.include_router(admin_integrations_routes.router)
 app.include_router(admin_sheets_routes.router)
 app.include_router(admin_pricing_routes.router)
+app.include_router(admin_matched_set_routes.router)
 app.include_router(bom_templates_routes.router)
 
 logging.basicConfig(level=logging.INFO,

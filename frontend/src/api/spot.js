@@ -123,6 +123,12 @@ export const adminPricingRepin = (id, { dry_run = true, exclude_won = false, exc
     .then((r) => r.data);
 };
 
+// Matched Set qty batch-heal (BUG-2026-02). One-shot rewriter that normalizes
+// state.qtys across every Matched Set quote/draft in the DB. Idempotent — safe
+// to run repeatedly. Returns { scanned, drafts_healed, quotes_healed, unchanged, errors }.
+export const adminMatchedSetHealQtys = () =>
+  api.post("/admin/matched-set/heal-qtys").then((r) => r.data);
+
 
 // Full Board Engine reference data — base matrix, liner/medium upgrades, flute
 // rules, dim adders, fixed charges, approved sheet specs. Drives the Board

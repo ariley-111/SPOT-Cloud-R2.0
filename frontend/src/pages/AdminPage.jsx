@@ -15,6 +15,7 @@ import {
   adminPricingVersions, adminPricingGetVersion, adminPricingImport,
   adminPricingActivate, adminPricingDeleteDraft, adminPricingRepin,
   adminPricingUpdateVersion,
+  adminMatchedSetHealQtys,
   listQuoteAudit,
   getCustomerSyncStatus,
   listCustomers,
@@ -2125,6 +2126,31 @@ function ReportsPanel() {
       setAnalysisBusy, setAnalysisMsg);
   };
 
+  // Matched Set qty batch-heal (BUG-2026-02) — one-click DB cleanup
+  const [healBusy, setHealBusy] = React.useState(false);
+  const [healResult, setHealResult] = React.useState(null);
+  const [healMsg, setHealMsg] = React.useState("");
+  const runHeal = async () => {
+    if (!window.confirm(
+      "Run Matched Set qty heal on ALL quotes and drafts in the DB?\n\n" +
+      "This normalizes state.qtys so every component agrees on the same set qty. " +
+      "Idempotent — running twice is safe. Non-Matched-Set quotes are skipped."
+    )) return;
+    setHealBusy(true); setHealMsg(""); setHealResult(null);
+    try {
+      const r = await adminMatchedSetHealQtys();
+      setHealResult(r);
+      const total = (r.drafts_healed || 0) + (r.quotes_healed || 0);
+      setHealMsg(total > 0
+        ? `✓ Healed ${total} doc${total === 1 ? "" : "s"} (${r.drafts_healed || 0} drafts + ${r.quotes_healed || 0} quotes). ${r.unchanged || 0} already canonical.`
+        : `✓ Nothing to heal — all ${r.scanned || 0} scanned docs already canonical.`);
+    } catch (e) {
+      setHealMsg(`✗ ${e?.response?.data?.detail || e.message}`);
+    } finally {
+      setHealBusy(false);
+    }
+  };
+
   const cardStyle = {
     background: "var(--spot-bg2)", border: "1px solid var(--spot-border)",
     borderRadius: 6, padding: 16,
@@ -2214,6 +2240,51 @@ function ReportsPanel() {
             <div style={{ marginTop: 10, fontSize: 11,
               color: analysisMsg.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)" }}>
               {analysisMsg}
+            </div>
+          )}
+        </div>
+
+        {/* Matched Set qty batch-heal (BUG-2026-02) */}
+        <div style={cardStyle} data-testid="matched-set-heal-card">
+          <div style={titleStyle}>Matched Set Qty Heal</div>
+          <div style={descStyle}>
+            One-click DB cleanup for the <b>Feb 2026</b> Matched Set qty bug —
+            walks every Multi-Part quote and draft, normalizes each
+            component's <code>state.qtys</code> so all components agree on the
+            same set qty per slot. <b>Idempotent</b> — safe to run multiple
+            times. Non-Matched-Set quotes are skipped. Every run is written to
+            the Audit Log.
+            <br /><br />
+            Run this <b>once after redeploying to PROD</b> as a safety net so
+            the underlying DB rows are canonical (the fix already ensures the
+            UI, reports, and PDFs show correct totals even without this heal).
+          </div>
+          <button data-testid="admin-matched-set-heal-btn" onClick={runHeal}
+            disabled={healBusy}
+            style={{ ...btnStyle, background: healBusy ? "var(--spot-bg3)" : "var(--spot-accent)",
+              color: healBusy ? "var(--spot-text3)" : "#fff", opacity: healBusy ? 0.7 : 1 }}>
+            {healBusy ? "Healing…" : "Run heal now"}
+          </button>
+          {healMsg && (
+            <div data-testid="admin-matched-set-heal-msg" style={{ marginTop: 10, fontSize: 11,
+              color: healMsg.startsWith("✗") ? "var(--spot-err)" : "var(--spot-green)" }}>
+              {healMsg}
+            </div>
+          )}
+          {healResult && (
+            <div data-testid="admin-matched-set-heal-stats" style={{
+              marginTop: 8, padding: "8px 10px", background: "var(--spot-bg)",
+              border: "1px solid var(--spot-border)", borderRadius: 4,
+              fontSize: 10, color: "var(--spot-text3)", fontFamily: "monospace",
+            }}>
+              scanned: {healResult.scanned} · drafts healed: {healResult.drafts_healed}
+              {" · "}quotes healed: {healResult.quotes_healed} · unchanged: {healResult.unchanged}
+              {(healResult.errors || []).length > 0 && (
+                <div style={{ marginTop: 6, color: "var(--spot-err)" }}>
+                  {healResult.errors.length} error{healResult.errors.length === 1 ? "" : "s"}:
+                  {" "}{(healResult.errors[0] || {}).error}
+                </div>
+              )}
             </div>
           )}
         </div>
