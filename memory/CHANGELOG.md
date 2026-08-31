@@ -1993,3 +1993,19 @@ Keeps cloud's compact layout but adds legacy functionality.
   the `MAX_TILES=20` per-doc budget). Parser knowledge already covers
   detection of a boxed CORRUGATION swatch with directional word underneath
   — the problem was purely resolution.
+
+### 2026-02-13 — Analysis Report: Component Total now sums to Quote Total
+- Bug (user-reported, prod): on Matched Set quote CD-260825-091053, sum of
+  Component Totals (10 rows) = $22,002.38 but Quote Total = $27,501.17 —
+  gap of $5,498.79 = slot-level one-time charges (die line, prepress line,
+  proofs line, misc line, un-embedded freight) that don't live in
+  per-component `itemSell`. Analysis rows couldn't reconcile to the quote
+  total, killing pivots.
+- Fix in `analysis_report()`: after computing rows per quote, group by
+  (est_num, qty) and pro-rata allocate the gap by itemSell weight into a
+  new `_component_total` field. Last row absorbs rounding remainder so the
+  sum lands exactly on Quote Total. Falls back to itemSell when gap is
+  <$0.005 (Simple quotes / fully-embedded one-times) — no distortion.
+- Verified: 21/21 (SPOT #, Qty) groups in preview sum exactly to Quote Total.
+- Testing Report (`testing.xlsx`) untouched — that report is the granular
+  per-component cost buildup, where Sell Total ≠ Quote Total is by design.

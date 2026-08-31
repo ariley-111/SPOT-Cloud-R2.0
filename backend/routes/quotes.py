@@ -1021,6 +1021,41 @@ async def analysis_report(
         except Exception as e:  # noqa: BLE001
             logger.warning(f"analysis_report: skip quote {q.get('id')}: {e}")
             continue
+
+        # Pro-rata allocate slot-level one-time charges (die line, prepress
+        # line, proofs line, misc line, un-embedded freight) into Component
+        # Total so per-component values SUM TO Quote Total. Otherwise on a
+        # Matched Set with $5k+ in one-times, the estimator sees component
+        # rows that don't reconcile to the quote total — the exact user
+        # complaint that motivated this fix (CD-260825-091053, Feb 2026).
+        # Grouping is by (est_num, qty): each qty tier of a MP quote is a
+        # separate slot with its own one-times to distribute.
+        by_tier: Dict[Any, List[Dict[str, Any]]] = {}
+        for r in full:
+            key = (r.get("SPOT Estimate #"), r.get("Qty"))
+            by_tier.setdefault(key, []).append(r)
+        for tier_rows in by_tier.values():
+            sum_item_sell = sum(_n(r.get("Sell Total")) for r in tier_rows)
+            quote_total_n = _n(tier_rows[0].get("Quote Total"))
+            gap = round(quote_total_n - sum_item_sell, 2)
+            if abs(gap) < 0.005 or sum_item_sell <= 0:
+                # Nothing to allocate (Simple quotes, or one-times fully
+                # embedded per-component already). Component Total = itemSell.
+                for r in tier_rows:
+                    r["_component_total"] = _n(r.get("Sell Total"))
+            else:
+                # Pro-rata split by itemSell weight — matches how legacy
+                # cost sheets and iQuote's TotalEstimatePrice allocate
+                # one-time charges across products.
+                running = 0.0
+                for r in tier_rows[:-1]:
+                    share = _n(r.get("Sell Total")) / sum_item_sell * gap
+                    r["_component_total"] = round(_n(r.get("Sell Total")) + share, 2)
+                    running += r["_component_total"]
+                # Last row absorbs any rounding remainder so tier sums land
+                # exactly on Quote Total (no half-cent drift).
+                tier_rows[-1]["_component_total"] = round(quote_total_n - running, 2)
+
         for r in full:
             rows.append({
                 "SPOT Estimate #": r.get("SPOT Estimate #", ""),
@@ -1037,13 +1072,14 @@ async def analysis_report(
                 "Sheet": r.get("Sheet", ""),
                 "Print Mode": r.get("Print Mode", ""),
                 "Route": r.get("Route", ""),
-                # Component Total = this component's own sell at this tier
-                # (itemSell). For Multi-Part Individual quotes — same component
-                # priced with variations (CAD vs die, print vs no-print, etc.) —
-                # this is what the estimator needs to see side-by-side. For
-                # Matched Set quotes, it's each component's contribution to the
-                # kit at that qty tier.
-                "Component Total": r.get("Sell Total", ""),
+                # Component Total = the component's own sell PLUS its
+                # pro-rata share of slot-level one-time charges (die/prepress/
+                # proofs/misc/un-embedded freight). Guarantees the sum of
+                # Component Total within each (SPOT #, Qty) group EQUALS
+                # Quote Total — so analysis pivots always reconcile. Falls
+                # back to itemSell if for some reason the pre-computed field
+                # is missing.
+                "Component Total": r.get("_component_total", r.get("Sell Total", "")),
                 "Quote Total": r.get("Quote Total", ""),
             })
 
