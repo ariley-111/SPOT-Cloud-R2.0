@@ -609,54 +609,17 @@ _MP_ITEM_KEYS = [
 
 def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[str, Any]:
     """Build the multi-part engine payload EXACTLY like the UI's buildMpPayload()
-    (frontend/src/hooks/useEngine.js) so the report prices what the UI shows."""
+    (frontend/src/hooks/useEngine.js) so the report prices what the UI shows.
+
+    IMPORTANT: does NOT do any "heal" of state.qtys. The frontend passes
+    state.qtys through verbatim; if the backend re-derives them, the report
+    prices on a different qty than the UI and reports diverge from the
+    on-screen numbers. Historic heal removed 2026-02-13 after a Matched Set
+    quote (CD-260825-091053) was priced at qty=67 in the report while the UI
+    showed qty=400 — the heal reconstructed [67] from a legacy per-component
+    qtys array and clobbered the correct [400] the user had actually entered."""
     items = list(state.get("bomItems") or [])
     active = state.get("activeItemIdx") or 0
-
-    # Heal legacy corruption where top-level `state.qtys` got saved as the
-    # PRE-multiplied max-pcsPerSet version (e.g., [2, 1000, 2000, 4000] when
-    # the true set qtys are [1, 500, 1000, 2000] and the Tray has pcsPerSet=2).
-    # Ground truth: every component's `state.qtys[i] / pcsPerSet` yields the
-    # true set qty for slot i. So we rebuild top-level qtys from EACH
-    # component's own qtys, then take the MIN across components — a corrupted
-    # component would only shift its own qtys UP, never DOWN.
-    def _n(v: Any) -> float:
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return 0.0
-    healed_qtys: Optional[List[str]] = None
-    if state.get("quoteType") == "Multi-Part" and items:
-        candidates: List[List[str]] = []
-        for it in items:
-            iqs = (it.get("state") or {}).get("qtys") or []
-            pps = _n(it.get("pcsPerSet")) or 1.0
-            if pps <= 0:
-                pps = 1.0
-            per_slot: List[str] = []
-            for q in iqs:
-                v = _n(q)
-                per_slot.append(str(int(v / pps)) if v > 0 else "")
-            if any(s.strip() for s in per_slot):
-                candidates.append(per_slot)
-        if candidates:
-            width = max(len(c) for c in candidates)
-            healed = []
-            for i in range(width):
-                vals = []
-                for c in candidates:
-                    if i < len(c) and c[i].strip():
-                        try:
-                            vals.append(int(c[i]))
-                        except ValueError:
-                            pass
-                healed.append(str(min(vals)) if vals else "")
-            # Only apply the heal if the reconstructed set-qtys disagree with
-            # what's stored — same-value case means the top-level was already
-            # correct and we don't want to mask other legitimate configs.
-            top_qtys_str = [str(x) for x in (state.get("qtys") or [])]
-            if healed and healed != top_qtys_str[: len(healed)]:
-                healed_qtys = healed
 
     if isinstance(active, int) and 0 <= active < len(items):
         mirror = {k: state.get(k) for k in _MP_ITEM_KEYS if state.get(k) is not None}
@@ -707,7 +670,7 @@ def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[s
         "setMarginOverride": bool(state.get("setMarginOverride")),
         "fulfillmentMarginPct": state.get("fulfillmentMarginPct") or "0.45",
         "purchasedMarginPct": state.get("purchasedMarginPct") or "0.40",
-        "qtys": [str(x) for x in (healed_qtys if healed_qtys is not None else (state.get("qtys") or []))],
+        "qtys": [str(x) for x in (state.get("qtys") or [])],
         "activeItemIdx": active,
         "bomItems": items,
         "estInitials": state.get("estInitials"),

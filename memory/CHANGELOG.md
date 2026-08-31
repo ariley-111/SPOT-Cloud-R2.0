@@ -2029,3 +2029,23 @@ Keeps cloud's compact layout but adds legacy functionality.
   a single Qty across rows, and Component Totals still sum exactly to
   Quote Total (both fixes compose correctly).
 - Testing Report also benefits since it shares `_compute_report_rows`.
+
+### 2026-02-13 — Analysis Report: qty mismatch UI (Mondelez Oreo Kit)
+- User-reported: Analysis Report showed Qty=67 / Quote Total=$27,501.17 for
+  CD-260825-091053 while SPOT UI clearly showed Qty=400 / Order Total=$96,292.40.
+- Root cause: `_mp_engine_payload` was running a "legacy corruption heal"
+  that reconstructed top-level qtys from each component's qtys (divided by
+  pcsPerSet) and took the MIN. For a healthy quote where one component
+  happened to store its own qtys correctly at 400 but another component
+  stored [67, ...] for whatever reason, the heal would compute MIN → 67 and
+  clobber the correct [400]. Frontend `buildMpPayload` did NO such heal
+  (useEngine.js:209 uses state.qtys verbatim) — hence UI showed correct 400
+  and report showed healed-to-hell 67.
+- Fix: removed the heal from `_mp_engine_payload`. Backend now aligned with
+  frontend — both use state.qtys as-stored, no reconstruction.
+- Regression risk: if any prod quote is ACTUALLY corrupted (state.qtys saved
+  as pre-multiplied [2, 1000, 2000, 4000] instead of set qtys [1, 500, 1000,
+  2000]), it'll now price on the corrupt values in BOTH UI and report. But
+  if that quote were live, the user would already be seeing wrong numbers
+  in the UI too — so any complaint would surface immediately, not silently.
+- Ships with next redeploy.
