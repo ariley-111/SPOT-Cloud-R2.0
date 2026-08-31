@@ -199,14 +199,36 @@ export function buildMpPayload(state) {
       },
     };
   }
+  // ── Matched Set qty normalization (BUG-2026-02: Cost-Buildup Quote Total
+  // changed per active component). In Matched Set mode, top-level state.qtys
+  // holds the ACTIVE component's PRE-MULTIPLIED item qty (pcsPerSet × set qty),
+  // per legacy commit semantics (spot_r1_5.jsx L2074). The backend engine's
+  // Matched Set path treats payload.qtys as the SET qty and multiplies each
+  // component's pcsPerSet against it. So sending state.qtys as-is causes the
+  // Shelf tab (pcsPerSet=3, state.qtys=['6']) to be interpreted as 6 SETS,
+  // producing 3× kit totals on tab switches. Fix: divide by ACTIVE component's
+  // pcsPerSet before sending, so the engine always sees the raw SET qty
+  // regardless of which tab is active. Individual mode uses top-level qtys as
+  // the fall-back for blank per-item slots, so we leave it unchanged there.
+  const pricingMode = state.pricingMode || "Matched Set";
+  const activePcs = Math.max(1, Number((items[activeIdx] || {}).pcsPerSet) || 1);
+  const rawQtys = (state.qtys || []).map(String);
+  const setQtys = (state.quoteType === "Multi-Part" && pricingMode === "Matched Set")
+    ? rawQtys.map((q) => {
+        const n = Number(q);
+        if (!Number.isFinite(n) || n <= 0) return "";
+        return String(Math.round(n / activePcs));
+      })
+    : rawQtys;
+
   return {
     quoteType: state.quoteType,
-    pricingMode: state.pricingMode || "Matched Set",
+    pricingMode: pricingMode,
     setMarginPct: state.setMarginPct || "0.40",
     setMarginOverride: !!state.setMarginOverride,
     fulfillmentMarginPct: state.fulfillmentMarginPct || "0.45",
     purchasedMarginPct: state.purchasedMarginPct || "0.40",
-    qtys: (state.qtys || []).map(String),
+    qtys: setQtys,
     activeItemIdx: activeIdx,
     // When freight is being allocated at the job level (Local Delivery, Per-Job UTS, etc.)
     // we MUST zero out each component's per-item freightCost — otherwise the engine

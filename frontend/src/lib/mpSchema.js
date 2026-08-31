@@ -111,14 +111,54 @@ export function healLoadedState(s) {
   }
   if (s.custIdent !== undefined) merged.custIdent = s.custIdent || "";
   if (Array.isArray(s.miscCharges)) merged.miscCharges = [...s.miscCharges];
-  const bomItems = s.bomItems.map((b, i) => (i === idx ? { ...b, state: merged } : b));
+  let bomItems = s.bomItems.map((b, i) => (i === idx ? { ...b, state: merged } : b));
   const out = { ...s, bomItems };
+  // ── Matched Set qty normalization (BUG-2026-02) ────────────────────────
+  // Corrupt Matched Set quotes/drafts can have per-component state.qtys that
+  // disagree on the set qty (e.g. Hutch state.qtys=['2'] pcsPerSet=1,
+  // Shelf state.qtys=['9'] pcsPerSet=3 → different set qtys 2 vs 3).
+  // Historic cause: BOM commit multiplied by an OLD pcsPerSet, or a subset of
+  // items were built at a different set qty than the rest.
+  // Heal: derive the TRUE set qty per slot from the ACTIVE item's state.qtys
+  // ÷ activePcs (top-level qtys was just mirrored from it), then rewrite every
+  // component's state.qtys[slot] to setQty × items[i].pcsPerSet.
+  // Idempotent: correct data returns the same values unchanged.
+  const pricingMode = out.pricingMode || "Matched Set";
+  if (pricingMode === "Matched Set" && bomItems.length > 0) {
+    const activePcs = Math.max(1, Number(bomItems[idx]?.pcsPerSet) || 1);
+    const topRaw = Array.isArray(out.qtys) ? out.qtys : [];
+    // Derive set qty per slot from top-level (active-item's pre-multiplied qty)
+    const setQtysBySlot = topRaw.map((q) => {
+      const n = Number(q);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      return Math.round(n / activePcs);
+    });
+    // Only rewrite when we have at least one valid slot
+    if (setQtysBySlot.some((v) => v > 0)) {
+      bomItems = bomItems.map((b) => {
+        const pcs = Math.max(1, Number(b?.pcsPerSet) || 1);
+        const cur = Array.isArray(b?.state?.qtys) ? b.state.qtys : [];
+        const rewritten = setQtysBySlot.map((sq, i) => {
+          if (sq > 0) return String(sq * pcs);
+          // Preserve blanks / original for slots where we couldn't derive setQty
+          return (cur[i] !== undefined ? cur[i] : "");
+        });
+        // Pad/trim to top-level length
+        while (rewritten.length < topRaw.length) rewritten.push("");
+        return { ...b, state: { ...(b.state || {}), qtys: rewritten } };
+      });
+      // Also update the ACTIVE item's mirror we just built
+      const activeState = bomItems[idx]?.state || {};
+      out.qtys = activeState.qtys ? [...activeState.qtys] : topRaw;
+    }
+    out.bomItems = bomItems;
+  }
   // Hoist testing/comparison flags to the quote level for legacy saves that
   // stored them inside a specific component's state (pre-2026-02 fix when
   // these keys were incorrectly item-level). Union across all components:
   //   goodForTesting/iquoteWon: OR of top-level + any component
   //   iquoteNum: first non-empty (top-level wins, else scan components)
-  const bomStates = bomItems.map((b) => b?.state || {});
+  const bomStates = (out.bomItems || bomItems).map((b) => b?.state || {});
   if (!out.goodForTesting) {
     out.goodForTesting = bomStates.some((st) => !!st.goodForTesting) || false;
   }

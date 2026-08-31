@@ -663,6 +663,35 @@ def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[s
             return ist
         return {**ist, "cadPricingMethod": want}
     items = [{**it, "state": _heal_cad(it.get("state") or {})} for it in items]
+    # ── Matched Set qty normalization ─────────────────────────────────────
+    # BUG-2026-02 (Cost Buildup Quote Total varied per active component):
+    # legacy stores state.qtys PRE-MULTIPLIED by the active component's
+    # pcsPerSet (spot_r1_5.jsx L2074). The engine's Matched Set path expects
+    # payload.qtys to be the raw SET qty and re-multiplies each component's
+    # pcsPerSet. Divide by the active component's pcsPerSet here so the
+    # engine gets the true set qty (same transform as the UI's
+    # buildMpPayload in useEngine.js — reports must match the UI 1:1).
+    # Individual mode is unaffected (each item uses its own state.qtys).
+    top_qtys_raw = [str(x) for x in (state.get("qtys") or [])]
+    top_qtys_out = top_qtys_raw
+    if (state.get("quoteType") == "Multi-Part"
+            and (state.get("pricingMode") or "Matched Set") == "Matched Set"
+            and isinstance(active, int) and 0 <= active < len(items)):
+        try:
+            active_pcs = int((items[active] or {}).get("pcsPerSet") or 1)
+        except (TypeError, ValueError):
+            active_pcs = 1
+        active_pcs = max(1, active_pcs)
+        if active_pcs > 1:
+            def _div(q):
+                try:
+                    n = float(q)
+                except (TypeError, ValueError):
+                    return q
+                if n <= 0:
+                    return ""
+                return str(int(round(n / active_pcs)))
+            top_qtys_out = [_div(q) if str(q).strip() else "" for q in top_qtys_raw]
     payload = {
         "quoteType": state.get("quoteType"),
         "pricingMode": state.get("pricingMode") or "Matched Set",
@@ -670,7 +699,7 @@ def _mp_engine_payload(state: Dict[str, Any], quote_id: Optional[str]) -> Dict[s
         "setMarginOverride": bool(state.get("setMarginOverride")),
         "fulfillmentMarginPct": state.get("fulfillmentMarginPct") or "0.45",
         "purchasedMarginPct": state.get("purchasedMarginPct") or "0.40",
-        "qtys": [str(x) for x in (state.get("qtys") or [])],
+        "qtys": top_qtys_out,
         "activeItemIdx": active,
         "bomItems": items,
         "estInitials": state.get("estInitials"),

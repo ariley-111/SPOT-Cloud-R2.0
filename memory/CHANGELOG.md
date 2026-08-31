@@ -2,6 +2,51 @@
 
 Append-only log of shipped features and fixes.
 
+
+## 2026-02-19 — CRITICAL FIX: Matched Set kit total drifted per active BOM tab
+- **User report:** In Matched Set Multi-Part quotes, the top MATCHED SET block Quote Total,
+  the Cost Buildup rail Quote Total, AND the Letter of Quote PDF Quote Summary total all
+  changed depending on which BOM component tab was active. Example: Balconi/Hot Wheels
+  draft (6 components: 2 Hutches pcs=1, 2 Shelf Sets pcs=3, 2 Header/Bottom Combos pcs=1)
+  showed inflated 3× totals when a Shelf tab was active. User frustrated: "WHAT IS THE
+  ACTUAL COST OF THIS MATCHED SET???"
+- **Root cause (CLOUD-ONLY — Legacy immune):** Legacy stores `state.qtys` PRE-MULTIPLIED
+  by each item's `pcsPerSet` at BOM commit (spot_r1_5.jsx L2074). Cloud's Matched Set
+  engine path (`engine_routes.py` L553-581, L609) takes a shortcut — treats top-level
+  `payload.qtys` as the SET qty and multiplies each component's pcsPerSet against it.
+  When `switchBomItem` swaps top-level `state.qtys` to the active component's
+  pre-multiplied qtys (per legacy convention), a Shelf tab's `state.qtys=[6]` becomes
+  the "set qty" and the engine computes 6 hutches + 18 shelves + 6 headers → 3× the kit
+  totals. Legacy is safe because it uses per-item `runItem(item.state)` for non-active
+  components (spot_r1_5.jsx L3794-3802), so tab switching never pollutes non-active
+  inputs.
+- **Fix (4 legs — Legacy parity, zero label changes):**
+  - (A) `frontend/src/hooks/useEngine.js` `buildMpPayload`: in Matched Set mode, divide
+    top-level `state.qtys` by ACTIVE component's `pcsPerSet` before sending
+    `payload.qtys` — engine now always receives the raw SET qty regardless of active tab.
+  - (B) `backend/routes/quotes.py` `_mp_engine_payload`: same divide-by-active-pcs on
+    the server so the analysis xlsx + report generators match the UI 1:1.
+  - (C) `frontend/src/context/QuoteContext.jsx` `switchBomItem`: in Matched Set mode,
+    re-scale top-level `state.qtys` as `setQty × newItem.pcsPerSet` on tab switch so the
+    visible qty stays anchored to the same number of complete kits across tabs.
+  - (D) `frontend/src/lib/mpSchema.js` `healLoadedState`: on quote/draft load in Matched
+    Set mode, derive the true SET qty from top-level qtys ÷ activePcs, then normalize
+    EVERY component's `state.qtys` to `setQty × item.pcsPerSet`. Idempotent for correct
+    data; retroactively heals every corrupt quote/draft on first open (no batch migration
+    needed).
+- **Testing (iteration_70.json — 100% PASS):**
+  - Backend 4/4 pytest: All 6 `activeItemIdx` values POSTed to `/api/engine/calculate-multi-part`
+    return IDENTICAL `jobSell=$2,436.07` (delta <1¢); analysis.xlsx returns 200; PDF preview
+    is byte-identical (118486 bytes) between activeIdx=0 (hutch) and activeIdx=2 (shelf).
+  - Frontend Playwright: cycled all 6 BOM tabs — `econ-set-quote-total` and `econ-set-sell`
+    stayed at $2,436.07 on every tab; Letter of Quote PDF Quote Summary = $2,436.07
+    (2 SETS × $1,218.03/set) matches top-block 1:1.
+  - Data heal verified idempotent on real corrupt Balconi draft.
+- **New files:** `/app/backend/tests/test_matched_set_qty_stability.py` (regression guard).
+- **Prod deploy note:** After redeploy, opening ANY existing Matched Set quote in prod
+  auto-heals it on load (silent, no user action needed).
+
+
 ## 2026-08-03 — Executive Summary regenerated from fresh corrected report
 - **User request:** Rebuild the SPOT Exec Summary using the freshly corrected pricing report (SPOT rows,
   iQuote export, actuals in one workbook) and apply strict formatting rules.

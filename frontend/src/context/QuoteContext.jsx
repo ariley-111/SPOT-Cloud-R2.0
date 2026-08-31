@@ -685,6 +685,29 @@ export function QuoteProvider({ children }) {
       // Prefer the saved state values over the BOM-item-level labels — the state
       // is the user's latest input; the BOM label is just a cached display value.
       const next = applyItemStateTo(t.state, target.state || freshItemState());
+      // ── Matched Set qty anchoring (BUG-2026-02) ─────────────────────────
+      // In Matched Set mode, state.qtys is PRE-MULTIPLIED by each item's
+      // pcsPerSet (legacy commitBom, spot_r1_5.jsx L2074). Blind copy of
+      // target.state.qtys into top-level makes the visible qty jump — e.g.
+      // Hutch tab shows "2", Shelf tab shows "6" — which used to feed the
+      // engine as SET qty and 3× the kit totals. Re-derive the raw set qty
+      // from the OUTGOING item (top-level ÷ its pcsPerSet) and re-multiply
+      // by the TARGET item's pcsPerSet so the visible number always maps
+      // back to the same number of complete kits.
+      const isMatched = (t.state.pricingMode || "Matched Set") === "Matched Set"
+        && t.state.quoteType === "Multi-Part";
+      if (isMatched) {
+        const oldPcs = Math.max(1, Number(items[oldIdx]?.pcsPerSet) || 1);
+        const newPcs = Math.max(1, Number(target.pcsPerSet) || 1);
+        const rawTop = Array.isArray(t.state.qtys) ? t.state.qtys : [];
+        // For each slot: setQty = topQty / oldPcs; newTop = setQty * newPcs
+        next.qtys = rawTop.map((q) => {
+          const n = Number(q);
+          if (!Number.isFinite(n) || n <= 0) return "";
+          const setQty = Math.round(n / oldPcs);
+          return setQty > 0 ? String(setQty * newPcs) : "";
+        });
+      }
       next.bomItems = itemsSaved;
       next.activeItemIdx = newIdx;
       next.itemDesc = target.state?.itemDesc || target.desc || "";

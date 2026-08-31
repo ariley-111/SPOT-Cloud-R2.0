@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 70 — BUG-2026-02 Matched Set qty stability fix VERIFIED end-to-end. Backend + Frontend + PDF all agree at $2,436.07 kit total across all 6 BOM component tabs of the healed Balconi/Hot Wheels draft (id=4711168a-5638-4885-a550-3d5c42d8657e, mongo _id 6a884a6a630e9e0a09ba1369, 6 items: 2 Hutches pcs=1, 2 Shelf Sets pcs=3, 2 Header/Bottom Combos pcs=1, setQty=2). Backend pytest (4/4 PASS): (1) All 6 activeItemIdx values POSTed to /api/engine/calculate-multi-part return IDENTICAL jobSell=$2,436.07 (delta < 1¢). (2) Per-component qty scales correctly by pcsPerSet — hutches qty=2, shelves qty=6. (3) Analysis xlsx endpoint returns 200. (4) /api/pdf/preview-quote returns identical 118486-byte PDF for activeIdx=0 (hutch) vs activeIdx=2 (shelf). UI E2E (Playwright): loaded Balconi draft via Load modal, cycled through all 6 [data-testid=bom-item-desc-N] tabs — top-block [data-testid=econ-set-quote-total] and [data-testid=econ-set-sell] stayed at $2,436.07 on every tab; the visible [data-testid=input-qty-0] correctly re-anchors as setQty*pcsPerSet (shows 2 on hutch/header tabs, 6 on shelf tabs). Opened Preview modal → Letter of Quote 'QUOTE TOTAL' row = $2,436.07 (2 SETS × $1,218.03/set) — identical to the top-block. Data heal verified idempotent: DB inspection showed items[0,1,4,5].state.qtys=['2'], items[2,3].state.qtys=['6'], top state.qtys=['6'] (activeItemIdx=2) — exact expected post-heal shape.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "tests_executed": {
+    "backend": [
+      "POST /api/engine/calculate-multi-part × 6 (activeItemIdx=0..5) with adjusted top qtys (per switchBomItem contract) — all returned slots[0].jobSell=$2,436.07 (identical)",
+      "Per-component qty verification: 6 components × pcsPerSet match (hutches qty=2×1=2, shelves qty=2×3=6, headers qty=2×1=2)",
+      "GET /api/quotes/_report/analysis.xlsx?ids=4711168a... → 200",
+      "POST /api/pdf/preview-quote for activeIdx=0 and activeIdx=2 → 200, identical 118486-byte PDFs"
+    ],
+    "frontend": [
+      "JWT login as admin, opened Load modal → Drafts tab → clicked SA-260813-121003 (Balconi/Hot Wheels)",
+      "Cycled all 6 bom-item-desc-N tabs: econ-set-quote-total stayed at $2,436.07, econ-set-sell stayed at $2,436.07, input-qty-0 re-anchored correctly (2 on pcs=1 tabs, 6 on pcs=3 tabs)",
+      "Opened Preview modal → Letter of Quote table showed MATCHED SET — 6 ITEMS, Price/Set=$1,218.03, QUOTE TOTAL=$2,436.07 (2 sets) — matches top-block 1:1"
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_matched_set_qty_stability.py",
+    "/app/test_reports/pytest/mp_qty_stability.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routes/quotes.py _mp_engine_payload L666-694: divide-by-active-pcs is gated correctly on (quoteType==Multi-Part AND pricingMode==Matched Set AND valid active index) — Individual and Simple modes are provably untouched. Idempotent because it operates on the current stored top qtys which the frontend already anchors as setQty*activePcs. Good.",
+    "backend/routes/engine_routes.py calculate_multi_part L580-581: Matched Set path re-multiplies set_qty by each component's pcsPerSet — this is the ONLY place per-component pcs multiplication happens in Matched Set mode, so as long as payload.qtys is the raw set qty, results are stable regardless of active tab. Fix is architecturally sound.",
+    "frontend switchBomItem re-scaling top qtys to setQty*newItemPcsPerSet is what makes the UI's visible qty0 change between hutch(2) and shelf(6) tabs — this could confuse users who expect the visible qty to always represent 'kits'. Consider adding a small helper caption '2 sets · 6 shelves total' near input-qty-0 in Matched Set mode so estimators aren't surprised.",
+    "mpSchema.healLoadedState correctly normalized this real corrupt draft (activeIdx=2 shelf) into the canonical shape — verified in mongo. Recommend the same heal run on backend GET as a defensive net for any drafts saved by an older client build that hasn't picked up the frontend fix yet."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_matched_set_qty_stability.py (NEW)"
+  ],
+  "success_rate": { "backend": "100% (4/4)", "frontend": "100% (all 6 tabs stable + PDF matches)" },
+  "test_credentials": "admin@standardprinting.com / spot-admin-2026",
+  "seed_data_creation": "None — only READ the pre-existing Balconi draft (id=4711168a-5638-4885-a550-3d5c42d8657e). No writes to DB. Cleanup not required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The Balconi draft in DB is already in canonical healed shape (top qtys=['6'] because activeIdx=2 shelf, per-item state.qtys correctly scaled by each pcsPerSet). Frontend healLoadedState + switchBomItem + buildMpPayload work together, and backend _mp_engine_payload mirrors the same divide-by-active-pcs transform so /api/quotes/_report/analysis.xlsx and any server-side report path stay in sync. Expected kit total: $2,436.07 (session note said ~$2,505.07 — actual is $2,436.07, likely reflecting a rate update since the note was written). To reproduce on a fresh MP quote, use tile-quote-multipart → BOM Builder → add 2 Manufactured items with pcsPerSet=1 and pcsPerSet=3, commit, set qty=100. Test data-testids used: econ-set-quote-total, econ-set-sell, input-qty-0, bom-item-desc-{0..5}, toolbar-load, toolbar-preview.",
+  "rca of the issue": "Root cause was the legacy pre-multiplication convention (state.qtys already scaled by pcsPerSet) colliding with the cloud engine's Matched Set path which independently multiplies set qty by pcsPerSet. When switchBomItem swapped top-level state.qtys to the active component's pre-multiplied qtys, the engine received a shelf's 6 as the 'set qty' and inflated the kit total 3×. Fix chain: (A) buildMpPayload divides by activePcs before sending → engine gets raw set qty. (B) _mp_engine_payload does the same on the server (report/analysis parity). (C) switchBomItem re-anchors top qtys as setQty*newPcsPerSet so the UI shows the right visible qty per tab. (D) healLoadedState normalizes corrupt drafts on load. All 4 legs verified working end-to-end with real Balconi data."
+}
