@@ -82,6 +82,10 @@ INTEGRATIONS: List[Dict[str, str]] = [
      "env": "SSO_ADMIN_EMAILS", "label": "Admin Email Allowlist",
      "hint": "Comma-separated emails that always get role=admin regardless of group membership (bootstrap escape hatch).",
      "type": "text"},
+    {"provider": "entra", "key": "APP_BASE_URL",
+     "env": "APP_BASE_URL", "label": "App Base URL (for SSO redirect)",
+     "hint": "Public HTTPS URL where the app is reachable (no trailing slash). Used by MSAL to build the redirect_uri sent to Microsoft. MUST match a Redirect URI listed on the Azure Portal App Registration. Example: https://ai-connect-33.emergent.host. If this is blank, the 'Sign in with Microsoft' button disappears from the login page.",
+     "type": "text"},
 ]
 
 # Provider metadata for the UI status pills
