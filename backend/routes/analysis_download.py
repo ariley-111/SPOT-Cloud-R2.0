@@ -19,3 +19,15 @@ def download_round2_report():
         filename="SPOT_vs_iQuote_Round2.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/jobtype")
+def download_jobtype_report():
+    fp = _ASSETS / "SPOT_JobType_Variance.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_JobType_Variance.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
