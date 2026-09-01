@@ -43,3 +43,15 @@ def download_distribution_chart():
         filename="SPOT_Variance_Distribution.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/customer")
+def download_customer_chart():
+    fp = _ASSETS / "SPOT_Customer_QtyBand_Chart.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_Customer_QtyBand_Chart.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
