@@ -114,6 +114,10 @@ m["Variance %"] = np.where(
     np.nan,
 )
 
+# Backfill Customer from the Round 2 SPOT sheet (full export lacks Customer)
+cust_map = r2.dropna(subset=["SPOT Estimate #"]).drop_duplicates("SPOT Estimate #").set_index("SPOT Estimate #")["Customer"].to_dict()
+m["Customer"] = m["SPOT Estimate #"].map(cust_map)
+
 # Qty band
 def qty_band(q):
     if pd.isna(q): return "Unknown"
@@ -270,12 +274,69 @@ comb.set_categories(Reference(ws, min_col=1, min_row=combined_hdr + 1, max_row=c
 ws.add_chart(comb, f"F{combined_start_row}")
 
 
-# Column widths
-ws.column_dimensions["A"].width = 28
-for c in "BCD":
-    ws.column_dimensions[c].width = 18
-for c in "EFGHIJKLMNOP":
-    ws.column_dimensions[c].width = 12
+# ─── Per-job-type quote/component lists (one sheet each) ─────────
+band_sort_map = {"1-49": 0, "50-199": 1, "200-999": 2, "1000-4999": 3, "5000+": 4, "Unknown": 5}
+FMT_MONEY = "$#,##0.00;[Red]-$#,##0.00"
+
+def write_list_sheet(name, sub):
+    s = wb.create_sheet(name)
+    s["A1"] = f"{name} — Component List"
+    s["A1"].font = TITLE
+    s["A2"] = ("Rows are components (job type is per component). A single SPOT estimate can appear across "
+               "multiple job-type sheets. Sorted by Qty Band → Customer → Estimate.")
+    s["A2"].font = SUBTITLE
+    s.merge_cells("A1:K1"); s.merge_cells("A2:K2")
+
+    headers = ["Qty Band", "iQuote Estimate #", "SPOT Estimate #", "Customer", "Project Name",
+               "Component", "Qty", "Print Mode", "SPOT Sell Total", "iQuote Total", "Variance %"]
+    for j, h in enumerate(headers, start=1):
+        c = s.cell(row=4, column=j, value=h)
+        c.font = HDR; c.fill = HDR_FILL; c.alignment = CENTER; c.border = BORDER
+
+    sub = sub.copy()
+    sub["_bk"] = sub["Qty Band"].map(band_sort_map).fillna(99)
+    sub = sub.sort_values(["_bk", "Customer", "iq_id", "Qty"]).reset_index(drop=True)
+
+    for i in range(len(sub)):
+        r = 5 + i
+        row = sub.iloc[i]
+        s.cell(row=r, column=1, value=row["Qty Band"])
+        s.cell(row=r, column=2, value=int(row["iq_id"]) if pd.notna(row["iq_id"]) else None).number_format = FMT_INT
+        s.cell(row=r, column=3, value=row["SPOT Estimate #"])
+        s.cell(row=r, column=4, value=row["Customer"])
+        s.cell(row=r, column=5, value=row["Project Name"])
+        s.cell(row=r, column=6, value=row["Component"])
+        s.cell(row=r, column=7, value=int(row["Qty"]) if pd.notna(row["Qty"]) else None).number_format = FMT_INT
+        pm = row["Print Mode"]
+        s.cell(row=r, column=8, value=None if pd.isna(pm) else str(pm))
+        v = row["SPOT Component Total"]
+        s.cell(row=r, column=9, value=float(v) if pd.notna(v) else None).number_format = FMT_MONEY
+        v = row["iQuote Component Total"]
+        s.cell(row=r, column=10, value=float(v) if pd.notna(v) else None).number_format = FMT_MONEY
+        v = row["Variance %"]
+        s.cell(row=r, column=11, value=float(v) if pd.notna(v) else None).number_format = FMT_PCT
+        for cc in range(1, 12):
+            s.cell(row=r, column=cc).border = BORDER
+
+    s.auto_filter.ref = f"A4:K{4 + len(sub)}"
+    s.freeze_panes = "A5"
+    widths = [12, 18, 22, 28, 42, 26, 10, 14, 18, 18, 14]
+    for j, w in enumerate(widths, start=1):
+        s.column_dimensions[get_column_letter(j)].width = w
+
+
+list_cols = m[["Qty Band", "iq_id", "SPOT Estimate #", "Customer", "Project Name",
+               "Component", "Qty", "Print Mode", "SPOT Component Total",
+               "iQuote Component Total", "Variance %", "Job Type"]]
+
+sheet_names = {
+    "Cut Only": "Cut Only List",
+    "Print + Cut": "Print + Cut List",
+    "Print + Cut + Finishing": "Print+Cut+Fin List",
+}
+for jt in JOB_TYPES:
+    write_list_sheet(sheet_names[jt], list_cols[list_cols["Job Type"] == jt].drop(columns=["Job Type"]))
+
 
 wb.save(OUT)
 print(f"Wrote {OUT}")
