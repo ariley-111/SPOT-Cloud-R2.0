@@ -31,3 +31,15 @@ def download_jobtype_report():
         filename="SPOT_JobType_Variance.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/distribution")
+def download_distribution_chart():
+    fp = _ASSETS / "SPOT_Variance_Distribution.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_Variance_Distribution.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
