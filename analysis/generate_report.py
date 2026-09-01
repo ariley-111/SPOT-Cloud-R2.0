@@ -8,9 +8,11 @@ import numpy as np
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.chart import ScatterChart, Reference, Series
+from openpyxl.chart import ScatterChart, Reference, Series, BarChart, PieChart, LineChart
 from openpyxl.chart.trendline import Trendline
 from openpyxl.chart.marker import Marker
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.layout import Layout, ManualLayout
 
 
 IN = sys.argv[1] if len(sys.argv) > 1 else "input.xlsx"
@@ -439,6 +441,36 @@ write_df(ws3, band_trim, start_row=start2,
          pct_cols=("Avg Variance %", "Median Variance %", "P25", "P75", "Std Dev"),
          int_cols=("Count",))
 
+# Chart: grouped bar — Avg + Median by Qty Band (raw)
+qb_chart = BarChart()
+qb_chart.type = "col"
+qb_chart.style = 11
+qb_chart.title = "Avg vs Median Variance % by Qty Band (Raw)"
+qb_chart.y_axis.title = "Variance %"
+qb_chart.x_axis.title = "Qty Band"
+qb_chart.height = 10
+qb_chart.width = 22
+data_ref = Reference(ws3, min_col=3, max_col=4, min_row=3, max_row=3 + len(band_raw))
+cats_ref = Reference(ws3, min_col=1, min_row=4, max_row=3 + len(band_raw))
+qb_chart.add_data(data_ref, titles_from_data=True)
+qb_chart.set_categories(cats_ref)
+ws3.add_chart(qb_chart, "I3")
+
+# Chart: IQR-trimmed comparison
+qb_chart2 = BarChart()
+qb_chart2.type = "col"
+qb_chart2.style = 12
+qb_chart2.title = "Avg vs Median Variance % by Qty Band (IQR-Trimmed)"
+qb_chart2.y_axis.title = "Variance %"
+qb_chart2.x_axis.title = "Qty Band"
+qb_chart2.height = 10
+qb_chart2.width = 22
+data_ref2 = Reference(ws3, min_col=3, max_col=4, min_row=start2, max_row=start2 + len(band_trim))
+cats_ref2 = Reference(ws3, min_col=1, min_row=start2 + 1, max_row=start2 + len(band_trim))
+qb_chart2.add_data(data_ref2, titles_from_data=True)
+qb_chart2.set_categories(cats_ref2)
+ws3.add_chart(qb_chart2, "I22")
+
 
 # ---------- Sheet 4: Qty x Customer pivot ----------
 ws4 = wb.create_sheet("Qty x Customer")
@@ -446,6 +478,35 @@ ws4["A1"] = "Avg Variance % — Top 15 Customers × Qty Band"
 ws4["A1"].font = TITLE
 pct_cols_p = tuple([c for c in pivot_df.columns if c not in ("Customer", "Component Count")])
 write_df(ws4, pivot_df, start_row=3, pct_cols=pct_cols_p, int_cols=("Component Count",))
+
+# Chart: horizontal bar — each customer's average variance across all bands
+cust_avgs = raw[raw["Customer"].isin(top_cust)].groupby("Customer")["Variance %"].mean().reindex(top_cust)
+cust_start = 3 + len(pivot_df) + 4
+ws4.cell(row=cust_start, column=1, value="Top 15 Customers — Overall Avg Variance %").font = TITLE
+ws4.cell(row=cust_start + 1, column=1, value="Customer").font = BOLD
+ws4.cell(row=cust_start + 1, column=2, value="Avg Variance %").font = BOLD
+ws4.cell(row=cust_start + 1, column=3, value="Component Count").font = BOLD
+for i, (c, v) in enumerate(cust_avgs.items(), start=cust_start + 2):
+    ws4.cell(row=i, column=1, value=str(c))
+    cell = ws4.cell(row=i, column=2, value=None if pd.isna(v) else float(v))
+    cell.number_format = FMT_PCT
+    n_cell = ws4.cell(row=i, column=3, value=int(raw[raw["Customer"] == c].shape[0]))
+    n_cell.number_format = FMT_INT
+
+cust_bar = BarChart()
+cust_bar.type = "bar"
+cust_bar.style = 10
+cust_bar.title = "Avg Variance % — Top 15 Customers (sorted by volume)"
+cust_bar.y_axis.title = "Customer"
+cust_bar.x_axis.title = "Avg Variance %"
+cust_bar.height = 14
+cust_bar.width = 22
+cust_bar.legend = None
+dref = Reference(ws4, min_col=2, min_row=cust_start + 2, max_row=cust_start + 1 + len(cust_avgs))
+cref = Reference(ws4, min_col=1, min_row=cust_start + 2, max_row=cust_start + 1 + len(cust_avgs))
+cust_bar.add_data(dref, titles_from_data=False)
+cust_bar.set_categories(cref)
+ws4.add_chart(cust_bar, f"E{cust_start}")
 
 
 # ---------- Sheet 5: Print vs No-Print ----------
@@ -468,6 +529,35 @@ write_df(
     pct_cols=("Avg Variance %", "Median Variance %", "P25", "P75", "Std Dev"),
     int_cols=("Count", "SPOT > iQuote", "SPOT < iQuote"),
 )
+
+# Chart: Print vs No-Print — Avg + Median side by side
+pn_chart = BarChart()
+pn_chart.type = "col"
+pn_chart.style = 11
+pn_chart.title = "Print vs No-Print — Avg / Median Variance %"
+pn_chart.y_axis.title = "Variance %"
+pn_chart.x_axis.title = "Print Mode"
+pn_chart.height = 10
+pn_chart.width = 20
+d = Reference(ws5, min_col=3, max_col=4, min_row=3, max_row=3 + len(print_stats))
+c = Reference(ws5, min_col=1, min_row=4, max_row=3 + len(print_stats))
+pn_chart.add_data(d, titles_from_data=True)
+pn_chart.set_categories(c)
+ws5.add_chart(pn_chart, "K3")
+
+# Chart: Print Mode detail
+pm_chart = BarChart()
+pm_chart.type = "col"
+pm_chart.style = 12
+pm_chart.title = "By Print Mode — Avg / Median Variance %"
+pm_chart.y_axis.title = "Variance %"
+pm_chart.height = 10
+pm_chart.width = 20
+d2 = Reference(ws5, min_col=3, max_col=4, min_row=r2, max_row=r2 + len(mode_stats))
+c2 = Reference(ws5, min_col=1, min_row=r2 + 1, max_row=r2 + len(mode_stats))
+pm_chart.add_data(d2, titles_from_data=True)
+pm_chart.set_categories(c2)
+ws5.add_chart(pm_chart, "K22")
 
 
 # ---------- Sheet 6: Distribution (Z-Scores) + chart ----------
@@ -518,8 +608,6 @@ for i, (b, c) in enumerate(hist.items(), start=hist_start + 2):
     cc.number_format = FMT_INT
 
 # Bar chart on histogram
-from openpyxl.chart import BarChart
-
 bar = BarChart()
 bar.type = "col"
 bar.title = "Variance % Histogram"
@@ -575,6 +663,206 @@ for lbl, val, fmt in labels:
     c = ws7.cell(row=r_e, column=2, value=None if pd.isna(val) else (float(val) if not isinstance(val, (int, np.integer)) else int(val)))
     c.number_format = fmt
     r_e += 1
+
+# Impact bar: All vs Excluding-CD (Mean, Median, Std Dev)
+r_e += 3
+ws7.cell(row=r_e, column=1, value="Impact of CD-Freight Bug on Top-Line Stats").font = TITLE
+r_e += 1
+ws7.cell(row=r_e, column=1, value="Metric").font = BOLD
+ws7.cell(row=r_e, column=2, value="All Components").font = BOLD
+ws7.cell(row=r_e, column=3, value="Excluding CD-Freight").font = BOLD
+metrics = [
+    ("Mean Variance %", all_stats["mean"], noc_stats["mean"]),
+    ("Median Variance %", all_stats["median"], noc_stats["median"]),
+    ("Std Dev %", all_stats["std"], noc_stats["std"]),
+]
+metric_start = r_e + 1
+for i, (lbl, a, b) in enumerate(metrics):
+    rr = metric_start + i
+    ws7.cell(row=rr, column=1, value=lbl).font = BOLD
+    ca = ws7.cell(row=rr, column=2, value=float(a))
+    ca.number_format = FMT_PCT
+    cb = ws7.cell(row=rr, column=3, value=float(b))
+    cb.number_format = FMT_PCT
+
+impact_chart = BarChart()
+impact_chart.type = "col"
+impact_chart.style = 13
+impact_chart.title = "CD-Freight Bug — Impact on Top-Line Variance Stats"
+impact_chart.y_axis.title = "Variance %"
+impact_chart.height = 10
+impact_chart.width = 22
+d = Reference(ws7, min_col=2, max_col=3, min_row=r_e, max_row=metric_start + len(metrics) - 1)
+c = Reference(ws7, min_col=1, min_row=metric_start, max_row=metric_start + len(metrics) - 1)
+impact_chart.add_data(d, titles_from_data=True)
+impact_chart.set_categories(c)
+ws7.add_chart(impact_chart, f"E{r_e}")
+
+
+# ============================================================
+# Dashboard sheet — prepend at position 0
+# ============================================================
+dash = wb.create_sheet("Dashboard", 0)
+dash["A1"] = "SPOT vs iQuote — Big Picture"
+dash["A1"].font = TITLE
+dash["A2"] = "Component-level variance. Green shows where the mean drops after removing the CD freight bug."
+dash["A2"].font = SUBTITLE
+dash.merge_cells("A1:L1")
+dash.merge_cells("A2:L2")
+
+# KPI tiles row (rows 4-5)
+kpi_row = 4
+kpis = [
+    ("Components", len(raw), FMT_INT),
+    ("Unique Estimates", raw["iQuote Estimate #"].nunique(), FMT_INT),
+    ("Mean Variance", all_stats["mean"], FMT_PCT),
+    ("Median Variance", all_stats["median"], FMT_PCT),
+    ("SPOT > iQuote", all_stats["pos"], FMT_INT),
+    ("SPOT < iQuote", all_stats["neg"], FMT_INT),
+]
+for i, (label, val, fmt) in enumerate(kpis):
+    col = 1 + i * 2
+    ac = dash.cell(row=kpi_row, column=col, value=label)
+    ac.font = SUBHDR
+    ac.alignment = CENTER
+    vc = dash.cell(row=kpi_row + 1, column=col, value=int(val) if isinstance(val, (int, np.integer)) else float(val))
+    vc.font = Font(bold=True, size=18, color="1F4E78")
+    vc.number_format = fmt
+    vc.alignment = CENTER
+    dash.merge_cells(start_row=kpi_row, start_column=col, end_row=kpi_row, end_column=col + 1)
+    dash.merge_cells(start_row=kpi_row + 1, start_column=col, end_row=kpi_row + 1, end_column=col + 1)
+dash.row_dimensions[kpi_row + 1].height = 30
+
+# Data blocks the charts reference (put below the visible area, hidden columns not needed)
+data_start = 30
+dash.cell(row=data_start, column=1, value="[chart source data]").font = SUBTITLE
+
+# 1) Direction split
+dr = data_start + 1
+dash.cell(row=dr, column=1, value="Direction")
+dash.cell(row=dr, column=2, value="Count")
+dash.cell(row=dr + 1, column=1, value="SPOT > iQuote")
+dash.cell(row=dr + 1, column=2, value=int(all_stats["pos"]))
+dash.cell(row=dr + 2, column=1, value="SPOT < iQuote")
+dash.cell(row=dr + 2, column=2, value=int(all_stats["neg"]))
+
+pie = PieChart()
+pie.title = "Where does SPOT land vs iQuote?"
+pie.height = 8
+pie.width = 12
+d = Reference(dash, min_col=2, min_row=dr + 1, max_row=dr + 2)
+c = Reference(dash, min_col=1, min_row=dr + 1, max_row=dr + 2)
+pie.add_data(d, titles_from_data=False)
+pie.set_categories(c)
+pie.dataLabels = DataLabelList(showPercent=True, showCatName=True)
+dash.add_chart(pie, "A7")
+
+# 2) Impact of CD bug on Mean/Median/Std
+ci = dr + 5
+dash.cell(row=ci, column=1, value="Metric")
+dash.cell(row=ci, column=2, value="All")
+dash.cell(row=ci, column=3, value="Ex-CD")
+rows_ci = [
+    ("Mean", all_stats["mean"], noc_stats["mean"]),
+    ("Median", all_stats["median"], noc_stats["median"]),
+    ("Std Dev", all_stats["std"], noc_stats["std"]),
+]
+for i, (lbl, a, b) in enumerate(rows_ci):
+    dash.cell(row=ci + 1 + i, column=1, value=lbl)
+    dash.cell(row=ci + 1 + i, column=2, value=float(a)).number_format = FMT_PCT
+    dash.cell(row=ci + 1 + i, column=3, value=float(b)).number_format = FMT_PCT
+
+impact = BarChart()
+impact.type = "col"
+impact.style = 13
+impact.title = "CD Freight Bug Impact — All vs Excluding-CD"
+impact.y_axis.title = "Variance %"
+impact.height = 8
+impact.width = 12
+d = Reference(dash, min_col=2, max_col=3, min_row=ci, max_row=ci + len(rows_ci))
+c = Reference(dash, min_col=1, min_row=ci + 1, max_row=ci + len(rows_ci))
+impact.add_data(d, titles_from_data=True)
+impact.set_categories(c)
+dash.add_chart(impact, "G7")
+
+# 3) Histogram — same data as Distribution sheet
+hstart = ci + 6
+dash.cell(row=hstart, column=1, value="Bucket")
+dash.cell(row=hstart, column=2, value="Count")
+for i, (b, cnt) in enumerate(hist.items(), start=hstart + 1):
+    dash.cell(row=i, column=1, value=str(b))
+    dash.cell(row=i, column=2, value=int(cnt))
+
+hist_chart = BarChart()
+hist_chart.type = "col"
+hist_chart.style = 11
+hist_chart.title = "Distribution of Variance % (all components)"
+hist_chart.x_axis.title = "Variance % Bucket"
+hist_chart.y_axis.title = "Component Count"
+hist_chart.height = 9
+hist_chart.width = 24
+hist_chart.legend = None
+d = Reference(dash, min_col=2, min_row=hstart + 1, max_row=hstart + len(hist))
+c = Reference(dash, min_col=1, min_row=hstart + 1, max_row=hstart + len(hist))
+hist_chart.add_data(d, titles_from_data=False)
+hist_chart.set_categories(c)
+dash.add_chart(hist_chart, "A24")
+
+# 4) By Qty Band — Median Variance
+qstart = hstart + len(hist) + 3
+dash.cell(row=qstart, column=1, value="Qty Band")
+dash.cell(row=qstart, column=2, value="Median")
+dash.cell(row=qstart, column=3, value="Avg")
+for i, row in band_raw.iterrows():
+    dash.cell(row=qstart + 1 + i, column=1, value=row["Qty Band"])
+    dash.cell(row=qstart + 1 + i, column=2, value=float(row["Median Variance %"])).number_format = FMT_PCT
+    dash.cell(row=qstart + 1 + i, column=3, value=float(row["Avg Variance %"])).number_format = FMT_PCT
+
+qty_chart = BarChart()
+qty_chart.type = "col"
+qty_chart.style = 12
+qty_chart.title = "Where the Gap Sits — by Order Qty Band"
+qty_chart.y_axis.title = "Variance %"
+qty_chart.x_axis.title = "Qty Band"
+qty_chart.height = 9
+qty_chart.width = 20
+d = Reference(dash, min_col=2, max_col=3, min_row=qstart, max_row=qstart + len(band_raw))
+c = Reference(dash, min_col=1, min_row=qstart + 1, max_row=qstart + len(band_raw))
+qty_chart.add_data(d, titles_from_data=True)
+qty_chart.set_categories(c)
+dash.add_chart(qty_chart, "A42")
+
+# 5) Print vs No-Print — Median
+pstart = qstart + len(band_raw) + 3
+dash.cell(row=pstart, column=1, value="Group")
+dash.cell(row=pstart, column=2, value="Median")
+dash.cell(row=pstart, column=3, value="Avg")
+for i, row in print_stats.iterrows():
+    dash.cell(row=pstart + 1 + i, column=1, value=row["Print/No-Print"])
+    dash.cell(row=pstart + 1 + i, column=2, value=float(row["Median Variance %"])).number_format = FMT_PCT
+    dash.cell(row=pstart + 1 + i, column=3, value=float(row["Avg Variance %"])).number_format = FMT_PCT
+
+pn_chart2 = BarChart()
+pn_chart2.type = "col"
+pn_chart2.style = 13
+pn_chart2.title = "Print vs No-Print"
+pn_chart2.y_axis.title = "Variance %"
+pn_chart2.height = 9
+pn_chart2.width = 16
+d = Reference(dash, min_col=2, max_col=3, min_row=pstart, max_row=pstart + len(print_stats))
+c = Reference(dash, min_col=1, min_row=pstart + 1, max_row=pstart + len(print_stats))
+pn_chart2.add_data(d, titles_from_data=True)
+pn_chart2.set_categories(c)
+dash.add_chart(pn_chart2, "H42")
+
+# Column widths
+dash.column_dimensions["A"].width = 22
+for col_letter in "BCDEFGHIJKLM":
+    dash.column_dimensions[col_letter].width = 15
+
+# Hide the scratch data area rows (30+) so the dashboard stays clean
+for r_hide in range(30, pstart + len(print_stats) + 2):
+    dash.row_dimensions[r_hide].hidden = True
 
 
 wb.save(OUT)
