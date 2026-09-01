@@ -110,6 +110,28 @@ async def on_startup():
         {"rate_snapshot": {"$exists": False}},
         {"$set": {"rate_snapshot": baseline_snapshot()}})
     logger.info(f"Rate-freeze backfill: {bf.modified_count} legacy quotes pinned to baseline rates")
+    # BUG-2026-02-hotfix: heal-qtys accidentally wrote `updated_at` as a
+    # datetime (BSON Date) instead of the ISO string the rest of the codebase
+    # uses. Pydantic Quote.updated_at: str then 500'd the /api/quotes list
+    # (empty Load Quote modal in PROD). Coerce back to ISO string on boot —
+    # idempotent, safe to run every startup.
+    from db import COL_QUOTE_DRAFTS as _CQD
+    for _coll in (_CQ, _CQD):
+        try:
+            fixed = 0
+            async for _d in _dbq[_coll].find(
+                {"updated_at": {"$type": "date"}}, {"_id": 1, "updated_at": 1}
+            ):
+                _ua = _d.get("updated_at")
+                _iso = _ua.isoformat() if hasattr(_ua, "isoformat") else str(_ua)
+                await _dbq[_coll].update_one(
+                    {"_id": _d["_id"]}, {"$set": {"updated_at": _iso}}
+                )
+                fixed += 1
+            if fixed:
+                logger.warning(f"updated_at coerce (bson→iso): {_coll} fixed={fixed}")
+        except Exception as e:
+            logger.warning(f"updated_at coerce skipped for {_coll}: {e}")
     # Async parse jobs — TTL index purges completed/abandoned jobs after 24h.
     from db import db as _dbj, COL_PARSER_JOBS, COL_EMAIL_JOBS
     try:

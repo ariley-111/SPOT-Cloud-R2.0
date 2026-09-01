@@ -25,6 +25,13 @@ from routes.auth import require_admin
 router = APIRouter(prefix="/api/admin/matched-set", tags=["admin-matched-set"])
 
 
+def _now_iso() -> str:
+    """Match `routes.quotes._now()` — ISO string, not datetime. Writing a
+    datetime object here breaks Pydantic `updated_at: str` validation on the
+    read path and 500s the whole quotes list. Learned the hard way."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _heal_state(s: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     """Return (healed_state, changed). Mirrors mpSchema.healLoadedState's
     Matched Set qty normalization exactly."""
@@ -134,7 +141,7 @@ async def heal_qtys(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
             try:
                 await db[collection].update_one(
                     {"_id": _id},
-                    {"$set": {"state": healed, "updated_at": datetime.now(timezone.utc)}},
+                    {"$set": {"state": healed, "updated_at": _now_iso()}},
                 )
                 if is_draft:
                     drafts_healed += 1

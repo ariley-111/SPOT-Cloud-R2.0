@@ -59,6 +59,12 @@ drafts_router = APIRouter(prefix="/api/drafts", tags=["drafts"])
 async def list_drafts(user: User = Depends(get_current_user)) -> List[QuoteDraft]:
     cursor = db[COL_QUOTE_DRAFTS].find({"owner_id": user.id}, {"_id": 0}).sort("updated_at", -1)
     docs = await cursor.to_list(length=50)
+    # Defense-in-depth: coerce any datetime `updated_at` to ISO string so
+    # QuoteDraft.updated_at: str validation can't 500 the drafts list.
+    for _d in docs:
+        _ua = _d.get("updated_at")
+        if _ua is not None and not isinstance(_ua, str):
+            _d["updated_at"] = _ua.isoformat() if hasattr(_ua, "isoformat") else str(_ua)
     return [QuoteDraft(**d) for d in docs]
 
 
@@ -74,6 +80,9 @@ async def get_draft(draft_id: str, user: User = Depends(get_current_user)) -> Qu
     doc = await db[COL_QUOTE_DRAFTS].find_one({"id": draft_id, "owner_id": user.id}, {"_id": 0})
     if not doc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Draft not found")
+    _ua = doc.get("updated_at")
+    if _ua is not None and not isinstance(_ua, str):
+        doc["updated_at"] = _ua.isoformat() if hasattr(_ua, "isoformat") else str(_ua)
     return QuoteDraft(**doc)
 
 
@@ -200,6 +209,16 @@ async def list_quotes(
         query["$or"] = or_clauses
     cursor = db[COL_QUOTES].find(query, {"_id": 0}).sort("updated_at", -1).limit(limit)
     docs = await cursor.to_list(length=limit)
+    # Defense-in-depth: coerce any datetime `updated_at` to ISO string so
+    # Quote.updated_at: str validation can't 500 the whole list because one
+    # doc has the wrong type. (Root cause of the Feb 2026 hotfix: heal-qtys
+    # wrote a bson Date instead of _now()'s ISO string. Startup migration
+    # heals persistence; this line makes the read path bullet-proof against
+    # future regressions.)
+    for _d in docs:
+        _ua = _d.get("updated_at")
+        if _ua is not None and not isinstance(_ua, str):
+            _d["updated_at"] = _ua.isoformat() if hasattr(_ua, "isoformat") else str(_ua)
     quotes = [Quote(**d) for d in docs]
     result = await _attach_owner_names(quotes)
     # Attach attached-file counts (📎 badge in the Load Quote list) — one query.
@@ -253,6 +272,11 @@ async def get_quote(quote_id: str, user: User = Depends(get_current_user)) -> Di
     doc = await db[COL_QUOTES].find_one({"id": quote_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Quote not found")
+    # Defense-in-depth: coerce datetime `updated_at` → ISO string (Feb 2026
+    # hotfix). See list_quotes for the full context.
+    _ua = doc.get("updated_at")
+    if _ua is not None and not isinstance(_ua, str):
+        doc["updated_at"] = _ua.isoformat() if hasattr(_ua, "isoformat") else str(_ua)
     quote = Quote(**doc)
     name_map = await _user_name_map([quote.owner_id])
     return {**quote.model_dump(), "owner_name": name_map.get(quote.owner_id, quote.owner_id)}
@@ -809,29 +833,62 @@ async def _compute_report_rows(q: Dict[str, Any], user: User) -> List[Dict[str, 
     state = q.get("state") or {}
     rows: List[Dict[str, Any]] = []
     is_mp = state.get("quoteType") == "Multi-Part" and bool(state.get("bomItems"))
+    is_individual = is_mp and (state.get("pricingMode") == "Individual")
     try:
-        if is_mp:
-            # buildMpPayload-equivalent payload, then read the SLOTS aggregation
-            # (what the Quote Table / right rail show) — NOT componentPricing,
-            # which prices each component independently.
+        if is_mp and is_individual:
+            # Individual mode: each component has its OWN tier ladder (e.g.
+            # Shelf @ 250/500, Header @ 1000/2000). The `slots` aggregation is
+            # a Matched-Set concept and mis-labels rows when component tiers
+            # don't align (bug: report row 2 read "Header @ 500" when the
+            # engine actually ran Shelf @ 500 at slot 1 — user report Feb 2026
+            # on Walmart Sidekick Display). Use `componentPricing` which gives
+            # us one row per (component, that component's own tier).
+            data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
+            bom = state.get("bomItems") or []
+            by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
+            per_job = (state.get("freightScope") == "Per Job")
+            # Slot roll-ups (for Quote Total column) — sum per-component sell
+            # for all components active in that slot.
+            slot_totals: Dict[int, float] = {}
+            slot_die_totals: Dict[int, float] = {}
+            for cp in (data.get("componentPricing") or []):
+                for pcrow in (cp.get("rows") or []):
+                    slot_totals[pcrow.get("slotIdx", 0)] = (
+                        slot_totals.get(pcrow.get("slotIdx", 0), 0.0)
+                        + float(pcrow.get("sellTotal") or 0)
+                    )
+                    slot_die_totals[pcrow.get("slotIdx", 0)] = (
+                        slot_die_totals.get(pcrow.get("slotIdx", 0), 0.0)
+                        + float(pcrow.get("dieLineCost") or 0)
+                        + float(pcrow.get("dieEmbedded") or 0)
+                    )
+            for cp in (data.get("componentPricing") or []):
+                item_id = cp.get("itemId") or ""
+                ist = by_id.get(item_id, {})
+                for pcrow in (cp.get("rows") or []):
+                    if pcrow.get("error"):
+                        continue
+                    slot_i = pcrow.get("slotIdx", 0)
+                    rows.append(_report_row(
+                        q, state, cp.get("desc"), ist, pcrow,
+                        quote_total=slot_totals.get(slot_i, 0.0),
+                        per_job_freight=per_job,
+                        raw_qty_override=int(pcrow.get("qty") or 0),
+                        tier_die_override=slot_die_totals.get(slot_i, 0.0)))
+        elif is_mp:
+            # Matched Set: aggregate at slot level, one row per component per slot
             data = await calculate_multi_part(payload=_mp_engine_payload(state, q.get("id")), _u=user)
             bom = state.get("bomItems") or []
             by_id = {(b.get("id") or ""): (b.get("state") or {}) for b in bom}
             per_job = (state.get("freightScope") == "Per Job")
             for slot in (data.get("slots") or []):
                 per_comp = slot.get("perComponent") or []
-                # Slot-level roll-ups so per-component report rows can display
-                # the whole-quote figures at this qty tier (matches iQuote's
-                # TotalEstimatePrice repeated per row + right-rail Die aggregate).
                 tier_die = _n(slot.get("dieLineCost")) + sum(_n(pc.get("dieEmbedded")) for pc in per_comp)
                 tier_total = slot.get("sellTotal")
-                # Qty column = the SLOT's set qty (Matched Set) or the tier's
-                # order qty (Individual) — the same value across every row in
-                # a slot, so `(SPOT #, Qty)` groups correctly and each tier
-                # rolls up to one iQuote break-qty for comparison. Previously
-                # emitted per-component pcs (set_qty × pcsPerSet), which mixed
-                # 134 and 67 in the same tier and broke pivots (user report
-                # CD-260825-091053, Feb 2026).
+                # Qty column = SLOT's setQty — every row in a tier shares one
+                # set qty so `(SPOT #, Qty)` groups correctly. Previously per-
+                # component pcs (set_qty × pcsPerSet) mixed 134 and 67 in same
+                # tier and broke pivots (CD-260825-091053, Feb 2026 fix).
                 tier_qty = slot.get("setQty") or slot.get("qty")
                 for pc in per_comp:
                     if pc.get("error"):

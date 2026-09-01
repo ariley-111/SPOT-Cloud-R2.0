@@ -579,18 +579,29 @@ async def calculate_multi_part(
             # Determine this item's qty for this slot
             if pricing_mode == "Matched Set":
                 item_qty = set_qty * pcs_per_set
-            else:  # Individual — use item's own qtys[slot] (fall back to set_qty if blank)
+            else:  # Individual — use item's own qtys[slot]; skip if blank
                 ist = item.get("state") or {}
                 iqs = ist.get("qtys") or []
+                # LEGACY PARITY: in Individual mode each component runs at its
+                # OWN tier qty per slot. If the component didn't fill this slot
+                # (e.g. Shelf has [250, 500] but this is slot 2 for Header's
+                # 1000/2000 tier), SKIP it — do NOT fall back to the top-level
+                # slot qty. Falling back inflates the report by cross-pricing
+                # every component at every top-level tier, producing rows like
+                # "Shelf @ Header's qty tier" that never existed in the UI.
+                # Bug fix 2026-02: report row misalignment on Individual quotes
+                # with per-component tier qtys (user report: Walmart Sidekick
+                # showing Shelf @ 1000 and Header @ 500 in the report while UI
+                # correctly ran Shelf @ 250/500 and Header @ 1000/2000).
+                blank_slot = not (slot < len(iqs) and str(iqs[slot]).strip() not in ("", "0"))
+                if blank_slot:
+                    continue  # skip this component for this slot
                 try:
-                    raw = int(iqs[slot]) if slot < len(iqs) and iqs[slot] not in ("", None) else set_qty
+                    raw = int(iqs[slot])
                 except (TypeError, ValueError):
-                    raw = set_qty
-                # LEGACY PARITY (spot_r1_5.jsx L2071-2075): when committing a BOM
-                # draft, legacy stores `state.qtys` PRE-MULTIPLIED by pcsPerSet so
-                # every downstream calc (including Individual mode) sees the true
-                # component pcs count. Cloud stores raw set qtys; multiply at
-                # runtime so Individual mode matches legacy 1:1.
+                    continue
+                if raw <= 0:
+                    continue
                 item_qty = raw * pcs_per_set
 
             if item_type == "Purchased":
