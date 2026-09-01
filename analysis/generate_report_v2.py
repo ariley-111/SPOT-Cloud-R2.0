@@ -194,10 +194,7 @@ band_noc = band_stats(quote[noc_mask])
 # Top customers pivot
 top_cust = quote.groupby("Customer")["Variance %"].count().sort_values(ascending=False).head(15).index.tolist()
 pivot_df = quote[quote["Customer"].isin(top_cust)].pivot_table(
-    index="Customer", columns="Qty Band", values="Variance %", aggfunc="mean"
-).reindex(columns=[b for b in BANDS if b in _.columns] if (_:= pd.DataFrame()) is None else BANDS, fill_value=np.nan)
-pivot_df = quote[quote["Customer"].isin(top_cust)].pivot_table(
-    index="Customer", columns="Qty Band", values="Variance %", aggfunc="mean"
+    index="Customer", columns="Qty Band", values="Variance %", aggfunc="median"
 )
 pivot_df = pivot_df.reindex(columns=[b for b in BANDS if b in pivot_df.columns])
 pivot_df = pivot_df.reindex(top_cust)
@@ -401,32 +398,43 @@ ws3.add_chart(qb2, "I22")
 
 # ---------- Sheet: Qty x Customer ----------
 ws4 = wb.create_sheet("Qty x Customer")
-ws4["A1"] = "Avg Variance % — Top 15 Customers × Qty Band (Quote-Total Level)"
+ws4["A1"] = "Median Variance % — Top 15 Customers × Qty Band (Quote-Total Level)"
 ws4["A1"].font = TITLE
 pct_cols_p = tuple([c for c in pivot_df.columns if c not in ("Customer","Quote Count")])
 write_df(ws4, pivot_df, start_row=3, pct_cols=pct_cols_p, int_cols=("Quote Count",))
 
 # Per-customer overall avg bar chart
-cust_avgs = quote[quote["Customer"].isin(top_cust)].groupby("Customer")["Variance %"].mean().reindex(top_cust)
+cust_grp = quote[quote["Customer"].isin(top_cust)].groupby("Customer")["Variance %"]
+cust_stats = pd.DataFrame({
+    "Median Variance %": cust_grp.median(),
+    "Avg Variance %": cust_grp.mean(),
+    "Min %": cust_grp.min(),
+    "Max %": cust_grp.max(),
+}).reindex(top_cust)
 cust_start = 3 + len(pivot_df) + 4
-ws4.cell(row=cust_start, column=1, value="Top 15 Customers — Overall Avg Variance %").font = TITLE
+ws4.cell(row=cust_start, column=1, value="Top 15 Customers — Overall Variance (Median leads; Mean shown for context)").font = TITLE
 ws4.cell(row=cust_start+1, column=1, value="Customer").font = BOLD
-ws4.cell(row=cust_start+1, column=2, value="Avg Variance %").font = BOLD
-ws4.cell(row=cust_start+1, column=3, value="Quote Count").font = BOLD
-for i, (cn, v) in enumerate(cust_avgs.items(), start=cust_start+2):
+ws4.cell(row=cust_start+1, column=2, value="Median Variance %").font = BOLD
+ws4.cell(row=cust_start+1, column=3, value="Avg Variance %").font = BOLD
+ws4.cell(row=cust_start+1, column=4, value="Min %").font = BOLD
+ws4.cell(row=cust_start+1, column=5, value="Max %").font = BOLD
+ws4.cell(row=cust_start+1, column=6, value="Quote Count").font = BOLD
+for i, (cn, row) in enumerate(cust_stats.iterrows(), start=cust_start+2):
     ws4.cell(row=i, column=1, value=str(cn))
-    cell = ws4.cell(row=i, column=2, value=None if pd.isna(v) else float(v))
-    cell.number_format = FMT_PCT
-    n = ws4.cell(row=i, column=3, value=int(quote[quote["Customer"]==cn].shape[0]))
-    n.number_format = FMT_INT
+    for j, key in enumerate(["Median Variance %","Avg Variance %","Min %","Max %"], start=2):
+        v = row[key]
+        c = ws4.cell(row=i, column=j, value=None if pd.isna(v) else float(v))
+        c.number_format = FMT_PCT
+    n_cell = ws4.cell(row=i, column=6, value=int(quote[quote["Customer"]==cn].shape[0]))
+    n_cell.number_format = FMT_INT
 
 cbar = BarChart(); cbar.type="bar"; cbar.style=10
-cbar.title="Avg Variance % — Top 15 Customers"; cbar.legend=None
+cbar.title="Median Variance % — Top 15 Customers"; cbar.legend=None
 cbar.height=14; cbar.width=22
-d = Reference(ws4, min_col=2, min_row=cust_start+2, max_row=cust_start+1+len(cust_avgs))
-c = Reference(ws4, min_col=1, min_row=cust_start+2, max_row=cust_start+1+len(cust_avgs))
+d = Reference(ws4, min_col=2, min_row=cust_start+2, max_row=cust_start+1+len(cust_stats))
+c = Reference(ws4, min_col=1, min_row=cust_start+2, max_row=cust_start+1+len(cust_stats))
 cbar.add_data(d, titles_from_data=False); cbar.set_categories(c)
-ws4.add_chart(cbar, f"E{cust_start}")
+ws4.add_chart(cbar, f"H{cust_start}")
 
 
 # ---------- Sheet: Print vs No-Print (component level as spec'd) ----------
