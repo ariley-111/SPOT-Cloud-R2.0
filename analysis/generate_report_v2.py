@@ -602,89 +602,99 @@ for i, (label, val, fmt) in enumerate(kpis):
     dash.merge_cells(start_row=kpi_row+1, start_column=col, end_row=kpi_row+1, end_column=col+1)
 dash.row_dimensions[kpi_row+1].height = 30
 
-# Chart source data area
-data_start = 30
-dr = data_start + 1
-dash.cell(row=dr, column=1, value="Direction"); dash.cell(row=dr, column=2, value="Count")
-dash.cell(row=dr+1, column=1, value="SPOT > iQuote"); dash.cell(row=dr+1, column=2, value=int(all_stats["pos"]))
-dash.cell(row=dr+2, column=1, value="SPOT < iQuote"); dash.cell(row=dr+2, column=2, value=int(all_stats["neg"]))
+# ─── Chart source data — placed in columns O+ so it stays out of view ───
+# Charts reference cells here; the main dashboard area (cols A-L) stays clean.
+# Keep source in visible rows — openpyxl chart series ignore hidden rows.
 
-pie = PieChart(); pie.title="Where SPOT lands vs iQuote (quote-level)"
-pie.height=8; pie.width=12
-d = Reference(dash, min_col=2, min_row=dr+1, max_row=dr+2)
-c = Reference(dash, min_col=1, min_row=dr+1, max_row=dr+2)
-pie.add_data(d, titles_from_data=False); pie.set_categories(c)
+# Block 1: direction split
+dash["O1"] = "Direction"; dash["P1"] = "Count"
+dash["O2"] = "SPOT > iQuote"; dash["P2"] = int(all_stats["pos"])
+dash["O3"] = "SPOT < iQuote"; dash["P3"] = int(all_stats["neg"])
+
+pie = PieChart(); pie.title = "Where SPOT lands vs iQuote"
+pie.height = 8; pie.width = 12
+pie.add_data(Reference(dash, min_col=16, min_row=2, max_row=3), titles_from_data=False)
+pie.set_categories(Reference(dash, min_col=15, min_row=2, max_row=3))
 pie.dataLabels = DataLabelList(showPercent=True, showCatName=True)
 dash.add_chart(pie, "A7")
 
-ci = dr + 5
-dash.cell(row=ci, column=1, value="Metric"); dash.cell(row=ci, column=2, value="All"); dash.cell(row=ci, column=3, value="Ex-CD")
-mrs = [("Mean", all_stats["mean"], noc_stats["mean"]),
-       ("Median", all_stats["median"], noc_stats["median"]),
-       ("Std Dev", all_stats["std"], noc_stats["std"])]
-for i, (lbl, a, b) in enumerate(mrs):
-    dash.cell(row=ci+1+i, column=1, value=lbl)
-    dash.cell(row=ci+1+i, column=2, value=float(a)).number_format = FMT_PCT
-    dash.cell(row=ci+1+i, column=3, value=float(b)).number_format = FMT_PCT
+# Block 2: CD Impact
+dash["O5"] = "Metric"; dash["P5"] = "All"; dash["Q5"] = "Ex-CD"
+metrics = [
+    ("Mean", all_stats["mean"], noc_stats["mean"]),
+    ("Median", all_stats["median"], noc_stats["median"]),
+    ("Std Dev", all_stats["std"], noc_stats["std"]),
+]
+for i, (lbl, a, b) in enumerate(metrics):
+    dash.cell(row=6 + i, column=15, value=lbl)
+    dash.cell(row=6 + i, column=16, value=float(a)).number_format = FMT_PCT
+    dash.cell(row=6 + i, column=17, value=float(b)).number_format = FMT_PCT
 
-impact = BarChart(); impact.type="col"; impact.style=13
-impact.title="CD Freight Bug — Impact on Top-Line"; impact.y_axis.title="Variance %"
-impact.height=8; impact.width=12
-d = Reference(dash, min_col=2, max_col=3, min_row=ci, max_row=ci+len(mrs))
-c = Reference(dash, min_col=1, min_row=ci+1, max_row=ci+len(mrs))
-impact.add_data(d, titles_from_data=True); impact.set_categories(c)
+impact = BarChart(); impact.type = "col"; impact.style = 13
+impact.title = "CD Freight Bug — Impact on Top-Line"; impact.y_axis.title = "Variance %"
+impact.height = 8; impact.width = 12
+impact.add_data(Reference(dash, min_col=16, max_col=17, min_row=5, max_row=5 + len(metrics)), titles_from_data=True)
+impact.set_categories(Reference(dash, min_col=15, min_row=6, max_row=5 + len(metrics)))
 dash.add_chart(impact, "G7")
 
-hstart = ci + 6
-dash.cell(row=hstart, column=1, value="Bucket"); dash.cell(row=hstart, column=2, value="Count")
-for i, (b, cnt) in enumerate(hist.items(), start=hstart+1):
-    dash.cell(row=i, column=1, value=str(b))
-    dash.cell(row=i, column=2, value=int(cnt))
-hb = BarChart(); hb.type="col"; hb.style=11
-hb.title="Distribution of Variance % (quote-level)"; hb.x_axis.title="Bucket"; hb.y_axis.title="Quote Count"
-hb.height=9; hb.width=24; hb.legend=None
-d = Reference(dash, min_col=2, min_row=hstart+1, max_row=hstart+len(hist))
-c = Reference(dash, min_col=1, min_row=hstart+1, max_row=hstart+len(hist))
-hb.add_data(d, titles_from_data=False); hb.set_categories(c)
+# Block 3: Histogram of variance %
+dash["O10"] = "Bucket"; dash["P10"] = "Count"
+for i, (b, cnt) in enumerate(hist.items(), start=11):
+    dash.cell(row=i, column=15, value=str(b))
+    dash.cell(row=i, column=16, value=int(cnt)).number_format = FMT_INT
+h_end = 10 + len(hist)
+
+hb = BarChart(); hb.type = "col"; hb.style = 11
+hb.title = "Distribution of Variance %"; hb.x_axis.title = "Bucket"; hb.y_axis.title = "Quote Count"
+hb.height = 10; hb.width = 24; hb.legend = None
+hb.add_data(Reference(dash, min_col=16, min_row=11, max_row=h_end), titles_from_data=False)
+hb.set_categories(Reference(dash, min_col=15, min_row=11, max_row=h_end))
 dash.add_chart(hb, "A24")
 
-qstart = hstart + len(hist) + 3
-dash.cell(row=qstart, column=1, value="Qty Band"); dash.cell(row=qstart, column=2, value="Median"); dash.cell(row=qstart, column=3, value="Avg")
+# Block 4: by Qty band
+q_top = h_end + 2
+dash.cell(row=q_top, column=15, value="Qty Band")
+dash.cell(row=q_top, column=16, value="Median")
+dash.cell(row=q_top, column=17, value="Avg")
 for i, row in band_all.iterrows():
-    dash.cell(row=qstart+1+i, column=1, value=row["Qty Band"])
-    dash.cell(row=qstart+1+i, column=2, value=float(row["Median Variance %"])).number_format = FMT_PCT
-    dash.cell(row=qstart+1+i, column=3, value=float(row["Avg Variance %"])).number_format = FMT_PCT
+    dash.cell(row=q_top + 1 + i, column=15, value=row["Qty Band"])
+    dash.cell(row=q_top + 1 + i, column=16, value=float(row["Median Variance %"])).number_format = FMT_PCT
+    dash.cell(row=q_top + 1 + i, column=17, value=float(row["Avg Variance %"])).number_format = FMT_PCT
+q_end = q_top + len(band_all)
 
-qc = BarChart(); qc.type="col"; qc.style=12
-qc.title="Where the Gap Sits — by Order Qty Band"; qc.y_axis.title="Variance %"; qc.x_axis.title="Qty Band"
-qc.height=9; qc.width=20
-d = Reference(dash, min_col=2, max_col=3, min_row=qstart, max_row=qstart+len(band_all))
-c = Reference(dash, min_col=1, min_row=qstart+1, max_row=qstart+len(band_all))
-qc.add_data(d, titles_from_data=True); qc.set_categories(c)
-dash.add_chart(qc, "A42")
+qc = BarChart(); qc.type = "col"; qc.style = 12
+qc.title = "Where the Gap Sits — by Order Qty Band"
+qc.y_axis.title = "Variance %"; qc.x_axis.title = "Qty Band"
+qc.height = 10; qc.width = 20
+qc.add_data(Reference(dash, min_col=16, max_col=17, min_row=q_top, max_row=q_end), titles_from_data=True)
+qc.set_categories(Reference(dash, min_col=15, min_row=q_top + 1, max_row=q_end))
+dash.add_chart(qc, "A44")
 
-# Print vs No-Print — component level (as spec'd) — pull from print_stats_c
-pstart = qstart + len(band_all) + 3
-dash.cell(row=pstart, column=1, value="Group"); dash.cell(row=pstart, column=2, value="Median"); dash.cell(row=pstart, column=3, value="Avg")
+# Block 5: Print vs No-Print
+p_top = q_end + 2
+dash.cell(row=p_top, column=15, value="Group")
+dash.cell(row=p_top, column=16, value="Median")
+dash.cell(row=p_top, column=17, value="Avg")
 for i, row in print_stats_c.iterrows():
-    dash.cell(row=pstart+1+i, column=1, value=row["print_flag"])
-    dash.cell(row=pstart+1+i, column=2, value=float(row["Median Variance %"])).number_format = FMT_PCT
-    dash.cell(row=pstart+1+i, column=3, value=float(row["Avg Variance %"])).number_format = FMT_PCT
+    dash.cell(row=p_top + 1 + i, column=15, value=row["print_flag"])
+    dash.cell(row=p_top + 1 + i, column=16, value=float(row["Median Variance %"])).number_format = FMT_PCT
+    dash.cell(row=p_top + 1 + i, column=17, value=float(row["Avg Variance %"])).number_format = FMT_PCT
+p_end = p_top + len(print_stats_c)
 
-pn2 = BarChart(); pn2.type="col"; pn2.style=13
-pn2.title="Print vs No-Print (component-level)"; pn2.y_axis.title="Variance %"
-pn2.height=9; pn2.width=16
-d = Reference(dash, min_col=2, max_col=3, min_row=pstart, max_row=pstart+len(print_stats_c))
-c = Reference(dash, min_col=1, min_row=pstart+1, max_row=pstart+len(print_stats_c))
-pn2.add_data(d, titles_from_data=True); pn2.set_categories(c)
-dash.add_chart(pn2, "H42")
+pn2 = BarChart(); pn2.type = "col"; pn2.style = 13
+pn2.title = "Print vs No-Print (component-level)"; pn2.y_axis.title = "Variance %"
+pn2.height = 10; pn2.width = 16
+pn2.add_data(Reference(dash, min_col=16, max_col=17, min_row=p_top, max_row=p_end), titles_from_data=True)
+pn2.set_categories(Reference(dash, min_col=15, min_row=p_top + 1, max_row=p_end))
+dash.add_chart(pn2, "H44")
 
+# Column widths — main area readable, source columns pushed far right (visible so charts render)
 dash.column_dimensions["A"].width = 22
-for cl in "BCDEFGHIJKLM":
-    dash.column_dimensions[cl].width = 15
-
-for r_hide in range(30, pstart+len(print_stats_c)+2):
-    dash.row_dimensions[r_hide].hidden = True
+for cl in "BCDEFGHIJKLMN":
+    dash.column_dimensions[cl].width = 14
+# Source columns O/P/Q — leave visible (Excel/openpyxl may skip series when columns are hidden)
+for cl in ("O", "P", "Q"):
+    dash.column_dimensions[cl].width = 14
 
 
 wb.save(OUT)
