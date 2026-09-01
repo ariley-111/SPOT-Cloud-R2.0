@@ -3,6 +3,32 @@
 Append-only log of shipped features and fixes.
 
 
+## 2026-02-20 — Round 2 SPOT vs iQuote Analysis Report (for 9:30 AM CEO meeting)
+- **User request:** Generate multi-view Excel workbook from cleaned SPOT vs iQuote
+  data (`spot-analysis-report-2026-08-31.xlsx`). No Δ symbols. Component-level
+  analysis. iQuote Estimate # prominent on left. IQR + z-score outlier flags.
+  Visualize distribution (no outlier flags on that sheet).
+- **Script:** `/app/analysis/generate_report.py` — pandas + openpyxl.
+  Component-level fuzzy join on (iQuote Estimate # + option-normalized + Qty),
+  with fallback to (Estimate # + Qty) then Estimate # only. **100 % match rate
+  (323/323)**.
+- **Output:** `/app/SPOT_vs_iQuote_Round2.xlsx` (also at `/app/analysis/…`).
+  7 sheets: Exec Summary, Raw Variances (25 cols, filterable), By Qty Range
+  (raw + IQR-trimmed), Qty × Customer pivot, Print vs No-Print,
+  Distribution (with scatter + histogram charts), CD Freight Cut.
+- **Formatting:** currency `$#,##0.00`, percent `0.00"%"`, integers `#,##0`,
+  decimals `0.0000`. Frozen headers + auto-filter on Raw Variances.
+- **Headline numbers:**
+  - Raw: **n=323, mean=41.83 %, median=18.76 %, std=178.5 %.**
+    240 rows SPOT > iQuote (74 %), 83 rows SPOT < iQuote.
+  - Excluding CD-freight: mean 30.61 %, median 18.81 %, std drops to 83.8 %.
+  - Print median 20.6 % vs No-Print median 6.0 %.
+  - 1-49 qty band median +31 %; 5000+ qty band median **−26 %**
+    (SPOT lower than iQuote at high volume — worth flagging to CEO).
+- **CD freight callout:** 4 estimates flagged (224297, 224362, 224377, 224504);
+  restated exec summary on dedicated sheet.
+
+
 ## 2026-02-19 — Admin Utility: Matched Set Qty Batch-Heal
 - **User request:** "I would like to do (b)" — add the optional one-click Admin
   endpoint to canonicalize corrupt Matched Set rows in the DB.
