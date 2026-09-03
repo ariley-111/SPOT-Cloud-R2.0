@@ -23,12 +23,13 @@ def download_round2_report():
 
 @router.get("/jobtype")
 def download_jobtype_report():
-    fp = _ASSETS / "SPOT_JobType_Variance.xlsx"
+    """Latest job-type × qty-band analysis (v3 — corrected component join)."""
+    fp = _ASSETS / "SPOT_JobType_Variance_v3.xlsx"
     if not fp.exists():
         raise HTTPException(status_code=404, detail="Report not generated")
     return FileResponse(
         path=str(fp),
-        filename="SPOT_JobType_Variance.xlsx",
+        filename="SPOT_JobType_Variance_v3.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
