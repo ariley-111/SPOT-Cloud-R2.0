@@ -66,6 +66,7 @@ FORCE_QTY_MATCH_QUOTES = {
     222935,  # WedgeHeader V1/V2 = artwork variants of same product
     222258,  # Header #1 across 2 qty tiers vs Header 1 & Header 2 in iQuote — match by qty
     223596,  # SPOT uses "Mini Pallet Band" name; iQuote uses SKU codes DS5993/DS5994
+    223583,  # SPOT uses "Mini Pallet Band" name; iQuote uses SKU codes 222300/222301
 }
 # Manual SPOT-W → iQuote product name overrides (per user-provided notes columns)
 MANUAL_NAME_MAP = {
