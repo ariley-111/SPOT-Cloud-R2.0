@@ -50,9 +50,37 @@ IQUOTE_QTY_REMAP = {
     222971: {521: 520},
 }
 # 224322: SPOT row (W=46.375, Board 250 C) qty should be 315 not 600
+# 223957: SPOT qty swap — W=25.312 should be 1920 (was 480), W=15.875 should be 480 (was 1920)
 SPOT_QTY_OVERRIDE = {
-    # (iQuote #, W match) -> new qty
     (224322, 46.375): 315,
+    (223957, 25.312): 1920,
+    (223957, 15.875): 480,
+}
+# Quotes to drop entirely
+DROP_QUOTES = {
+    224362,  # Oreo Digital Innovation Add On Kit — completely different qty structures
+    223677,  # duplicate of 223672
+}
+# Quotes to force-match by qty only (skip name clustering — user-confirmed pairs)
+FORCE_QTY_MATCH_QUOTES = {
+    222935,  # WedgeHeader V1/V2 = artwork variants of same product
+    222258,  # Header #1 across 2 qty tiers vs Header 1 & Header 2 in iQuote — match by qty
+    223596,  # SPOT uses "Mini Pallet Band" name; iQuote uses SKU codes DS5993/DS5994
+}
+# Manual SPOT-W → iQuote product name overrides (per user-provided notes columns)
+MANUAL_NAME_MAP = {
+    # Q222777 — user notes column mapping
+    (222777, 23.25):  "Base Tray",
+    (222777, 8.5):    "Bottom Graphic",
+    (222777, 43.562): "Carton OPF",
+    (222777, 17):     "Header",
+    (222777, 50.312): "Hutch",
+    (222777, 43.688): "Shelf",
+    (222777, 45.75):  "Side Support",
+    # Q223672 — user notes column mapping
+    (223672, 49.75):  "Hutch - 2586-01-01",
+    (223672, 31.438): "Shelf Set - 2586-01-02",
+    (223672, 35.312): "Header & Bottom Graphic Combo - 2586-01-03",
 }
 
 
@@ -104,6 +132,10 @@ def load_data():
 
 
 def apply_overrides(sp_data, iq_data):
+    # Drop entire quotes
+    sp_data = [r for r in sp_data if r.get("iQuote Estimate #") not in DROP_QUOTES]
+    iq_data = [r for r in iq_data if r.get("IdQuote") not in DROP_QUOTES]
+
     # SPOT qty override
     for r in sp_data:
         q = r.get("iQuote Estimate #")
@@ -172,6 +204,7 @@ def _assign_spot_component_names(sp_data, cost_lookup):
     (iQuote #, W, L) — like matched-set 'Heart Middle Side 1' and 'Heart Middle Side 2'
     at identical dimensions — distribute the UNIQUE component names from spot_full
     sequentially so each SPOT row gets a distinct name.
+    Also applies MANUAL_NAME_MAP overrides last (per user-provided notes columns).
     """
     # Group SPOT rows by (q, W, L)
     from collections import defaultdict as _dd
@@ -194,9 +227,14 @@ def _assign_spot_component_names(sp_data, cost_lookup):
             for r in rows:
                 r["_comp_name"] = None
             continue
-        # Assign unique names round-robin to rows in this dimension bucket
         for idx, r in enumerate(rows):
             r["_comp_name"] = unique_names[idx % len(unique_names)]
+
+    # Apply MANUAL_NAME_MAP overrides
+    for r in sp_data:
+        key = (r.get("iQuote Estimate #"), r.get("Width"))
+        if key in MANUAL_NAME_MAP:
+            r["_comp_name"] = MANUAL_NAME_MAP[key]
 
 
 def build_component_pairs(sp_data, iq_data, cost_lookup):
@@ -228,6 +266,11 @@ def build_component_pairs(sp_data, iq_data, cost_lookup):
 
     for q, srows in sp_by.items():
         irows = iq_by.get(q, [])
+
+        # FORCE_QTY_MATCH_QUOTES bypass — user confirmed these should force-pair by qty
+        if q in FORCE_QTY_MATCH_QUOTES:
+            _fallback_qty_force_pair(q, srows, irows, cost_lookup, matched_pairs, unmatched_rows)
+            continue
 
         # --- Step 3: name clustering (SPOT idx -> iQuote idx) via greedy assignment
         pairs = []  # (score, s_idx, i_idx)
@@ -685,11 +728,30 @@ def write_methodology_tab(wb, matched_count, unmatched_count):
         "  Step 6: Ambiguous matches (score < 30 within a multi-row bucket) → 'Unmatched'.",
         "",
         "USER-SPECIFIED OVERRIDES",
-        "  • Quote 223864: Dropped iQuote rows with qty 800 (×2) and qty 1600 (×1).",
+        "  DROPPED QUOTES:",
+        "    • Q224362 — Oreo Digital Innovation Add On Kit: SPOT and iQuote priced",
+        "                 completely different qty structures; not comparable.",
+        "    • Q223677 — duplicate of Q223672 (removed to avoid double counting).",
+        "",
+        "  QTY OVERRIDES:",
+        "    • Q223864: Dropped iQuote rows with qty 800 (×2) and qty 1600 (×1).",
         "                 (Estimator did not price these tiers in SPOT.)",
-        "  • Quote 222971: SPOT qty 520 matched to iQuote qty 521 (iQuote 'hard proofs').",
-        "  • Quote 224322: SPOT row W=46.375 qty overridden 600 → 315 (SPOT reporting bug).",
-        "  • Quote 224377: Dropped iQuote HSC Bin row (qty 68 — not priced in SPOT).",
+        "    • Q222971: SPOT qty 520 matched to iQuote qty 521 (iQuote 'hard proofs').",
+        "    • Q224322: SPOT row W=46.375 qty overridden 600 → 315 (SPOT reporting bug).",
+        "    • Q223957: SPOT rows W=25.312 qty 480→1920 and W=15.875 qty 1920→480",
+        "                 (user manual fix — swapped qty tiers).",
+        "    • Q224377: Dropped iQuote HSC Bin row (qty 68 — not priced in SPOT).",
+        "",
+        "  FORCE-QTY-MATCH (name clustering bypassed; pair by qty only):",
+        "    • Q222935 — WedgeHeader V1/V2 are same product, different artwork.",
+        "    • Q222258 — Header #1 across 2 qty tiers matched to Header 1 & Header 2.",
+        "    • Q223596 — SPOT uses 'Mini Pallet Band' name; iQuote uses SKU codes.",
+        "",
+        "  EXPLICIT COMPONENT NAME OVERRIDES (per user notes column):",
+        "    • Q222777 — 7 rows mapped to Base Tray / Bottom Graphic / Carton OPF /",
+        "                 Header / Hutch / Shelf / Side Support.",
+        "    • Q223672 — 3 rows mapped to Hutch-2586-01-01 / Shelf Set-2586-01-02 /",
+        "                 Header & Bottom Graphic Combo-2586-01-03.",
         "",
         "JOB TYPE CLASSIFICATION (per component)",
         "  • Cut Only               → no Print Cost.",
