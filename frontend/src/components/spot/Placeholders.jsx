@@ -594,10 +594,13 @@ export function BoardEngineSec({ result }) {
               manifest.base_matrix.doublewall, manifest.msf_tiers, "board-dw-matrix"
             )}
 
-            {/* Liner + Medium Upgrades */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            {/* Liner Upgrades + Medium Upgrades + Medium Treatments (specialty
+                MRA/WRA/WPA — ADDITIVE on top of the selected medium, priced
+                per wall type). Rendered in a 3-column grid so estimators can
+                scan all three board upcharge levers side-by-side. */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
               <div data-testid="board-liner-upgrades-list">
-                <div style={SUBHEAD}>Liner Upgrades</div>
+                <div style={SUBHEAD}>Liner Upgrades ($/MSF)</div>
                 {Object.entries(manifest.liner_upgrades).map(([name, r]) => {
                   const isKemi = name === "42# Kemi-Lite";
                   const amt = isKemi ? (r.base_amount_per_msf || 0) : (r.amount_per_msf || 0);
@@ -620,7 +623,7 @@ export function BoardEngineSec({ result }) {
                 })}
               </div>
               <div data-testid="board-medium-upgrades-list">
-                <div style={SUBHEAD}>Medium Upgrades</div>
+                <div style={SUBHEAD}>Medium Upgrades ($/MSF)</div>
                 {Object.entries(manifest.medium_upgrades).map(([name, r]) => (
                   <div key={name} style={LIST_ROW}>
                     <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
@@ -633,12 +636,29 @@ export function BoardEngineSec({ result }) {
                   </div>
                 ))}
               </div>
+              <div data-testid="board-medium-treatments-list">
+                <div style={SUBHEAD}>Specialty Treatments (SW / DW $/MSF)</div>
+                <div style={{ fontSize: 10, color: "var(--spot-text3)", marginBottom: 4 }}>
+                  Additive — stacks on top of the selected Medium Upgrade
+                </div>
+                {Object.entries(manifest.medium_treatments || {}).map(([name, r]) => (
+                  <div key={name} style={LIST_ROW}>
+                    <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
+                      {name}
+                    </span>
+                    <span style={{ color: "var(--spot-text2)", fontWeight: 600,
+                      fontFamily: "'JetBrains Mono', monospace" }}>
+                      {fn2(r.sw_amount_per_msf || 0, 1, 1)} / {fn2(r.dw_amount_per_msf || 0, 1, 1)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Flute Rules + Dim Adders + Fixed Charges */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
               <div data-testid="board-flute-rules-list">
-                <div style={SUBHEAD}>Flute Rules</div>
+                <div style={SUBHEAD}>Flute Rules (SW/DW · $/MSF upcharge)</div>
                 {Object.entries(manifest.flute_rules).map(([f, r]) => (
                   <div key={f} style={LIST_ROW}>
                     <span style={{ color: "var(--spot-text)", fontWeight: 600 }}>{f}</span>
@@ -654,7 +674,7 @@ export function BoardEngineSec({ result }) {
                 ))}
               </div>
               <div data-testid="board-dim-adders-list">
-                <div style={SUBHEAD}>Dim Adders</div>
+                <div style={SUBHEAD}>Dim Adders ($/MSF for oversized pieces)</div>
                 <div style={{ fontSize: 11, color: "var(--spot-text2)", marginBottom: 2 }}>
                   Width:{" "}
                   {(manifest.dimensional_adders.width || []).map((r) =>
@@ -669,7 +689,7 @@ export function BoardEngineSec({ result }) {
                 </div>
               </div>
               <div data-testid="board-fixed-charges-list">
-                <div style={SUBHEAD}>Fixed Charges</div>
+                <div style={SUBHEAD}>Fixed Charges (order-level fees)</div>
                 <div style={{ fontSize: 11, color: "var(--spot-text2)" }}>
                   Under {manifest.fixed_charges?.under_5_msf_setup_fee?.trigger_order_msf_lt} MSF:{" "}
                   ${fn2(manifest.fixed_charges?.under_5_msf_setup_fee?.amount || 0)}
