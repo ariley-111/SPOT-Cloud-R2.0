@@ -22,6 +22,10 @@ STATIC_DIR = "/app/backend/static_assets"
 SOURCE_FILE = os.path.join(STATIC_DIR, "SPOT_JobType_Variance_v3.xlsx")
 OUT_FILE = "SPOT_Print_WhatIf_Scenarios.xlsx"
 
+# Exclude qty=1 proof/artwork rows — they distort the 1-49 band with flat setup pricing.
+# See generate_1to49_raw.py: 14 of 27 P+C 1-49 rows are qty=1 proofs (12 from Q224227 alone).
+EXCLUDE_QTY_1 = True
+
 BANDS = ["1-49", "50-199", "200-999", "1000-4999", "5000+"]
 PRINT_TYPES = ["Print + Cut"]  # focus: print pricing only, exclude Finishing to avoid uncalibrated-strip/glue/tape distortion
 CUT_BANDS = {"1-49", "200-999"}  # scenarios apply here only
@@ -63,6 +67,9 @@ def load_matched():
     ws = wb["All Matched"]
     h = [c.value for c in ws[1]]
     rows = [dict(zip(h, r)) for r in ws.iter_rows(min_row=2, values_only=True)]
+    # Filter qty=1 proofs if configured
+    if EXCLUDE_QTY_1:
+        rows = [r for r in rows if r.get("Qty") != 1]
     # Original SPOT $ preserved
     for r in rows:
         r["_orig_SPOT $"] = r["SPOT $"]
@@ -115,7 +122,7 @@ def write_scenario_tab(wb, tab_name, subtitle, summary, cut_pct):
     for i in range(2, 6):
         ws.column_dimensions[get_column_letter(i)].width = 22
 
-    ws["A1"] = "SPOT Print Pricing — Variance by Qty Band"
+    ws["A1"] = "SPOT Print Pricing — Variance by Qty Band (Proofs Excluded)"
     ws["A1"].font = TITLE_FONT
     ws["A2"] = subtitle
     ws["A2"].font = Font(italic=True, color="606060")
@@ -183,9 +190,9 @@ def write_scenario_tab(wb, tab_name, subtitle, summary, cut_pct):
 def write_comparison_tab(wb, all_summaries):
     """Side-by-side matrix — 1 row per (JobType, Band), columns per scenario."""
     ws = wb.create_sheet("Scenario Comparison", 0)  # first tab
-    ws["A1"] = "Print Pricing — Scenario Comparison"
+    ws["A1"] = "Print Pricing — Scenario Comparison (Proofs Excluded)"
     ws["A1"].font = TITLE_FONT
-    ws["A2"] = "Shading: green = within ±8% (near parity)  •  yellow = +overprice  •  red = -underprice  •  blue = qty band where cut applied"
+    ws["A2"] = "Shading: green = within ±8% (near parity)  •  yellow = +overprice  •  red = -underprice  •  blue = qty band where cut applied  •  qty=1 proof rows are EXCLUDED"
     ws["A2"].font = Font(italic=True, color="606060")
 
     scenario_names = ["Current", "10% cut", "15% cut", "20% cut"]
@@ -287,6 +294,10 @@ def write_recommendation_tab(wb):
         "    EXCLUDED because finishing rates (Strip / Glue / Tape) are still",
         "    uncalibrated placeholders in the SPOT engine and mask the true print",
         "    pricing signal.",
+        "  • QTY = 1 PROOF ROWS ALSO EXCLUDED — the 1-49 band contained 14 qty=1",
+        "    rows (12 from a single quote Q224227 versioned proofs). These flat-",
+        "    setup proof charges distort the small-run signal. This tab shows the",
+        "    'real production' 1-49 band = qty 2 through 49 only.",
         "  • The 10/15/20% price cut is applied to Print + Cut components in the",
         "    1-49 and 200-999 qty bands ONLY. Other bands unchanged.",
         "",
