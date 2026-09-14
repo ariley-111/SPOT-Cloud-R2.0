@@ -56,3 +56,17 @@ def download_customer_chart():
         filename="SPOT_Customer_QtyBand_Chart.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/whatif-print")
+def download_whatif_scenarios():
+    """Print-price what-if scenarios (10%/15%/20% cut in 1-49 and 200-999 bands)."""
+    fp = _ASSETS / "SPOT_Print_WhatIf_Scenarios.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_Print_WhatIf_Scenarios.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
