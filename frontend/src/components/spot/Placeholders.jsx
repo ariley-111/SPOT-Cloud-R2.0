@@ -471,6 +471,50 @@ export function BoardEngineSec({ result }) {
   const LIST_ROW = { display: "flex", justifyContent: "space-between", padding: "2px 0",
     fontSize: 11, borderBottom: "1px solid var(--spot-border)33" };
 
+  // Compact 2-column table for upgrade lists — replaces the flex justify-between
+  // pattern that opened huge gaps between label and value in narrow columns.
+  // Every row is Name (left) + one or two right-aligned monospace value columns.
+  const renderList = (label, entries, valueHeaders, testid, note) => (
+    <div style={{ marginBottom: 8 }} data-testid={testid}>
+      <div style={SUBHEAD}>{label}</div>
+      {note && (
+        <div style={{ fontSize: 10, color: "var(--spot-text3)", marginBottom: 4 }}>{note}</div>
+      )}
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead><tr style={{ background: "var(--spot-bg3)" }}>
+          <th style={{ ...HEAD, textAlign: "left" }}>Name</th>
+          {valueHeaders.map((h) => (
+            <th key={h} style={{ ...HEAD, textAlign: "right" }}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {entries.map(([name, cols, meta], i) => (
+            <tr key={name} style={{ background: i % 2 ? "var(--spot-bg2)" : "transparent",
+              borderBottom: "1px solid var(--spot-border)22" }}>
+              <td style={{ padding: "3px 6px", whiteSpace: "nowrap",
+                color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)",
+                fontWeight: name === "None" ? 500 : 600 }}>
+                {name}
+                {meta && (
+                  <span style={{ marginLeft: 6, fontSize: 10, color: "var(--spot-text3)", fontWeight: 400 }}>
+                    {meta}
+                  </span>
+                )}
+              </td>
+              {cols.map((v, j) => (
+                <td key={j} style={{ padding: "3px 6px", textAlign: "right",
+                  color: "var(--spot-text2)", fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" }}>
+                  {v}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   const renderMatrix = (label, rows, tiers, testid) => (
     <div style={{ marginBottom: 8 }} data-testid={testid}>
       <div style={SUBHEAD}>{label}</div>
@@ -596,83 +640,57 @@ export function BoardEngineSec({ result }) {
 
             {/* Liner Upgrades + Medium Upgrades + Medium Treatments (specialty
                 MRA/WRA/WPA — ADDITIVE on top of the selected medium, priced
-                per wall type). Rendered in a 3-column grid so estimators can
-                scan all three board upcharge levers side-by-side. */}
+                per wall type). Rendered as compact 2-column tables so labels
+                and rates sit adjacent (no more huge visual gap). */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <div data-testid="board-liner-upgrades-list">
-                <div style={SUBHEAD}>Liner Upgrades ($/MSF)</div>
-                {Object.entries(manifest.liner_upgrades).map(([name, r]) => {
+              {renderList(
+                "Liner Upgrades ($/MSF)",
+                Object.entries(manifest.liner_upgrades).map(([name, r]) => {
                   const isKemi = name === "42# Kemi-Lite";
                   const amt = isKemi ? (r.base_amount_per_msf || 0) : (r.amount_per_msf || 0);
-                  return (
-                    <div key={name} style={LIST_ROW}>
-                      <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
-                        {name === "None" ? "None (Kraft)" : name}
-                        {r.enforce && r.allowed_board_grades && (
-                          <span style={{ marginLeft: 6, fontSize: 10, color: "var(--spot-text3)" }}>
-                            ({r.allowed_board_grades.join(", ")} only)
-                          </span>
-                        )}
-                      </span>
-                      <span style={{ color: "var(--spot-text2)", fontWeight: 600,
-                        fontFamily: "'JetBrains Mono', monospace" }}>
-                        {fn2(amt, 1, 1)}{isKemi ? "+T" : ""}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div data-testid="board-medium-upgrades-list">
-                <div style={SUBHEAD}>Medium Upgrades ($/MSF)</div>
-                {Object.entries(manifest.medium_upgrades).map(([name, r]) => (
-                  <div key={name} style={LIST_ROW}>
-                    <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
-                      {name}
-                    </span>
-                    <span style={{ color: "var(--spot-text2)", fontWeight: 600,
-                      fontFamily: "'JetBrains Mono', monospace" }}>
-                      {fn2(r.amount_per_msf || 0, 1, 1)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div data-testid="board-medium-treatments-list">
-                <div style={SUBHEAD}>Specialty Treatments (SW / DW $/MSF)</div>
-                <div style={{ fontSize: 10, color: "var(--spot-text3)", marginBottom: 4 }}>
-                  Additive — stacks on top of the selected Medium Upgrade
-                </div>
-                {Object.entries(manifest.medium_treatments || {}).map(([name, r]) => (
-                  <div key={name} style={LIST_ROW}>
-                    <span style={{ color: name === "None" ? "var(--spot-text3)" : "var(--spot-text)" }}>
-                      {name}
-                    </span>
-                    <span style={{ color: "var(--spot-text2)", fontWeight: 600,
-                      fontFamily: "'JetBrains Mono', monospace" }}>
-                      {fn2(r.sw_amount_per_msf || 0, 1, 1)} / {fn2(r.dw_amount_per_msf || 0, 1, 1)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  const displayName = name === "None" ? "None (Kraft)" : name;
+                  const meta = (r.enforce && r.allowed_board_grades)
+                    ? `(${r.allowed_board_grades.join(", ")} only)` : null;
+                  return [displayName, [`${fn2(amt, 1, 1)}${isKemi ? "+T" : ""}`], meta];
+                }),
+                ["$/MSF"],
+                "board-liner-upgrades-list"
+              )}
+              {renderList(
+                "Medium Upgrades ($/MSF)",
+                Object.entries(manifest.medium_upgrades).map(([name, r]) => (
+                  [name, [fn2(r.amount_per_msf || 0, 1, 1)], null]
+                )),
+                ["$/MSF"],
+                "board-medium-upgrades-list"
+              )}
+              {renderList(
+                "Specialty Treatments ($/MSF)",
+                Object.entries(manifest.medium_treatments || {}).map(([name, r]) => (
+                  [name, [fn2(r.sw_amount_per_msf || 0, 1, 1), fn2(r.dw_amount_per_msf || 0, 1, 1)], null]
+                )),
+                ["SW", "DW"],
+                "board-medium-treatments-list",
+                "Additive — stacks on top of the selected Medium Upgrade"
+              )}
             </div>
 
             {/* Flute Rules + Dim Adders + Fixed Charges */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <div data-testid="board-flute-rules-list">
-                <div style={SUBHEAD}>Flute Rules (SW/DW · $/MSF upcharge)</div>
-                {Object.entries(manifest.flute_rules).map(([f, r]) => (
-                  <div key={f} style={LIST_ROW}>
-                    <span style={{ color: "var(--spot-text)", fontWeight: 600 }}>{f}</span>
-                    <span style={{ color: "var(--spot-text2)" }}>
-                      {r.wall_type === "doublewall" ? "DW" : "SW"}
-                      {r.flute_upcharge_per_msf > 0 ? " +" + fn2(r.flute_upcharge_per_msf, 1, 1) : ""}
-                      <span style={{ marginLeft: 6, color: "var(--spot-text3)",
-                        fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>
-                        caliper {fn2(manifest.constants?.FLUTE_CALIPERS?.[f] || 0, 4, 4)}″
-                      </span>
-                    </span>
-                  </div>
-                ))}
-              </div>
+              {renderList(
+                "Flute Rules",
+                Object.entries(manifest.flute_rules).map(([f, r]) => ([
+                  f,
+                  [
+                    r.wall_type === "doublewall" ? "DW" : "SW",
+                    r.flute_upcharge_per_msf > 0 ? `+${fn2(r.flute_upcharge_per_msf, 1, 1)}` : "—",
+                    `${fn2(manifest.constants?.FLUTE_CALIPERS?.[f] || 0, 4, 4)}″`,
+                  ],
+                  null,
+                ])),
+                ["Wall", "$/MSF", "Caliper"],
+                "board-flute-rules-list"
+              )}
               <div data-testid="board-dim-adders-list">
                 <div style={SUBHEAD}>Dim Adders ($/MSF for oversized pieces)</div>
                 <div style={{ fontSize: 11, color: "var(--spot-text2)", marginBottom: 2 }}>
