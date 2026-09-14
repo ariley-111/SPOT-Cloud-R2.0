@@ -70,3 +70,15 @@ def download_whatif_scenarios():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
+
+@router.get("/band-1to49-raw")
+def download_1to49_raw():
+    """Raw joined rows in the 1-49 qty band (SPOT vs iQuote, with dims + cost breakdown)."""
+    fp = _ASSETS / "SPOT_1to49_RawJoined.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_1to49_RawJoined.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
