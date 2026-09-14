@@ -39,12 +39,15 @@ export default function ItemSetupSec({ result }) {
   const _runGrade = (!_subForced && r?.gradeFallback) ? r.gradeFallback : s.boardGrade;
   const _runMedium = (!_subForced && r?.mediumFallback?.medium) ? r.mediumFallback.medium : s.medium;
   const _medLabel = _runMedium && _runMedium !== "None"
-    ? (["MRA", "WRA", "WPA"].includes(_runMedium)
-        ? _runMedium
-        : String(_runMedium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl"))
+    ? String(_runMedium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl")
     : "";
+  // Specialty treatment (MRA/WRA/WPA) is a SEPARATE, additive layer on top of
+  // the medium upgrade — append it to the collapsed pill so estimators see
+  // both facets at a glance (e.g. "200 B · Kemi/Kraft · 33# + WPA").
+  const _trLabel = (s.mediumTreatment && s.mediumTreatment !== "None") ? s.mediumTreatment : "";
+  const _medFull = _medLabel && _trLabel ? `${_medLabel} + ${_trLabel}` : (_medLabel || _trLabel);
   const _boardPart = (_runGrade || s.flute)
-    ? `${_runGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medLabel ? " · " + _medLabel : ""}`.trim()
+    ? `${_runGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medFull ? " · " + _medFull : ""}`.trim()
     : null;
   const _layoutPart = fullyResolved
     ? `${r.numUp}×${r.numOut} → ${r.pcsPerSheet} out on ${fmtDim(r.sheetW)}×${fmtDim(r.sheetL)}`
@@ -762,7 +765,7 @@ function BoardStatusBar({ s, r, setField }) {
           </F>
           <F l="Medium Upgrade" inline fw={108}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-              {MEDIUMS.filter((m) => !["MRA", "WRA", "WPA"].includes(m)).map((m) => {
+              {MEDIUMS.map((m) => {
                 // Green dot = mediums SPC carries in stock. Only "None" (standard
                 // weight) is stocked; every other entry is a medium UPGRADE (custom
                 // order), matching the flute/grade/liner stock-dot convention.
@@ -785,10 +788,10 @@ function BoardStatusBar({ s, r, setField }) {
               <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
               {["MRA", "WRA", "WPA"].map((m) => (
                 <Tile key={m} label={m}
-                  active={s.medium === m}
-                  data-testid={`tile-medium-${m}`}
-                  title={`${m} — specialty board treatment (priced per wall type)`}
-                  onClick={() => setField("medium", m)} small />
+                  active={s.mediumTreatment === m}
+                  data-testid={`tile-treatment-${m}`}
+                  title={`${m} — specialty board treatment (additive to medium upgrade; priced per wall type)`}
+                  onClick={() => setField("mediumTreatment", s.mediumTreatment === m ? "None" : m)} small />
               ))}
               {/* D-070 Buy Min toggle buttons (legacy spot_r1_5.jsx L5994-5995) */}
               {belowMin && s.buyMinBoard !== "Yes" && (

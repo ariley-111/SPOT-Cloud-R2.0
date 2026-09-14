@@ -1607,6 +1607,20 @@ function CostBuildup({ result, isMultiPart, aggregate, s }) {
         {detail && (
           <SubRow label={`Board ${r.msfTier || "—"} tier, ${fmtMoney(r.matPerMsf || r.boardEffRate)}/MSF`} value={fmtMoney(r.matTotal)} />
         )}
+        {/* Weighted-medium upgrade sub-line — 26#/33#/40# Medium etc. */}
+        {detail && (r.mdR || 0) > 0 && (
+          <SubRow
+            label={`Medium ${s.medium || ""} upcharge @ ${fmtMoney(r.mdR, 2)}/MSF`}
+            value={fmtMoney(r.mdCost)} />
+        )}
+        {/* Specialty board treatment sub-line — MRA/WRA/WPA (SW vs DW priced).
+            ADDITIVE on top of any medium upgrade above so estimators see the
+            treatment component of the board cost as its own line. */}
+        {detail && (r.trR || 0) > 0 && (
+          <SubRow
+            label={`Specialty ${r.mediumTreatment || s.mediumTreatment || ""} treatment @ ${fmtMoney(r.trR, 2)}/MSF`}
+            value={fmtMoney(r.trCost)} />
+        )}
         {detail && (r.matMakeready > 0) && (
           <SubRow label={`MR/Spoil Board ${spoilSheets} extra sheets`} value={fmtMoney(r.matMakeready)} />
         )}

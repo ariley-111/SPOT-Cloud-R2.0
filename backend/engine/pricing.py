@@ -253,6 +253,13 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         "shippedMSF": shipped_msf, "matTier": mat_tier, "matTotal": mat_total, "matMakeready": mat_makeready,
         "mkSheets": mk_sheets, "spoilSheets": spoil_sheets, "extraSheets": extra_sheets,
         "matPerMsf": mat_total / o_msf if o_msf > 0 else 0,
+        # Medium upgrade rate ($/msf) — non-zero when a paid weighted medium
+        # (26#/33#/40# etc.) is selected. Cost Buildup renders a sub-line.
+        "mdR": b.get("mdR", 0), "mdCost": (b.get("mdR", 0) or 0) * o_msf,
+        # Specialty board treatment (MRA/WRA/WPA) — additive on top of medium
+        # upgrade, priced per wall type (SW vs DW). Rendered as its own sub-line.
+        "trR": b.get("trR", 0), "trCost": (b.get("trR", 0) or 0) * o_msf,
+        "mediumTreatment": b.get("mediumTreatment") or "None",
         "printRunSheets": print_run_sheets, "convSheets": conv_sheets, "grossSqFt": gross_sq_ft,
         "pressHrs": press_hrs, "pressCost": press_cost, "inkCost": ink_cost, "whiteCost": white_cost,
         "side2Cost": side2_cost, "printDirect": print_direct,

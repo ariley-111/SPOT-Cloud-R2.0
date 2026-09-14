@@ -64,6 +64,14 @@ def _canon_medium(v: Any) -> str:
     return v
 
 
+def _canon_treatment(v: Any) -> str:
+    """Specialty medium treatment (MRA/WRA/WPA). Any other/blank value → 'None'."""
+    s = "" if v is None else str(v).strip().upper()
+    if s in ("MRA", "WRA", "WPA"):
+        return s
+    return "None"
+
+
 def _canon_liner(v: Any, default: str) -> str:
     """Liner parity (legacy spot_r1_5.jsx): a liner VALUE is never the literal
     string 'Kraft' — legacy stores 'None' and only DISPLAYS it as 'Kraft'
@@ -80,12 +88,22 @@ def _canon_liner(v: Any, default: str) -> str:
 
 
 def build_board_spec(json: Dict[str, Any]) -> Dict[str, Any]:
+    # Backward compat: legacy quotes saved MRA/WRA/WPA in the `medium` field
+    # before mediumTreatment became a separate axis. Promote them so the engine
+    # applies the treatment upcharge (and doesn't try to look up a bogus stock
+    # sheet keyed by "MRA"/etc.).
+    _m_raw = json.get("medium")
+    _mtreat_raw = json.get("mediumTreatment")
+    if (not _mtreat_raw or str(_mtreat_raw).strip() in ("", "None")) and isinstance(_m_raw, str) and _m_raw.strip().upper() in ("MRA", "WRA", "WPA"):
+        _mtreat_raw = _m_raw.strip().upper()
+        _m_raw = "None"
     return {
         "flute": _canon_field(json.get("flute"), "B"),
         "boardGrade": _canon_field(json.get("boardGrade"), "200"),
         "outsideLiner": _canon_liner(json.get("outsideLiner"), "42# Kemi-Lite"),
         "insideLiner": _canon_liner(json.get("insideLiner"), "None"),
-        "medium": _canon_medium(json.get("medium")),
+        "medium": _canon_medium(_m_raw),
+        "mediumTreatment": _canon_treatment(_mtreat_raw),
         "fscEnabled": bool(json.get("fscEnabled")),
         "fscFee": pn(json.get("fscFee", "25")),
         "kemiTariff": pn(json.get("kemiTariff", "2.50")),
@@ -592,6 +610,12 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "routeWarning": routing.get("warning"),
         "matTotal": wf["matTotal"], "matMakeready": wf["matMakeready"],
         "matPerMsf": wf.get("matPerMsf") or 0,
+        # Medium/specialty upcharge — sub-line under Board in Cost Buildup so
+        # estimators see weighted-medium upgrades (26#/33#/40# etc.) and
+        # specialty treatments (MRA/WRA/WPA — SW vs DW) as their own lines.
+        "mdR": wf.get("mdR") or 0, "mdCost": wf.get("mdCost") or 0,
+        "trR": wf.get("trR") or 0, "trCost": wf.get("trCost") or 0,
+        "mediumTreatment": wf.get("mediumTreatment") or "None",
         "extraSheets": wf.get("extraSheets") or 0,
         "mkSheets": wf.get("mkSheets") or 0,
         "spoilSheets": wf.get("spoilSheets") or 0,

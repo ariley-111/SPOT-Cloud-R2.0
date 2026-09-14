@@ -927,3 +927,48 @@ Port a single-user desktop tool ("SPOT" — Standard Printing Optimization Tool,
 5. `POST /api/admin/pricing/versions/{id}/repin?dry_run=true` — review delta.
 6. `POST /api/admin/pricing/versions/{id}/repin?dry_run=false` — commit.
 7. Hard-refresh + spot-check one re-pinned quote.
+
+
+---
+
+## 2026-09-14 — Specialty medium treatments (MRA / WRA / WPA) — ADDITIVE
+- Split MRA/WRA/WPA out of `medium_upgrades` into a NEW `medium_treatments`
+  axis on the engine. A component can now carry BOTH a weighted medium
+  upgrade (26#/33#/40# etc.) AND a specialty treatment (MRA/WRA/WPA) —
+  the two rates are added together on the effective board $/MSF.
+- Rates (per user's Specialty Pricing sheet):
+  - MRA: SW=$2.50/MSF, DW=$4.00/MSF
+  - WRA: SW=$2.50/MSF, DW=$4.00/MSF
+  - WPA: SW=$3.50/MSF, DW=$6.00/MSF
+- New state field: `mediumTreatment` (defaults.js) — values "None"|"MRA"|"WRA"|"WPA".
+- UI (`ItemSetupSec.jsx`): three treatment tiles (MRA/WRA/WPA) sit AFTER the
+  FSC toggle in the Medium Upgrade row. Click-to-toggle (click active tile → None).
+  Collapsed pill shows both: e.g. `"200 B · Kemi/Kraft · 33# + WPA"`.
+- Cost Buildup (`RightDashboard.jsx`): renders TWO sub-lines when applicable —
+  `"Medium 33# Medium upcharge @ $7.00/MSF"` and
+  `"Specialty WPA treatment @ $3.50/MSF"` — under the Board line.
+- Backend backward compat: `build_board_spec` promotes legacy quotes that
+  stored `medium="MRA/WRA/WPA"` (from the earlier incorrect implementation)
+  into `mediumTreatment=MRA/WRA/WPA` + `medium=None` so pricing and stock-sheet
+  lookups behave correctly.
+- Existing rate fixes (retained from earlier this session): 26#/33#/40# Mediums
+  and 33# Kla-White liner rates already re-calibrated in `core.py`.
+
+Files touched:
+- `backend/engine/core.py` — new `medium_treatments` table; `calc_board` adds
+  `tr_r` on top of `md_r`; returns `trR`/`mediumTreatment`.
+- `backend/engine/pricing.py` — exposes `trR`/`trCost` alongside `mdR`/`mdCost`.
+- `backend/engine/runner.py` — `_canon_treatment` + `mediumTreatment` in
+  `build_board_spec`; legacy compat promotion; passes `trR`/`trCost` through.
+- `frontend/src/hooks/useEngine.js` — includes `mediumTreatment` in both
+  Simple and MP payloads.
+- `frontend/src/lib/defaults.js` — new `mediumTreatment: "None"` default;
+  `MEDIUMS` list no longer contains MRA/WRA/WPA.
+- `frontend/src/components/spot/ItemSetupSec.jsx` — MRA/WRA/WPA tiles now
+  toggle `mediumTreatment`; collapsed pill labels both.
+- `frontend/src/components/spot/RightDashboard.jsx` — two Cost Buildup
+  sub-lines: medium upgrade + specialty treatment.
+
+Tested via screenshot on Simple-mode quote (60.25×45.89, qty=150, 200 · C ·
+Kemi/Kraft, 33# Medium + WPA): shows both sub-lines in Cost Buildup Detail,
+Material total reconciles ($173.71/MSF effective board rate).

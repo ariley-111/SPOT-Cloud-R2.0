@@ -145,10 +145,13 @@ ENGINE: Dict[str, Any] = {
         "35HPL# Medium": {"amount_per_msf": 8.6},
         "40# Medium": {"amount_per_msf": 10.0},
         "42# Bleached Medium": {"amount_per_msf": 28.5},
-        # Specialty treatments — priced per wall type (singlewall vs doublewall).
-        # These flow through medium_upgrades because the UI groups them with
-        # the medium upgrade tiles and they are mutually exclusive with the
-        # weighted medium selection.
+    },
+    # Specialty board treatments — ADDITIVE on top of the selected medium.
+    # Priced per wall type (singlewall vs doublewall). A component may carry
+    # both a medium upgrade (e.g. 33# Medium) AND a treatment (e.g. WPA); the
+    # engine adds both rates to the effective board $/MSF.
+    "medium_treatments": {
+        "None": {"sw_amount_per_msf": 0, "dw_amount_per_msf": 0},
         "MRA": {"sw_amount_per_msf": 2.5, "dw_amount_per_msf": 4.0},
         "WRA": {"sw_amount_per_msf": 2.5, "dw_amount_per_msf": 4.0},
         "WPA": {"sw_amount_per_msf": 3.5, "dw_amount_per_msf": 6.0},
@@ -179,7 +182,7 @@ ENGINE: Dict[str, Any] = {
 # v1 == these values, so existing quotes never move.
 # ═══════════════════════════════════════════════════════════════
 PRICING_KEYS: Tuple[str, ...] = (
-    "base_matrix", "liner_upgrades", "medium_upgrades",
+    "base_matrix", "liner_upgrades", "medium_upgrades", "medium_treatments",
     "dimensional_adders", "fixed_charges", "flute_rules",
 )
 
@@ -515,6 +518,7 @@ def calc_board(bi: Dict[str, Any], qty: int, is_stock: bool = False) -> Dict[str
         return {
             "qty": qty, "sqft": 0, "oSqFt": 0, "oMsf": 0, "tier": "-", "base": None,
             "hasPrice": False, "olR": 0, "ilR": 0, "mdR": 0, "flR": 0, "wA": 0, "lA": 0,
+            "trR": 0, "mediumTreatment": bi.get("mediumTreatment") or "None",
             "effRate": 0, "varCost": 0, "kemiChg": 0, "fscAmt": 0, "setup": 0, "pp": 0,
             "total": 0, "effWithFsc": 0, "costPc": 0, "isKraft": False,
             "minSqFt": 25000, "minQty": 0, "meetMin": False, "pricable": False,
@@ -531,16 +535,17 @@ def calc_board(bi: Dict[str, Any], qty: int, is_stock: bool = False) -> Dict[str
     il_r = get_liner_rate(bi["insideLiner"], kemi_tariff)
     k_sides = (1 if bi["outsideLiner"] == "42# Kemi-Lite" else 0) + (1 if bi["insideLiner"] == "42# Kemi-Lite" else 0)
     md_up = eng["medium_upgrades"].get(bi["medium"]) or {}
-    if "sw_amount_per_msf" in md_up or "dw_amount_per_msf" in md_up:
-        # Specialty treatment (MRA / WRA / WPA) — pick rate by wall type
-        md_r = md_up.get("dw_amount_per_msf" if mk == "doublewall" else "sw_amount_per_msf", 0) or 0
-    else:
-        md_r = md_up.get("amount_per_msf", 0) or 0
+    md_r = md_up.get("amount_per_msf", 0) or 0
+    # Specialty medium treatment (MRA / WRA / WPA) — ADDITIVE on top of the
+    # medium upgrade rate. Priced per wall type (singlewall vs doublewall).
+    tr_name = bi.get("mediumTreatment") or "None"
+    tr_up = (eng.get("medium_treatments") or {}).get(tr_name) or {}
+    tr_r = tr_up.get("dw_amount_per_msf" if mk == "doublewall" else "sw_amount_per_msf", 0) or 0
     fl_r = fr.get("flute_upcharge_per_msf", 0) or 0
     w_a = get_dim_adder(bi["widthIn"], eng["dimensional_adders"]["width"])
     l_a = get_dim_adder(bi["lengthIn"], eng["dimensional_adders"]["length"])
     grade_adder = bi["gradeAdder"] if is_finite(bi.get("gradeAdder")) else 0
-    eff_rate = (base or 0) + ol_r + il_r + md_r + fl_r + w_a + l_a + grade_adder
+    eff_rate = (base or 0) + ol_r + il_r + md_r + tr_r + fl_r + w_a + l_a + grade_adder
     var_cost = eff_rate * o_msf
     kemi_chg = k_sides * kemi_tariff * o_msf
     fsc_amt = (bi["fscFee"] if is_finite(bi.get("fscFee")) else 25) if bi.get("fscEnabled") else 0
@@ -557,6 +562,7 @@ def calc_board(bi: Dict[str, Any], qty: int, is_stock: bool = False) -> Dict[str
         "qty": qty, "sqft": sqft, "oSqFt": o_sq_ft, "oMsf": o_msf, "tier": tier,
         "base": base, "hasPrice": has_price, "olR": ol_r, "ilR": il_r, "mdR": md_r, "flR": fl_r,
         "wA": w_a, "lA": l_a, "effRate": eff_rate, "varCost": var_cost, "kemiChg": kemi_chg,
+        "trR": tr_r, "mediumTreatment": tr_name,
         "fscAmt": fsc_amt, "setup": setup, "pp": pp, "total": total,
         "effWithFsc": total / o_msf if o_msf > 0 else 0,
         "costPc": total / qty if qty > 0 else 0,
