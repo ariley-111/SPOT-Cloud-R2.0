@@ -71,6 +71,19 @@ def download_whatif_scenarios():
     )
 
 
+@router.get("/band-5000plus-pcf-raw")
+def download_5000plus_pcf_raw():
+    """Raw joined rows in the 5000+ Print+Cut+Finishing band (Q224297 die-cut hand-formed)."""
+    fp = _ASSETS / "SPOT_5000plus_PCF_RawJoined.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_5000plus_PCF_RawJoined.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @router.get("/band-1to49-raw")
 def download_1to49_raw():
     """Raw joined rows in the 1-49 qty band (SPOT vs iQuote, with dims + cost breakdown)."""
