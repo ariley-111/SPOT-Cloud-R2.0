@@ -39,7 +39,10 @@ export default function ItemSetupSec({ result }) {
   const _runGrade = (!_subForced && r?.gradeFallback) ? r.gradeFallback : s.boardGrade;
   const _runMedium = (!_subForced && r?.mediumFallback?.medium) ? r.mediumFallback.medium : s.medium;
   const _medLabel = _runMedium && _runMedium !== "None"
-    ? String(_runMedium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl") : "";
+    ? (["MRA", "WRA", "WPA"].includes(_runMedium)
+        ? _runMedium
+        : String(_runMedium).replace("# Medium", "#").replace("# Bleached Medium", "# Bl"))
+    : "";
   const _boardPart = (_runGrade || s.flute)
     ? `${_runGrade || "—"} ${s.flute || ""} · ${_fmLnr(s.outsideLiner)}/${_fmLnr(s.insideLiner)}${_medLabel ? " · " + _medLabel : ""}`.trim()
     : null;
@@ -759,7 +762,7 @@ function BoardStatusBar({ s, r, setField }) {
           </F>
           <F l="Medium Upgrade" inline fw={108}>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-              {MEDIUMS.map((m) => {
+              {MEDIUMS.filter((m) => !["MRA", "WRA", "WPA"].includes(m)).map((m) => {
                 // Green dot = mediums SPC carries in stock. Only "None" (standard
                 // weight) is stocked; every other entry is a medium UPGRADE (custom
                 // order), matching the flute/grade/liner stock-dot convention.
@@ -779,6 +782,14 @@ function BoardStatusBar({ s, r, setField }) {
               <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
               <Tile label="Off" active={!s.fscEnabled}  onClick={() => setField("fscEnabled", false)} small data-testid="tile-fsc-off" />
               <Tile label="FSC" active={s.fscEnabled}    onClick={() => setField("fscEnabled", true)}  small data-testid="tile-fsc-on" />
+              <span style={{ width: 1, height: 16, background: "var(--spot-border)", margin: "0 4px" }} />
+              {["MRA", "WRA", "WPA"].map((m) => (
+                <Tile key={m} label={m}
+                  active={s.medium === m}
+                  data-testid={`tile-medium-${m}`}
+                  title={`${m} — specialty board treatment (priced per wall type)`}
+                  onClick={() => setField("medium", m)} small />
+              ))}
               {/* D-070 Buy Min toggle buttons (legacy spot_r1_5.jsx L5994-5995) */}
               {belowMin && s.buyMinBoard !== "Yes" && (
                 <button onClick={() => setField("buyMinBoard", "Yes")}

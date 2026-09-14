@@ -217,7 +217,7 @@ export const linerLabel = (o) => {
   if (o.startsWith("42# ")) return o.slice(4);
   return o;
 };
-export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","40# Medium","42# Bleached Medium"];
+export const MEDIUMS      = ["None","26# Medium","33# Medium","35# HPL Medium","40# Medium","42# Bleached Medium","MRA","WRA","WPA"];
 export const PRINT_MODES  = ["Satin","Gloss","OnQ Styrene","OnQ Lightbox"];
 export const PRINT_SIDES  = ["1-Sided","2-Sided"];
 export const DIFFICULTY   = ["Simple","Standard","Complex"];  // "Straight" removed 2026-06-22 (cutting complexity)

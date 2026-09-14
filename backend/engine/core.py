@@ -132,7 +132,7 @@ ENGINE: Dict[str, Any] = {
     },
     "liner_upgrades": {
         "None": {"amount_per_msf": 0},
-        "33# Kla-White": {"amount_per_msf": 7.5, "allowed_board_grades": ["175", "ECT 32"], "enforce": True},
+        "33# Kla-White": {"amount_per_msf": 7.0, "allowed_board_grades": ["175", "ECT 32"], "enforce": True},
         "42# Kla-White": {"amount_per_msf": 8.0},
         "56# Kla-White": {"amount_per_msf": 15.0, "allowed_board_grades": ["250"], "enforce": True},
         "42# Bleached White": {"amount_per_msf": 17.5},
@@ -140,11 +140,18 @@ ENGINE: Dict[str, Any] = {
     },
     "medium_upgrades": {
         "None": {"amount_per_msf": 0},
-        "26# Medium": {"amount_per_msf": 3.0, "check_availability": True},
-        "33# Medium": {"amount_per_msf": 7.0},
+        "26# Medium": {"amount_per_msf": 2.5, "check_availability": True},
+        "33# Medium": {"amount_per_msf": 6.4},
         "35HPL# Medium": {"amount_per_msf": 8.6},
-        "40# Medium": {"amount_per_msf": 12.5},
+        "40# Medium": {"amount_per_msf": 10.0},
         "42# Bleached Medium": {"amount_per_msf": 28.5},
+        # Specialty treatments — priced per wall type (singlewall vs doublewall).
+        # These flow through medium_upgrades because the UI groups them with
+        # the medium upgrade tiles and they are mutually exclusive with the
+        # weighted medium selection.
+        "MRA": {"sw_amount_per_msf": 2.5, "dw_amount_per_msf": 4.0},
+        "WRA": {"sw_amount_per_msf": 2.5, "dw_amount_per_msf": 4.0},
+        "WPA": {"sw_amount_per_msf": 3.5, "dw_amount_per_msf": 6.0},
     },
     "dimensional_adders": {
         "width": [{"min": 8.875, "max": 10.0, "amount_per_msf": 4.5}],
@@ -524,7 +531,11 @@ def calc_board(bi: Dict[str, Any], qty: int, is_stock: bool = False) -> Dict[str
     il_r = get_liner_rate(bi["insideLiner"], kemi_tariff)
     k_sides = (1 if bi["outsideLiner"] == "42# Kemi-Lite" else 0) + (1 if bi["insideLiner"] == "42# Kemi-Lite" else 0)
     md_up = eng["medium_upgrades"].get(bi["medium"]) or {}
-    md_r = md_up.get("amount_per_msf", 0) or 0
+    if "sw_amount_per_msf" in md_up or "dw_amount_per_msf" in md_up:
+        # Specialty treatment (MRA / WRA / WPA) — pick rate by wall type
+        md_r = md_up.get("dw_amount_per_msf" if mk == "doublewall" else "sw_amount_per_msf", 0) or 0
+    else:
+        md_r = md_up.get("amount_per_msf", 0) or 0
     fl_r = fr.get("flute_upcharge_per_msf", 0) or 0
     w_a = get_dim_adder(bi["widthIn"], eng["dimensional_adders"]["width"])
     l_a = get_dim_adder(bi["lengthIn"], eng["dimensional_adders"]["length"])
