@@ -95,3 +95,15 @@ def download_1to49_raw():
         filename="SPOT_1to49_RawJoined.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/print-parity")
+def download_print_parity():
+    fp = _ASSETS / "SPOT_vs_iQuote_Print.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="SPOT_vs_iQuote_Print.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
