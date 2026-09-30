@@ -20,11 +20,20 @@ sys.path.insert(0, "/app/analysis/print")
 from build_print_parity import (HERE, PROD, QTY_BANDS, band, login, mp_items, mp_payload,  # noqa: E402
                                 single_payload, write_sheet, r2)
 
-NEW_SPEED = {"Satin": 144, "Gloss": 102}
-NEW_RATE = 319.0
-SETUP_MIN = 7
-INK_STD, INK_HEAVY = 0.024, 0.06
+import os
+_SC = os.environ.get("SCENARIO", "iquote")
+if _SC == "actuals":
+    NEW_SPEED = {"Satin": 50, "Gloss": 50}
+    NEW_RATE = 319.0
+    SETUP_MIN = 10
+    INK_STD, INK_HEAVY = 0.03, 0.03
+else:
+    NEW_SPEED = {"Satin": 144, "Gloss": 102}
+    NEW_RATE = 319.0
+    SETUP_MIN = 7
+    INK_STD, INK_HEAVY = 0.024, 0.06
 OLD_SPEED = 75
+OUT_TAG = "" if _SC == "iquote" else f"_{_SC}"
 
 
 def coverage_map():
@@ -200,7 +209,7 @@ def main():
         if n % 15 == 0:
             print(f"  {n}/{len(ests)}", flush=True)
 
-    json.dump({"comp": comp_rows, "slot": slot_rows, "flags": flags}, open(f"{HERE}/before_after_data.json", "w"))
+    json.dump({"comp": comp_rows, "slot": slot_rows, "flags": flags}, open(f"{HERE}/before_after_data{OUT_TAG}.json", "w"))
     build_workbook(comp_rows, slot_rows, flags)
 
 
@@ -263,7 +272,7 @@ def build_workbook(comp_rows, slot_rows, flags):
     write_sheet(wb, "Quote Slots", slot_rows, widths={"SPOT Estimate #": 24, "iQuote #": 16})
     write_sheet(wb, "Component Rows", comp_rows, widths={"SPOT Estimate #": 24, "Component": 34, "iQ Product": 30})
     write_sheet(wb, "Flags", flags)
-    out = f"{HERE}/SPOT_vs_iQuote_Sell_BeforeAfter.xlsx"
+    out = f"{HERE}/SPOT_vs_iQuote_Sell_BeforeAfter{OUT_TAG}.xlsx"
     wb.save(out)
     print("wrote", out, "| components", len(comp_rows), "matched", len(matched_comp), "| slots", len(slot_rows), "| flags", len(flags))
     for r in summarize(matched_comp, "Sell before", "Sell after", "iQ Sell $", "vs iQ before %", "vs iQ after %", "Qty Band"):
