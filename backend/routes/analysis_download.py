@@ -137,3 +137,12 @@ def download_cost_centers():
         raise HTTPException(status_code=404, detail="Report not generated")
     return FileResponse(path=str(fp), filename="SPOT_vs_iQuote_CostCenters.xlsx",
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@router.get("/print-actuals")
+def download_print_actuals():
+    fp = _ASSETS / "Print_Actuals_2026.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(path=str(fp), filename="Print_Actuals_2026.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
