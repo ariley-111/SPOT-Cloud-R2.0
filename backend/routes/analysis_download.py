@@ -119,3 +119,21 @@ def download_print_scenarios():
         filename="Print_Speed_Scenarios.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/print-before-after")
+def download_print_before_after():
+    fp = _ASSETS / "SPOT_vs_iQuote_Sell_BeforeAfter.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(path=str(fp), filename="SPOT_vs_iQuote_Sell_BeforeAfter.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@router.get("/cost-centers")
+def download_cost_centers():
+    fp = _ASSETS / "SPOT_vs_iQuote_CostCenters.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(path=str(fp), filename="SPOT_vs_iQuote_CostCenters.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
