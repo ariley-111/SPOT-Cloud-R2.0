@@ -107,3 +107,15 @@ def download_print_parity():
         filename="SPOT_vs_iQuote_Print.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/print-scenarios")
+def download_print_scenarios():
+    fp = _ASSETS / "Print_Speed_Scenarios.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(
+        path=str(fp),
+        filename="Print_Speed_Scenarios.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
