@@ -268,14 +268,12 @@ def match_quote(spot, iq):
                 qs = 3.0
             elif iqq and abs(sq - iqq) / iqq <= 0.10:
                 qs = 1.5
-            elif iqq and (sq % iqq == 0 or iqq % sq == 0):
-                qs = 0.75
             else:
                 qs = 0.0
             ds = sim(s["Component"], i["iQ Product"])
             opt = 0.5 if (s["iQuote Option (SPOT)"] and str(s["iQuote Option (SPOT)"]).lower() in str(i["iQ Option"]).lower()) else 0
             score = qs + ds + opt
-            if qs > 0 or ds >= 0.5:
+            if qs > 0:
                 pairs.append((score, si, ii, qs, ds))
     pairs.sort(reverse=True)
     used_s, used_i, out = set(), set(), []
@@ -283,7 +281,7 @@ def match_quote(spot, iq):
         if si in used_s or ii in used_i:
             continue
         used_s.add(si); used_i.add(ii)
-        conf = "exact qty" if qs == 3 else ("qty ±10%" if qs == 1.5 else ("qty multiple" if qs else "name only"))
+        conf = "exact qty" if qs == 3 else ("qty ±10%" if qs == 1.5 else "name only")
         if ds >= 0.5:
             conf += " + name"
         out.append((si, ii, round(score, 2), conf))
@@ -444,7 +442,7 @@ README = [
     ("Purpose", "Print-only cost parity: SPOT (production engine, live re-run) vs iQuote Inca press + ink cost account."),
     ("SPOT source", f"{PROD} — every quote with an iQuote # was re-run through /api/engine (read-only). Numbers equal the app."),
     ("iQuote source", "iquote cost breakdown analysis.xlsx → 'Inca + Ink Cost Raw Data' (Inca = press, Press Raw Material = ink)."),
-    ("Join", "iQuote # (SPOT field) = IdQuote; then per component: exact qty (3 pts) > qty ±10% (1.5) > qty multiple (0.75); product-name token similarity added; 1-to-1 greedy within a quote. 'Match Confidence' says which rule fired."),
+    ("Join", "iQuote # (SPOT field) = IdQuote; then per component: exact qty (3 pts) or qty ±10% (1.5) required; product-name token similarity breaks ties; 1-to-1 greedy within a quote. 'Match Confidence' says which rule fired."),
     ("iQuote press model (decoded)", "run time = (GrossSheets − ~2 waste) ÷ speed × passes; speed Satin 144 / Gloss 102 sh/hr; setup 10 min per pass; $319/hr; ink separate, coverage-based (~$0.047/sqft/pass median)."),
     ("SPOT press model", "run sheets = sheets + 5 MR (15 white) + ceil(2%) spoil; hrs = run sheets ÷ 75 sh/hr; $485/hr; ink flat $0.05/sqft × run sheets; white +50%; 2-sided +60%. No setup time."),
     ("Waterfall (Matched Rows)", "SPOT actual → [Δ Layout/Sheets] SPOT formula at iQuote's sheet count & size → [Δ Speed] 75→iQ speed → [Δ Rate] $485→$319 → [Δ Waste/Setup] MR+spoil-run-through-press → 2 waste + 10 min setup → [Δ Ink] flat $0.05 → iQuote actual ink → [Δ Residual] passes/white/2-sided differences → iQuote actual. Steps are sequential; signs: positive = that step raises cost."),

@@ -15,22 +15,27 @@ rows = [r for r in json.load(open(f"{HERE}/print_parity_data.json"))["matched"]
         and r["SPOT Print Mode"] in ("Satin", "Gloss")]
 
 
-def spot_print(r, speeds, setup_min, rate=485.0):
+def spot_print(r, speeds, setup_min, rate=485.0, pass2_full=False, coverage=False):
+    """coverage=True uses iQuote's per-product ink $/sqft as a stand-in for an estimator-picked coverage tier."""
     mode = r["SPOT Print Mode"]
+    two = r["SPOT Sides"] == "2-Sided"
     sq = float(r["SPOT Sheet W"]) * float(r["SPOT Sheet L"]) / 144
-    return spot_formula(r["SPOT Sheets"], sq, mode, r["SPOT White Ink"] == "Yes", r["SPOT Sides"] == "2-Sided",
-                        speed=speeds[mode], setup_min=setup_min, rate=rate)["total"]
+    ink = (r["iQ Ink $/sqft/pass"] or 0.05) if coverage else 0.05
+    f = spot_formula(r["SPOT Sheets"], sq, mode, r["SPOT White Ink"] == "Yes", False,
+                     speed=speeds[mode], setup_min=setup_min, rate=rate, ink=ink)
+    side1 = f["press"] + f["ink"] + f["white"]
+    return side1 * (2 if (two and pass2_full) else (1.6 if two else 1))
 
 
 SCENARIOS = {
-    "A. Today 75-75 @485, no setup": ({"Satin": 75, "Gloss": 75}, 0, 485),
-    "B. Single 160 @485, no setup": ({"Satin": 160, "Gloss": 160}, 0, 485),
-    "C. By finish 190-135 @485, no setup": ({"Satin": 190, "Gloss": 135}, 0, 485),
-    "D. By finish 190-135 @485 +10min": ({"Satin": 190, "Gloss": 135}, 10, 485),
-    "E. By finish 220-160 @485 +5min": ({"Satin": 220, "Gloss": 160}, 5, 485),
-    "F. iQuote 144-102 @319 +10min": ({"Satin": 144, "Gloss": 102}, 10, 319),
-    "G. iQuote 144-102 @319 +7min": ({"Satin": 144, "Gloss": 102}, 7, 319),
-    "H. iQuote 144-102 @319 +5min": ({"Satin": 144, "Gloss": 102}, 5, 319),
+    "A. Today 75-75 @485, no setup": dict(speeds={"Satin": 75, "Gloss": 75}, setup_min=0, rate=485),
+    "B. Single 160 @485, no setup": dict(speeds={"Satin": 160, "Gloss": 160}, setup_min=0, rate=485),
+    "C. By finish 190-135 @485, no setup": dict(speeds={"Satin": 190, "Gloss": 135}, setup_min=0, rate=485),
+    "D. By finish 190-135 @485 +10min": dict(speeds={"Satin": 190, "Gloss": 135}, setup_min=10, rate=485),
+    "F. iQuote 144-102 @319 +10min": dict(speeds={"Satin": 144, "Gloss": 102}, setup_min=10, rate=319),
+    "G. iQuote 144-102 @319 +7min": dict(speeds={"Satin": 144, "Gloss": 102}, setup_min=7, rate=319),
+    "H. G + 2-sided as full 2nd pass": dict(speeds={"Satin": 144, "Gloss": 102}, setup_min=7, rate=319, pass2_full=True),
+    "I. H + ink coverage tiers": dict(speeds={"Satin": 144, "Gloss": 102}, setup_min=7, rate=319, pass2_full=True, coverage=True),
 }
 
 
@@ -67,12 +72,13 @@ def finish_table(fn):
 def main():
     wb = openpyxl.Workbook(); wb.remove(wb.active)
     overview = []
-    for name, (speeds, setup, rate) in SCENARIOS.items():
-        fn = lambda r, s=speeds, m=setup, rt=rate: spot_print(r, s, m, rt)  # noqa: E731
+    for name, kw in SCENARIOS.items():
+        speeds, setup, rate = kw["speeds"], kw["setup_min"], kw["rate"]
+        fn = lambda r, kw=kw: spot_print(r, **kw)  # noqa: E731
         bt = band_table(fn); ft = finish_table(fn)
         sp = sum(fn(r) for r in rows); iq = sum(r["iQ Print $"] for r in rows)
         pcts = [(fn(r) - r["iQ Print $"]) / r["iQ Print $"] * 100 for r in rows]
-        overview.append({"Scenario": name, "Satin sh/hr": speeds["Satin"], "Gloss sh/hr": speeds["Gloss"], "Setup min/pass": setup, "$/hr": rate,
+        overview.append({"Scenario": name, "Satin sh/hr": speeds["Satin"], "Gloss sh/hr": speeds["Gloss"], "Setup min/pass": setup, "$/hr": rate, "2-sided": "full 2nd pass" if kw.get("pass2_full") else "+60%", "Ink": "coverage tiers" if kw.get("coverage") else "flat $0.05",
                          "Δ % all rows": round((sp - iq) / iq * 100, 1), "MAPE % all": round(sum(abs(p) for p in pcts) / len(pcts), 1),
                          **{f"Δ% {b['Qty Band']}": b["Δ % agg"] for b in bt},
                          **{f"Δ% {f['Finish']}": f["Δ % agg"] for f in ft},
