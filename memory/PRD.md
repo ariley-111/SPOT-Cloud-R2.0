@@ -972,3 +972,24 @@ Files touched:
 Tested via screenshot on Simple-mode quote (60.25×45.89, qty=150, 200 · C ·
 Kemi/Kraft, 33# Medium + WPA): shows both sub-lines in Cost Buildup Detail,
 Material total reconciles ($173.71/MSF effective board rate).
+
+## 2026-09-2x — Print parity investigation (SPOT vs iQuote vs ERP actuals) — ANALYSIS ONLY, NO ENGINE CHANGES
+Scripts & data: `/app/analysis/print/` (build_print_parity.py, scenario_speed_setup.py, before_after_sell.py, cost_centers.py).
+Downloads: /api/analysis/print-parity, print-scenarios, print-before-after, cost-centers, print-actuals.
+Method: prod quotes pulled via API, re-run through PROD engine read-only (calculate-all / calculate-multi-part, quoteId=None +
+payload `rateOverrides` to emulate hypotheticals). Join iQuote on IdQuote+OptDesc+Product+Qty (exact / ±10% only — "qty multiple" rule removed, it mis-joined).
+
+Findings (109 won-job rows w/ full iQuote cost centers; 197 ERP jobs Dec25–Sep26 w/ actual press hours):
+- iQuote press model: Satin 144 / Gloss 102 sh/hr, $319/hr, 10 min setup/pass, ~2 waste sheets, ink coverage-based (Standard ≈ $0.022, Heavy ≈ $0.059 /sqft; 71% Std / 28% Heavy over 2 yrs).
+- SPOT: 75 sh/hr, $485/hr, no setup, MR 5 + 2% spoil run through press, ink flat $0.05, 2-sided +60%.
+- ACTUALS: ~50 sh/hr (Satin 48 / Gloss 50 — no finish split), booked $319/hr, setup 5–19 min, ink median $0.026/sqft, press $6.3–7.2/sheet on 50+ sheet runs.
+  → SPOT $6.47/sheet is cost-true (−4% vs actual on 23 fully matched jobs); iQuote −34%. SPOT constants are individually wrong but multiply right.
+  → SPOT ink ~2× actual (only real print COST error).
+- Margin structures differ: iQuote = markup per cost account; SPOT = one GM% on total cost by MSF tier (pricing.py L226-241). SPOT has no print dial.
+- Sell vs iQuote today (won jobs): +15% overall; by MSF tier 0-1 +2%, 1-3 +16%, 3-5 +6%, 5-9 +14%, 10-24 +25%. Qty 1-49 +29% is small-run GM (38% vs 23%), not print.
+- Board +2%, cutting −1% when same route (routes differ 40% of rows, washes out), hand finishing intentionally different (stays), dies = 2 edge cases
+  (stale Crest default $1200 left in cuttingDieCost after route flipped to CAD — FD-260904; iQuote $0 die for existing dies, SPOT has no flag).
+- Proposed lever (NOT BUILT, user said no build yet): `printSellFactor` by MSF tier in admin console; sell = (cost−print)/(1−GM) + print×k; default k=1/(1−GM) (= today).
+  S1 k=1.0 on tiers ≥1 MSF → overall +6%, median row +10%, rows within ±20% 45→60/109, true GM 26→20%. k=0.85 → +2%, GM 17%. Fitted → +3%, 10-24 tier GM 4%.
+- Decision for VP: match iQuote price (= sell print at/below cost on volume tiers, knowingly) vs cost-true. Do NOT adopt iQuote speeds into engine (hides margin).
+- Small follow-ups noted: ink $0.05→~$0.03; side2Factor 0.6→1.0; CAD-route stale die cleanup; "existing die" flag; 1-49 GM tier.
