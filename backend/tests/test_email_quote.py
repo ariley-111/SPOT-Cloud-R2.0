@@ -23,6 +23,15 @@ def token():
     return r.json().get("access_token") or r.json().get("token")
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _never_send_real_mail(token):
+    """These tests assume Graph mail is NOT configured (expect 503). If it IS configured, a real
+    email would go out via the shared mailbox — skip the whole module instead."""
+    r = requests.get(f"{BASE_URL}/api/email/status", headers={"Authorization": f"Bearer {token}"}, timeout=15)
+    if r.ok and r.json().get("configured"):
+        pytest.skip("Graph mail is configured in this environment — refusing to send real test emails")
+
+
 @pytest.fixture
 def headers(token):
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
