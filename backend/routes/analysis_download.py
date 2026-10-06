@@ -146,3 +146,12 @@ def download_print_actuals():
         raise HTTPException(status_code=404, detail="Report not generated")
     return FileResponse(path=str(fp), filename="Print_Actuals_2026.xlsx",
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@router.get("/print-factor-old-vs-new")
+def download_print_factor():
+    fp = _ASSETS / "Print_Factor_OldVsNew.xlsx"
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Report not generated")
+    return FileResponse(path=str(fp), filename="Print_Factor_OldVsNew.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
