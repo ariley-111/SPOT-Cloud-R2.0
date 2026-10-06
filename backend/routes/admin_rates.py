@@ -74,6 +74,14 @@ CATEGORY_META = {
                     "description": "Target gross margin by MSF tier (decimal — 0.50 = 50%)"},
     svc.SELL_TIER: {"label": "Sell Curve ($/MSF tiers)",
                     "description": "Target sell price per MSF by tier (dollars)"},
+    svc.PRINT_FACTOR_CAT: {
+        "label": "Print Sell Factor (by MSF tier)",
+        "description": "How print cost is turned into sell price, per MSF tier. 0 = follow the GM curve "
+                       "(print ÷ (1 − GM), today's behaviour). Any other value = print cost × factor "
+                       "(1.0 = print sold at cost, 1.2 = +20%). Only affects Gross Margin % pricing; "
+                       "all other cost buckets keep the GM curve. Pricing policy — NOT frozen per quote: "
+                       "saved quotes re-price with the current factor when recalculated.",
+    },
     svc.GRADE:     {"label": "Grade Adders",
                     "description": "Per-MSF cost adder by board grade ($/MSF)"},
     svc.CAD_SETUP_CAT: {

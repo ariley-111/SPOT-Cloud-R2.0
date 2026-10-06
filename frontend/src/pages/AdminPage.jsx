@@ -26,6 +26,7 @@ const TAB_LABELS = {
   rate:         "Rates",
   gm_tier:      "GM Curve",
   sell_tier:    "Sell Curve",
+  print_factor: "Print Sell Factor",
   grade_adder:  "Grade Adders",
   cad:          "Cutting (CAD)",
   cad_setup:    "CAD Setup",
@@ -41,7 +42,7 @@ const TAB_LABELS = {
   audit:        "Audit Log",
   calibration:  "Calibration",
 };
-const TAB_ORDER = ["reports", "rate", "gm_tier", "sell_tier", "grade_adder", "difficulty", "board_pricing",
+const TAB_ORDER = ["reports", "rate", "gm_tier", "sell_tier", "print_factor", "grade_adder", "difficulty", "board_pricing",
                    "sheets", "customers", "integrations", "usage", "audit", "calibration"];
 
 export default function AdminPage({ onClose }) {
@@ -166,7 +167,7 @@ export default function AdminPage({ onClose }) {
         {loading && <div style={{ color: "var(--spot-text3)" }}>Loading rates…</div>}
         {!loading && data && (
           <>
-            {(tab === "rate" || tab === "gm_tier" || tab === "sell_tier" || tab === "grade_adder") && (
+            {(tab === "rate" || tab === "gm_tier" || tab === "sell_tier" || tab === "print_factor" || tab === "grade_adder") && (
               <CategoryPanel
                 category={tab}
                 rows={data.categories[tab] || []}
@@ -223,9 +224,17 @@ function FullScreen({ children, onClose }) {
   );
 }
 
-// ─── Category panel (Rates / GM / Sell / Grade) ─────────────────────────
+const MSF_TIER_ORDER = ["0-1", "1-3", "3-5", "5-9", "10-24", "25-49", "50-74", "75-99", "100+"];
+const tierSort = (a, b) => {
+  const ia = MSF_TIER_ORDER.indexOf(a), ib = MSF_TIER_ORDER.indexOf(b);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+};
+
+// ─── Category panel (Rates / GM / Sell / Print factor / Grade) ───────────
 function CategoryPanel({ category, rows, meta, onSave, onReset, onResetAll }) {
-  const groups = meta?.groups || [{ label: meta?.label || category, keys: rows.map((r) => r.key) }];
+  const isTier = ["gm_tier", "sell_tier", "print_factor"].includes(category);
+  const keys = isTier ? rows.map((r) => r.key).sort(tierSort) : rows.map((r) => r.key);
+  const groups = meta?.groups || [{ label: meta?.label || category, keys }];
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
   const overrideRows = rows.filter((r) => r.is_override);
 

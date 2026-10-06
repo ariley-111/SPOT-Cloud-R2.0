@@ -966,6 +966,8 @@ async def calculate_multi_part(
                 "matTotal": float(r.get("matTotal") or 0),
                 "matMakeready": float(r.get("matMakeready") or 0),
                 "printDirect": float(r.get("printDirect") or 0),
+                "printSellFactor": float(r.get("printSellFactor") or 0),
+                "printSell": float(r.get("printSell") or 0),
                 "cutterDirect": float(r.get("cutterDirect") or 0),
                 "saberCost": float(r.get("saberCost") or 0),
                 "assemblyCost": float(r.get("assemblyCost") or 0),

@@ -252,6 +252,11 @@ def _freeze_cat(cat: str) -> Optional[Dict[str, Any]]:
     return ov.get(cat) if ov else None
 
 
+def active_print_factor() -> Dict[str, Any]:
+    # Pricing POLICY, not a cost rate: deliberately NOT frozen per quote — saved quotes re-price on recalc.
+    return PRINT_FACTOR_DEFAULTS
+
+
 def active_cad_setup() -> Dict[str, Any]:
     f = _freeze_cat("cad_setup")
     return {**CAD_SETUP, **f} if f else CAD_SETUP
@@ -402,6 +407,8 @@ GM_MSF_TIERS = [
 ]
 GM_DEFAULTS = {"0-1": 0.50, "1-3": 0.37, "3-5": 0.32, "5-9": 0.27, "10-24": 0.25, "25-49": 0.25, "50-74": 0.25, "75-99": 0.25, "100+": 0.25}
 SELL_DEFAULTS = {"0-1": 600, "1-3": 500, "3-5": 450, "5-9": 400, "10-24": 375, "25-49": 325, "50-74": 300, "75-99": 285, "100+": 260}
+# Print sell factor by MSF tier: sell = (mfg − print)/(1−GM) + print × factor. 0 = follow GM (today's behaviour).
+PRINT_FACTOR_DEFAULTS = {"0-1": 0.0, "1-3": 0.0, "3-5": 0.0, "5-9": 0.0, "10-24": 0.0, "25-49": 0.0, "50-74": 0.0, "75-99": 0.0, "100+": 0.0}
 
 GRADE_ADDER_DEFAULTS = {
     "125": 0, "150": 0, "175": 0, "200": 15, "250": 46, "275": 5, "350": 0,

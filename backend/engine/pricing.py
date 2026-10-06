@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from .core import (
     PRINT_SPEEDS, CAD_SETUP, CAD_FALLBACK, STRIP_DEFAULTS, GLUE_DEFAULTS,
     GM_DEFAULTS, SELL_DEFAULTS, FLUTE_CALIPERS, ECT_GRADE_FALLBACK,
-    RATE_DEFAULTS, get_gm_msf_tier, pn, ceil_int, is_finite,
+    RATE_DEFAULTS, get_gm_msf_tier, pn, ceil_int, is_finite, active_print_factor,
     active_cad_setup, active_cad_fallback, active_rate_defaults,
     active_strip_defaults, active_glue_defaults,
 )
@@ -231,12 +231,18 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
     sell_tier = _sell_table[sell_tier_name] if sell_tier_name in _sell_table else (_sell_table.get(mat_tier, 0))
 
     item_sell = 0
+    print_factor = pn(active_print_factor().get(gm_tier_name, 0)) or 0
+    print_sell = 0
     if prod.get("pricingBasis") == "Gross Margin %":
         if die_amort_method == "Markup" and markup_exclude > 0:
             mfg_for_margin = total_mfg - markup_exclude
             item_sell = (mfg_for_margin / (1 - gm_tier) + markup_exclude) if ord_qty > 0 and gm_tier < 0.9999 else 0
         else:
             item_sell = (total_mfg / (1 - gm_tier)) if ord_qty > 0 and gm_tier < 0.9999 else 0
+        # Print sell factor (admin, by MSF tier): print is sold at cost × factor instead of ÷ (1 − GM)
+        if item_sell > 0 and print_factor > 0 and print_direct > 0:
+            print_sell = print_direct * print_factor
+            item_sell = item_sell - print_direct / (1 - gm_tier) + print_sell
     else:
         item_sell = sell_tier * o_msf
 
@@ -263,6 +269,7 @@ def calc_wf(board_calc: Dict[str, Any], sheet_qty: int, finished_qty: Optional[i
         "printRunSheets": print_run_sheets, "convSheets": conv_sheets, "grossSqFt": gross_sq_ft,
         "pressHrs": press_hrs, "pressCost": press_cost, "inkCost": ink_cost, "whiteCost": white_cost,
         "side2Cost": side2_cost, "printDirect": print_direct,
+        "printSellFactor": print_factor, "printSell": print_sell,
         "saberCost": saber_cost, "route": route, "cutterDirect": cutter_direct, "cutterBasis": cutter_basis, "cadHrs": cad_hrs,
         "cadPricingMethod": prod.get("cadPricingMethod") or "",
         "dieLineCost": die_line_cost, "dieSep": die_sep, "dieEmbedded": die_embedded, "dieBase": die_base,

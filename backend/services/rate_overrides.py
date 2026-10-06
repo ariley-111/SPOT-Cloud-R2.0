@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from db import db, COL_RATE_OVERRIDES, COL_AUDIT_LOG
 from engine.core import (
     RATE_DEFAULTS, GM_DEFAULTS, SELL_DEFAULTS, GRADE_ADDER_DEFAULTS,
-    CAD_SETUP, CAD_FALLBACK, STRIP_DEFAULTS, GLUE_DEFAULTS,
+    CAD_SETUP, CAD_FALLBACK, STRIP_DEFAULTS, GLUE_DEFAULTS, PRINT_FACTOR_DEFAULTS,
 )
 from engine.runner import ASMP_DEFAULTS
 
@@ -114,7 +114,8 @@ CAD_SETUP_CAT    = "cad_setup"     # cutting setup minutes by complexity
 CAD_FALLBACK_CAT = "cad_fallback"  # per-sheet cutting minutes by complexity
 STRIP_CAT        = "strip_complexity"  # hand-strip minutes/sheet by complexity
 GLUE_CAT         = "glue_complexity"   # hand-glue minutes/joint by complexity
-CATEGORIES = (RATE, GM_TIER, SELL_TIER, GRADE, CAD_SETUP_CAT, CAD_FALLBACK_CAT, STRIP_CAT, GLUE_CAT)
+PRINT_FACTOR_CAT = "print_factor"      # print sell factor by MSF tier (0 = follow GM)
+CATEGORIES = (RATE, GM_TIER, SELL_TIER, GRADE, CAD_SETUP_CAT, CAD_FALLBACK_CAT, STRIP_CAT, GLUE_CAT, PRINT_FACTOR_CAT)
 
 # Live dict lookup — engine reads from these by reference, so mutations
 # propagate immediately. NEVER replace these dicts (would break imports);
@@ -128,6 +129,7 @@ _LIVE = {
     CAD_FALLBACK_CAT: CAD_FALLBACK,
     STRIP_CAT:        STRIP_DEFAULTS,
     GLUE_CAT:         GLUE_DEFAULTS,
+    PRINT_FACTOR_CAT: PRINT_FACTOR_DEFAULTS,
 }
 
 # Snapshot at module-import time — this IS the source-of-truth baseline,
@@ -186,6 +188,7 @@ _VALUE_COERCERS = {
     CAD_FALLBACK_CAT: lambda v: float(v),
     STRIP_CAT:        lambda v: float(v),
     GLUE_CAT:         lambda v: float(v),
+    PRINT_FACTOR_CAT: lambda v: float(v),
 }
 
 
