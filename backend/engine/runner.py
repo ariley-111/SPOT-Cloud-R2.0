@@ -621,6 +621,7 @@ def run_estimate(json: Dict[str, Any], slot_index: int = 0) -> Dict[str, Any]:
         "spoilSheets": wf.get("spoilSheets") or 0,
         "pressCost": wf["pressCost"], "inkCost": wf["inkCost"], "whiteCost": wf["whiteCost"],
         "side2Cost": wf["side2Cost"], "printDirect": wf["printDirect"],
+        "printSellFactor": wf.get("printSellFactor") or 0, "printSell": wf.get("printSell") or 0,
         "saberCost": wf["saberCost"], "cutterDirect": wf["cutterDirect"],
         "dieEmbedded": wf["dieEmbedded"], "dieLineCost": wf["dieLineCost"],
         "dieAutoApplied": bool(prod_inputs.get("_dieAutoApplied")),

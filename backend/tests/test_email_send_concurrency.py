@@ -21,6 +21,10 @@ from typing import Optional
 import pytest
 import requests
 
+if os.environ.get("SPOT_ALLOW_EMAIL_TESTS") != "1":
+    pytest.skip("Email tests are opt-in only: set SPOT_ALLOW_EMAIL_TESTS=1 to run (they can send real mail)",
+                allow_module_level=True)
+
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
     # fall back to frontend env

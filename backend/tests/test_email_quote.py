@@ -9,6 +9,10 @@ import os
 import pytest
 import requests
 
+if os.environ.get("SPOT_ALLOW_EMAIL_TESTS") != "1":
+    pytest.skip("Email tests are opt-in only: set SPOT_ALLOW_EMAIL_TESTS=1 to run (they can send real mail)",
+                allow_module_level=True)
+
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://spot-estimator.preview.emergentagent.com").rstrip("/")
 
 ADMIN_EMAIL = "admin@standardprinting.com"
